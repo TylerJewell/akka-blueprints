@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-26",
-  "total_entries": 417,
+  "generated_at": "2026-06-29",
+  "total_entries": 455,
   "rules_version": 1,
   "buckets": [
     {
@@ -2414,6 +2414,196 @@
       "id": "glean.crossfunc.intelligent-reminders",
       "bucket": "agent+workflow",
       "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "anthropic.finance.pitch-builder",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.meeting-preparer",
+      "bucket": "agent",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.earnings-reviewer",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'planner-executor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.model-builder",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.market-researcher",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'continuous-monitor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.valuation-reviewer",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'evaluator-optimizer' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.gl-reconciler",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.month-end-closer",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.statement-auditor",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'evaluator-optimizer' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.kyc-screener",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'human-in-loop-gate' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "n8n.support.multi-agent-customer-router",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'delegation-supervisor-workers' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "n8n.content.subworkflow-pipeline",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "n8n.ops.self-correcting-extraction",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'evaluator-optimizer' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "n8n.content.self-critiquing-writer-loop",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'evaluator-optimizer' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "pydantic-ai.harness.code-mode-sandbox",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'planner-executor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "pydantic-ai.harness.tool-search-discovery",
+      "bucket": "agent",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "pydantic-ai.harness.web-tools-replay",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "google-adk.planning.marathon-planner",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'planner-executor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "google-adk.interop.a2a-interactions",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'handoff-routing' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "aws-bedrock.commerce.agentcore-payments",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "aws-bedrock.ops.agentcore-managed-harness",
+      "bucket": "agent",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "spring-ai.patterns.hierarchical-subagents",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'delegation-supervisor-workers' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "spring-ai.patterns.agent-skills",
+      "bucket": "agent",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "dapr-agents.ops.durable-workflow-agent",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "research.blackboard.shared-knowledge-discovery",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'blackboard' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "research.blackboard.swe-coordination",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'blackboard' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "research.contract-net.distributed-task-allocation",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'contract-net' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "research.contract-net.satellite-task-planner",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'contract-net' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "commerce.auction.real-time-bid-arbitration",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'market-making-auction' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "commerce.auction.agent-to-agent-settlement",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'market-making-auction' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "education.tutor.adaptive-practice-coach",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'evaluator-optimizer' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "education.faculty.instructional-design-assistant",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'delegation-supervisor-workers' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "education.admin.retention-outreach",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'continuous-monitor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "energy.grid.impact-study-runner",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "energy.demand.flexibility-orchestrator",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'continuous-monitor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "public-sector.constituent.311-triage",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'handoff-routing' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "public-sector.licensing.passport-renewal-coordinator",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'planner-executor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "public-sector.case.cross-agency-handoff",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'handoff-routing' + tool usage; market-scan 2026-06-29."
     }
   ]
 }

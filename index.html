@@ -217,12 +217,15 @@ cd akka-blueprints/&lt;sample-folder&gt;
 const PATTERNS = [
   'single-agent','sequential-pipeline','delegation-supervisor-workers','handoff-routing',
   'team-shared-list','moderation-turn-taking','planner-executor','evaluator-optimizer',
-  'debate-multi-perspective','continuous-monitor','human-in-loop-gate','composite-multi-team'
+  'debate-multi-perspective','continuous-monitor','human-in-loop-gate','composite-multi-team',
+  'blackboard','contract-net','market-making-auction'
 ];
 const DOMAINS = [
   'cx-support','sales-marketing','content-editorial','finance-analysis','dev-code',
   'research-intel','ops-automation','hr-recruiting','planning-travel','healthcare',
-  'legal-compliance','governance-risk','general'
+  'legal-compliance','governance-risk',
+  'education','energy-utilities','public-sector',
+  'general'
 ];
 const MECHS = ['guardrail','hitl','hotl','sanitizer','eval-periodic','eval-event','ci-gate','halt'];
 const BUCKETS = ['agent','agent+workflow','autonomous-agent','autonomous-agent+workflow'];
@@ -261,7 +264,64 @@ const PATTERN_LABEL = {
   'debate-multi-perspective': 'Debate / multi-perspective',
   'continuous-monitor': 'Continuous monitor',
   'human-in-loop-gate': 'Human-in-loop gate',
-  'composite-multi-team': 'Composite / multi-team'
+  'composite-multi-team': 'Composite / multi-team',
+  'blackboard': 'Blackboard',
+  'contract-net': 'Contract-net auction',
+  'market-making-auction': 'Market-making auction'
+};
+
+// Layman definitions, framed in terms of Akka AutonomousAgent + Workflow.
+// Shown as hover tooltips on each Pattern filter chip.
+const PATTERN_TIP = {
+  'single-agent': 'One AutonomousAgent handles the whole request. No coordination, no second agent — just task in, typed answer out. Surrounding components prepare input and audit output.',
+  'sequential-pipeline': 'A Workflow runs a fixed sequence of steps; each step is an Agent or a deterministic transform. Order is wired in code, not chosen by an LLM.',
+  'delegation-supervisor-workers': 'A supervisor AutonomousAgent decomposes the task and dispatches sub-tasks to specialist Agents in parallel, then synthesises their results. Routing is LLM-driven.',
+  'handoff-routing': 'An entry Agent classifies the request and hands the entire conversation off to a specialist Agent that owns it end-to-end. The router never speaks again on that turn.',
+  'team-shared-list': 'Multiple Agents work off a shared queue (an EventSourcedEntity). Any agent can pick the next task; coordination is the queue, not a router.',
+  'moderation-turn-taking': 'A moderator Workflow alternates turns between two or more Agents under a structured protocol (e.g. negotiation, role-play). Order is enforced; topic is open.',
+  'planner-executor': 'One AutonomousAgent plans a sequence of steps, then a Workflow drives an executor Agent through them. Plan can be revised mid-flight.',
+  'evaluator-optimizer': 'A generator Agent drafts; a separate evaluator Agent critiques; the generator refines. Loop until the eval bar is met or a budget cap halts it.',
+  'debate-multi-perspective': 'Multiple Agents argue distinct viewpoints turn-by-turn; a judge Agent reads the transcript and renders a verdict. Adversarial, not collaborative.',
+  'continuous-monitor': 'A Consumer + Timer keep an Agent running over a stream of events (emails, alerts, signals). The Agent reacts; it is not request-response.',
+  'human-in-loop-gate': 'A Workflow pauses at a decision point and waits for a human approval before continuing. The human is wired into the state machine, not a separate process.',
+  'composite-multi-team': 'Multiple coordination patterns composed in one system — e.g. a supervisor delegates to teams that internally use evaluator-optimizer loops.',
+  'blackboard': 'Specialist Agents read and write a shared structured state object (a View + Entity pair). A control shell coordinates; agents do not message each other directly.',
+  'contract-net': 'A manager Agent announces a task; a pool of contractor Agents bid; the manager awards; the winning contractor executes. Allocation is auction-driven.',
+  'market-making-auction': 'Agents bid in a real-time auction to fulfill external requests. Price emerges from market dynamics, not the prompt. Used for ad bidding, agent-to-agent commerce.'
+};
+
+// Governance mechanism definitions from specs/eval-matrix/.
+const MECH_LABEL = {
+  'guardrail': 'Guardrail',
+  'hitl': 'Human-in-the-loop',
+  'hotl': 'Human-on-the-loop',
+  'sanitizer': 'Sanitizer',
+  'eval-periodic': 'Periodic eval',
+  'eval-event': 'Event-triggered eval',
+  'ci-gate': 'CI build-gate',
+  'halt': 'Halt'
+};
+const MECH_TIP = {
+  'guardrail': 'Inline check around an agent decision. Runs before-input, before-tool-invocation, or before-agent-response. Blocking: a failed guardrail rejects the call.',
+  'hitl': 'A required human approval wired into the state machine. The workflow blocks until the human decides. The human is the decision-maker, not a reviewer.',
+  'hotl': 'A human monitors the agent post-decision and can intervene. The agent acts autonomously; the human can halt, override, or audit after the fact.',
+  'sanitizer': 'A Consumer transforms input before an Agent sees it — redacts PII, strips secrets, normalises shape. Runs out-of-band, never blocks the user.',
+  'eval-periodic': 'A scheduled Timer triggers an eval Agent that scores recent decisions against a rubric. Drift detector; not blocking.',
+  'eval-event': 'Every agent decision fires an eval event scored by a second Agent. One-to-one with decisions; feeds the audit trail and dashboards.',
+  'ci-gate': 'Build-time check enforced before a blueprint can ship. Catches schema, security, and policy violations before runtime.',
+  'halt': 'A budget or safety cap that terminates an agent loop. Caps tokens, retries, time, or spend. Prevents runaway autonomous behaviour.'
+};
+
+// Akka component definitions from doc.akka.io.
+const COMPONENT_TIP = {
+  'Agent': 'Akka Agent — a typed, request-response LLM wrapper. One call in, one structured result out. Stateless from the caller\'s point of view.',
+  'AutonomousAgent': 'Akka AutonomousAgent — an agent that runs a multi-turn task with its own iteration budget, can call tools and other agents, and returns a typed final result. Long-running.',
+  'Workflow': 'Akka Workflow — durable, restart-safe state machine. Drives multi-step business processes with explicit steps, retries, timeouts, and compensation.',
+  'View': 'Akka View — read-optimised projection over events from one or more Entities. Append-only, eventually consistent, queryable via SQL or SSE.',
+  'Entity': 'Akka EventSourcedEntity (or KeyValueEntity) — the unit of consistency. Owns state for one ID; every change is an event in an append-only log.',
+  'Consumer': 'Akka Consumer — subscribes to an Entity\'s event stream and reacts. Used for fan-out, sanitization, projections, and external integration.',
+  'Timer': 'Akka Timer — schedules a deferred or recurring call to an Endpoint or Entity. The pacing primitive for cron, retries, and continuous monitors.',
+  'Endpoint': 'Akka HttpEndpoint — the request-response surface. Routes HTTP calls to Agents, Workflows, and Entities. Every blueprint has at least one.'
 };
 
 function escapeHtml(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -324,8 +384,8 @@ const state = {
 function load(){
   state.corpus = {
   "schema_version": 1,
-  "generated_at": "2026-06-26",
-  "total_entries": 417,
+  "generated_at": "2026-06-29",
+  "total_entries": 455,
   "sources": 16,
   "patterns": 12,
   "domains": 13,
@@ -19676,13 +19736,1792 @@ function load(){
         "candidate_name": "open-loop-chaser",
         "notes": "Continuous-monitor over action items."
       }
+    },
+    {
+      "id": "anthropic.finance.pitch-builder",
+      "name": "Pitch Builder",
+      "source": {
+        "platform": "Anthropic Engineering",
+        "url": "https://www.anthropic.com/news/finance-agents",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "sequential-pipeline",
+        "domain": "finance-analysis"
+      },
+      "description": "Builds target lists, runs comparables, and drafts client pitchbooks across a research-then-draft pipeline.",
+      "implementation": {
+        "agent_roles": [
+          "PitchBuilderAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval",
+          "document-gen"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "advisory",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "sanitizer",
+          "flavor": "pii",
+          "rationale": "Pitchbooks reference real counterparties; redact PII from input research."
+        },
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-response",
+          "rationale": "Pitch claims are client-facing; validate citations and figures before draft is returned."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "pitch-builder",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "anthropic.finance.meeting-preparer",
+      "name": "Meeting Preparer",
+      "source": {
+        "platform": "Anthropic Engineering",
+        "url": "https://www.anthropic.com/news/finance-agents",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "single-agent",
+        "domain": "finance-analysis"
+      },
+      "description": "Assembles client and counterparty briefs ahead of calls from CRM, filings, and news.",
+      "implementation": {
+        "agent_roles": [
+          "MeetingPreparerAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval"
+        ],
+        "trigger": "request-response",
+        "state": "stateless",
+        "hitl_level": "none",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "sanitizer",
+          "flavor": "pii",
+          "rationale": "Counterparty briefs contain PII; redact before LLM exposure."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "meeting-preparer",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "anthropic.finance.earnings-reviewer",
+      "name": "Earnings Reviewer",
+      "source": {
+        "platform": "Anthropic Engineering",
+        "url": "https://www.anthropic.com/news/finance-agents",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "planner-executor",
+        "domain": "finance-analysis"
+      },
+      "description": "Reads earnings transcripts and filings, updates internal models, and flags thesis-relevant changes.",
+      "implementation": {
+        "agent_roles": [
+          "EarningsReviewerAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval",
+          "tool-calling"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "advisory",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-response",
+          "rationale": "Material-change flags drive trading decisions; output guardrail on confidence."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Every flagged change scored against evidence quality."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "earnings-reviewer",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "anthropic.finance.model-builder",
+      "name": "Financial Model Builder",
+      "source": {
+        "platform": "Anthropic Engineering",
+        "url": "https://www.anthropic.com/news/finance-agents",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "sequential-pipeline",
+        "domain": "finance-analysis"
+      },
+      "description": "Creates and maintains financial models from filings and data feeds across an extract-build-validate pipeline.",
+      "implementation": {
+        "agent_roles": [
+          "ModelBuilderAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval",
+          "spreadsheet"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Models inform investment decisions; analyst approves model changes."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Model deltas scored against source-filing fidelity."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "model-builder",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "anthropic.finance.market-researcher",
+      "name": "Sector Market Researcher",
+      "source": {
+        "platform": "Anthropic Engineering",
+        "url": "https://www.anthropic.com/news/finance-agents",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "continuous-monitor",
+        "domain": "finance-analysis"
+      },
+      "description": "Continuously synthesizes news, filings, and broker research; flags credit and risk-relevant items.",
+      "implementation": {
+        "agent_roles": [
+          "MarketResearcherAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval",
+          "webhook"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-response",
+          "rationale": "Risk flags fed to downstream desks; output guardrail required."
+        },
+        {
+          "mechanism": "eval-periodic",
+          "flavor": "scheduled-eval",
+          "rationale": "Daily replay scoring flag precision/recall."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "market-researcher",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "anthropic.finance.valuation-reviewer",
+      "name": "Valuation Reviewer",
+      "source": {
+        "platform": "Anthropic Engineering",
+        "url": "https://www.anthropic.com/news/finance-agents",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "evaluator-optimizer",
+        "domain": "finance-analysis"
+      },
+      "description": "Checks valuations against comparables and review standards in an iterative critique-refine loop.",
+      "implementation": {
+        "agent_roles": [
+          "ValuationReviewerAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Valuation sign-off requires human reviewer."
+        },
+        {
+          "mechanism": "halt",
+          "flavor": "budget-cap",
+          "rationale": "Refinement loop budget-capped to prevent runaway iteration."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "valuation-reviewer",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "anthropic.finance.gl-reconciler",
+      "name": "General Ledger Reconciler",
+      "source": {
+        "platform": "Anthropic Engineering",
+        "url": "https://www.anthropic.com/news/finance-agents",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "sequential-pipeline",
+        "domain": "finance-analysis"
+      },
+      "description": "Reconciles GL accounts and runs NAV calculations against books of record in a verify-then-post pipeline.",
+      "implementation": {
+        "agent_roles": [
+          "GlReconcilerAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling",
+          "ledger-api"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-response",
+          "rationale": "Posted journal entries are audit-material; validate before write."
+        },
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Material variances escalate to controller."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "gl-reconciler",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "anthropic.finance.month-end-closer",
+      "name": "Month-End Closer",
+      "source": {
+        "platform": "Anthropic Engineering",
+        "url": "https://www.anthropic.com/news/finance-agents",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "sequential-pipeline",
+        "domain": "finance-analysis"
+      },
+      "description": "Runs close checklist, prepares journal entries, and produces close reports across a checklist-driven pipeline.",
+      "implementation": {
+        "agent_roles": [
+          "MonthEndCloserAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling",
+          "ledger-api",
+          "document-gen"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Each close step approved by accounting before next step proceeds."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Journal entries scored against trial-balance reconciliation."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "month-end-closer",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "anthropic.finance.statement-auditor",
+      "name": "Statement Auditor",
+      "source": {
+        "platform": "Anthropic Engineering",
+        "url": "https://www.anthropic.com/news/finance-agents",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "evaluator-optimizer",
+        "domain": "legal-compliance"
+      },
+      "description": "Reviews financial statements for consistency and audit-readiness via critique-refine cycles.",
+      "implementation": {
+        "agent_roles": [
+          "StatementAuditorAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-response",
+          "rationale": "Audit findings are evidence-of-record; validate citations to working papers."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Each finding scored on materiality and source traceability."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "statement-auditor",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "anthropic.finance.kyc-screener",
+      "name": "KYC Screener",
+      "source": {
+        "platform": "Anthropic Engineering",
+        "url": "https://www.anthropic.com/news/finance-agents",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "human-in-loop-gate",
+        "domain": "legal-compliance"
+      },
+      "description": "Assembles entity files, reviews source documents, and packages escalations with a human-approval gate.",
+      "implementation": {
+        "agent_roles": [
+          "KycScreenerAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval",
+          "sanctions-screen"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "sanitizer",
+          "flavor": "pii",
+          "rationale": "Entity files contain sensitive PII; tokenize before LLM exposure."
+        },
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Every KYC verdict requires a compliance-officer approval before close."
+        },
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-response",
+          "rationale": "Verdicts must cite specific source documents."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "kyc-screener",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "n8n.support.multi-agent-customer-router",
+      "name": "Multi-Agent Customer Router",
+      "source": {
+        "platform": "n8n",
+        "url": "https://blog.n8n.io/production-ai-playbook-complex-agent-patterns/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "delegation-supervisor-workers",
+        "domain": "cx-support"
+      },
+      "description": "Orchestrator agent routes billing, technical, and account-management queries to specialist downstream agents.",
+      "implementation": {
+        "agent_roles": [
+          "MultiAgentCustomerRouterAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "advisory",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-invocation",
+          "rationale": "Routing decision audited before specialist handoff."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Each route scored on whether the chosen specialist resolved the ticket."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "multi-agent-customer-router",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "n8n.content.subworkflow-pipeline",
+      "name": "Content Pipeline Subworkflow Orchestrator",
+      "source": {
+        "platform": "n8n",
+        "url": "https://blog.n8n.io/production-ai-playbook-complex-agent-patterns/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "sequential-pipeline",
+        "domain": "content-editorial"
+      },
+      "description": "Research, writer, and reviewer sub-workflows composed as agent tools across a draft-review-publish pipeline.",
+      "implementation": {
+        "agent_roles": [
+          "SubworkflowPipelineAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "advisory",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-response",
+          "rationale": "Published copy goes to public surfaces; tone and factuality checks."
+        },
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Editor approves before publish."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "subworkflow-pipeline",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "n8n.ops.self-correcting-extraction",
+      "name": "Self-Correcting Extraction Agent with Memory",
+      "source": {
+        "platform": "n8n",
+        "url": "https://blog.n8n.io/production-ai-playbook-complex-agent-patterns/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "evaluator-optimizer",
+        "domain": "ops-automation"
+      },
+      "description": "Window-buffer plus database memory; agent corrects ID numbering and field extraction across executions.",
+      "implementation": {
+        "agent_roles": [
+          "SelfCorrectingExtractionAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval",
+          "memory-store"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Each extraction scored against memory-grounded ground truth."
+        },
+        {
+          "mechanism": "halt",
+          "flavor": "budget-cap",
+          "rationale": "Self-correction loop budget-capped."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "self-correcting-extraction",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "n8n.content.self-critiquing-writer-loop",
+      "name": "Self-Critiquing Writer Loop",
+      "source": {
+        "platform": "n8n",
+        "url": "https://blog.n8n.io/production-ai-playbook-complex-agent-patterns/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "evaluator-optimizer",
+        "domain": "content-editorial"
+      },
+      "description": "Writer agent drafts; separate critic agent evaluates; iterative refinement until quality bar met or budget exhausted.",
+      "implementation": {
+        "agent_roles": [
+          "SelfCritiquingWriterLoopAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Critic verdict recorded per iteration for audit."
+        },
+        {
+          "mechanism": "halt",
+          "flavor": "budget-cap",
+          "rationale": "Loop budget-capped; halt event fires on max iterations."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "self-critiquing-writer-loop",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "pydantic-ai.harness.code-mode-sandbox",
+      "name": "Sandboxed Code-Execution Capability",
+      "source": {
+        "platform": "pydantic-ai",
+        "url": "https://github.com/pydantic/pydantic-ai/releases",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "planner-executor",
+        "domain": "dev-code"
+      },
+      "description": "Harness-managed sandbox runs model-authored code as a first-class capability with capability-based authorization.",
+      "implementation": {
+        "agent_roles": [
+          "CodeModeSandboxAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "code-exec",
+          "sandbox"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-tool-invocation",
+          "rationale": "Capability tokens scope which sandbox calls are allowed."
+        },
+        {
+          "mechanism": "sanitizer",
+          "flavor": "prompt",
+          "rationale": "Strip secrets from prompt before sandbox compile."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "code-mode-sandbox",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "pydantic-ai.harness.tool-search-discovery",
+      "name": "Deferred Tool-Discovery Harness",
+      "source": {
+        "platform": "pydantic-ai",
+        "url": "https://github.com/pydantic/pydantic-ai/releases",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "single-agent",
+        "domain": "general"
+      },
+      "description": "Harness capability that searches and loads tool schemas on demand instead of frontloading the entire tool catalog.",
+      "implementation": {
+        "agent_roles": [
+          "ToolSearchDiscoveryAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling",
+          "mcp"
+        ],
+        "trigger": "request-response",
+        "state": "stateless",
+        "hitl_level": "none",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-tool-invocation",
+          "rationale": "Loaded tools verified against an allowlist before binding."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "tool-search-discovery",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "pydantic-ai.harness.web-tools-replay",
+      "name": "Server-Tool Web-Search Replay",
+      "source": {
+        "platform": "pydantic-ai",
+        "url": "https://github.com/pydantic/pydantic-ai/releases",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "single-agent",
+        "domain": "research-intel"
+      },
+      "description": "Harness capability replaying provider-side web-search tool calls deterministically for reproducibility.",
+      "implementation": {
+        "agent_roles": [
+          "WebToolsReplayAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "web-search"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "eval-periodic",
+          "flavor": "replay-eval",
+          "rationale": "Recorded search traces replayed to detect drift in tool behavior."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "web-tools-replay",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "google-adk.planning.marathon-planner",
+      "name": "Marathon Training Planner",
+      "source": {
+        "platform": "google-adk",
+        "url": "https://codelabs.developers.google.com/next26/dev-keynote/building-agents-with-skills",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "planner-executor",
+        "domain": "planning-travel"
+      },
+      "description": "Dynamic skill loading and MCP tool mapping drive goal-driven personalized training-plan generation.",
+      "implementation": {
+        "agent_roles": [
+          "MarathonPlannerAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "mcp",
+          "retrieval"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-tool-invocation",
+          "rationale": "Loaded skills checked against capability registry."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Plan adjustments scored on adherence-to-goal signal."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "marathon-planner",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "google-adk.interop.a2a-interactions",
+      "name": "Agent-to-Agent Interactions Sample",
+      "source": {
+        "platform": "google-adk",
+        "url": "https://developers.googleblog.com/building-agents-with-the-adk-and-the-new-interactions-api/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "handoff-routing",
+        "domain": "general"
+      },
+      "description": "Cross-agent delegation over a peer interactions API; receiver agent owns resolution post-handoff.",
+      "implementation": {
+        "agent_roles": [
+          "A2aInteractionsAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-invocation",
+          "rationale": "Receiver-agent identity verified before handoff."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-handoff-eval",
+          "rationale": "Each handoff scored on whether the receiver was the right target."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "a2a-interactions",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "aws-bedrock.commerce.agentcore-payments",
+      "name": "Agent-Initiated Payment Settlement",
+      "source": {
+        "platform": "AWS Bedrock agent samples",
+        "url": "https://aws.amazon.com/blogs/aws/aws-weekly-roundup-amazon-bedrock-agentcore-payments-agent-toolkit-for-aws-and-more-may-11-2026/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "single-agent",
+        "domain": "ops-automation"
+      },
+      "description": "Managed payment capability lets an agent pay external APIs autonomously within a spend envelope.",
+      "implementation": {
+        "agent_roles": [
+          "AgentcorePaymentsAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling",
+          "payment-api"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Payments above threshold require human approval."
+        },
+        {
+          "mechanism": "halt",
+          "flavor": "budget-cap",
+          "rationale": "Per-task spend cap halts further payments on breach."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "agentcore-payments",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "aws-bedrock.ops.agentcore-managed-harness",
+      "name": "Managed-Harness Tool-Use Agent",
+      "source": {
+        "platform": "AWS Bedrock agent samples",
+        "url": "https://aws.amazon.com/about-aws/whats-new/2026/04/agentcore-new-features-to-build-agents-faster/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "single-agent",
+        "domain": "general"
+      },
+      "description": "Agent defined by model, prompt, and tool list; managed runtime executes the tool-calling loop end-to-end.",
+      "implementation": {
+        "agent_roles": [
+          "AgentcoreManagedHarnessAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling"
+        ],
+        "trigger": "request-response",
+        "state": "stateless",
+        "hitl_level": "none",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-tool-invocation",
+          "rationale": "Tool allowlist enforced by managed runtime."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "agentcore-managed-harness",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "spring-ai.patterns.hierarchical-subagents",
+      "name": "Hierarchical Sub-Agent Delegation",
+      "source": {
+        "platform": "spring-ai-examples",
+        "url": "https://docs.spring.io/spring-ai/reference/api/effective-agents.html",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "delegation-supervisor-workers",
+        "domain": "dev-code"
+      },
+      "description": "Parent agent delegates to isolated-context specialist sub-agents and synthesises their structured outputs.",
+      "implementation": {
+        "agent_roles": [
+          "HierarchicalSubagentsAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-invocation",
+          "rationale": "Sub-agent inputs schema-validated before invocation."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Each sub-agent contribution scored before synthesis."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "hierarchical-subagents",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "spring-ai.patterns.agent-skills",
+      "name": "Modular Agent Skills Loader",
+      "source": {
+        "platform": "spring-ai-examples",
+        "url": "https://spring.io/blog/2026/01/13/spring-ai-generic-agent-skills/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "single-agent",
+        "domain": "general"
+      },
+      "description": "Skills as composable folders loaded on demand at runtime; agent selects skill from a registry per task.",
+      "implementation": {
+        "agent_roles": [
+          "AgentSkillsAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling"
+        ],
+        "trigger": "request-response",
+        "state": "stateless",
+        "hitl_level": "none",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-tool-invocation",
+          "rationale": "Loaded skill checked against capability registry."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "agent-skills",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "dapr-agents.ops.durable-workflow-agent",
+      "name": "Durable Workflow-Backed Agent",
+      "source": {
+        "platform": "dapr-agents",
+        "url": "https://www.cncf.io/announcements/2026/03/23/general-availability-of-dapr-agents-delivers-production-reliability-for-enterprise-ai/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "sequential-pipeline",
+        "domain": "ops-automation"
+      },
+      "description": "Production-reference durable agent: workflow engine guarantees task completion under transient failures.",
+      "implementation": {
+        "agent_roles": [
+          "DurableWorkflowAgentAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "halt",
+          "flavor": "budget-cap",
+          "rationale": "Per-task time and retry cap."
+        },
+        {
+          "mechanism": "eval-periodic",
+          "flavor": "scheduled-eval",
+          "rationale": "Workflow durability metrics monitored."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "durable-workflow-agent",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "research.blackboard.shared-knowledge-discovery",
+      "name": "Blackboard Knowledge Discovery",
+      "source": {
+        "platform": "arXiv 2510.01285 / claudioed/agent-blackboard",
+        "url": "https://arxiv.org/abs/2510.01285",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "blackboard",
+        "domain": "research-intel"
+      },
+      "description": "Specialist agents read and write a shared structured state object; a control shell coordinates without direct messaging.",
+      "implementation": {
+        "agent_roles": [
+          "SharedKnowledgeDiscoveryAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval",
+          "memory-store"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-state-write",
+          "rationale": "Writes to the blackboard schema-validated before commit."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Each contributing agent's write scored against contribution-utility metric."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "shared-knowledge-discovery",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "research.blackboard.swe-coordination",
+      "name": "Blackboard SWE Coordination",
+      "source": {
+        "platform": "arXiv 2507.01701",
+        "url": "https://arxiv.org/abs/2507.01701",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "blackboard",
+        "domain": "dev-code"
+      },
+      "description": "Nine-agent software-engineering team uses a blackboard to share code state, tickets, and decisions.",
+      "implementation": {
+        "agent_roles": [
+          "SweCoordinationAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling",
+          "code-exec"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "advisory",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-state-write",
+          "rationale": "Code-state writes pass type and lint checks before commit."
+        },
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Lead-engineer signoff on merges."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "swe-coordination",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "research.contract-net.distributed-task-allocation",
+      "name": "Contract-Net Task Auctioneer",
+      "source": {
+        "platform": "Wikipedia CNP / COALESCE arXiv 2506.01900",
+        "url": "https://arxiv.org/abs/2506.01900",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "contract-net",
+        "domain": "ops-automation"
+      },
+      "description": "Manager announces tasks; pool agents bid; manager awards; contractor executes; renegotiation on failure.",
+      "implementation": {
+        "agent_roles": [
+          "DistributedTaskAllocationAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-bid-acceptance",
+          "rationale": "Winning bid validated against task spec before award."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-completion-eval",
+          "rationale": "Contractor performance scored; bad scores throttle future awards."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "distributed-task-allocation",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "research.contract-net.satellite-task-planner",
+      "name": "Contract-Net Satellite Tasker",
+      "source": {
+        "platform": "IJAE 2026 Guo et al.",
+        "url": "https://arxiv.org/abs/2506.01900",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "contract-net",
+        "domain": "research-intel"
+      },
+      "description": "Auction-based task allocation across a satellite fleet; satellites bid on observation windows.",
+      "implementation": {
+        "agent_roles": [
+          "SatelliteTaskPlannerAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling",
+          "schedule-solver"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "none",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-bid-acceptance",
+          "rationale": "Bid feasibility checked against satellite ephemeris."
+        },
+        {
+          "mechanism": "eval-periodic",
+          "flavor": "scheduled-eval",
+          "rationale": "Awarded-task completion rate monitored across fleet."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "satellite-task-planner",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "commerce.auction.real-time-bid-arbitration",
+      "name": "Real-Time Bid Arbitration Agent",
+      "source": {
+        "platform": "PubMatic AgenticOS / IAB AAMP",
+        "url": "https://www.iab.com/agentic-marketing-framework/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "market-making-auction",
+        "domain": "sales-marketing"
+      },
+      "description": "Agent bids in real-time auctions to fulfill external requests; pricing emerges from the market, not the prompt.",
+      "implementation": {
+        "agent_roles": [
+          "RealTimeBidArbitrationAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling",
+          "auction-bus"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "halt",
+          "flavor": "budget-cap",
+          "rationale": "Per-window spend cap halts further bids."
+        },
+        {
+          "mechanism": "eval-periodic",
+          "flavor": "scheduled-eval",
+          "rationale": "Win-rate and ROAS monitored against budget envelope."
+        },
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Anomalous bid bursts escalate to ops."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "real-time-bid-arbitration",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "commerce.auction.agent-to-agent-settlement",
+      "name": "Agent-to-Agent Commerce Settlement",
+      "source": {
+        "platform": "arXiv 2507.03904 Agent Exchange",
+        "url": "https://arxiv.org/abs/2507.03904",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "market-making-auction",
+        "domain": "general"
+      },
+      "description": "Agents discover, bid for, and settle inter-agent service exchanges across a brokered marketplace.",
+      "implementation": {
+        "agent_roles": [
+          "AgentToAgentSettlementAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling",
+          "payment-api"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-settlement",
+          "rationale": "Settlement preconditions verified before payment."
+        },
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Disputes escalate to operator."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "agent-to-agent-settlement",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "education.tutor.adaptive-practice-coach",
+      "name": "Adaptive Practice Coach",
+      "source": {
+        "platform": "arXiv 2505.22526",
+        "url": "https://arxiv.org/abs/2505.22526",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "evaluator-optimizer",
+        "domain": "education"
+      },
+      "description": "Tutor agent generates practice items, scores learner responses, and adapts difficulty per a mastery model.",
+      "implementation": {
+        "agent_roles": [
+          "AdaptivePracticeCoachAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "advisory",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-response",
+          "rationale": "Practice items pass curriculum-alignment check."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Each item scored on diagnostic value before delivery."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "adaptive-practice-coach",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "education.faculty.instructional-design-assistant",
+      "name": "Instructional Design Assistant",
+      "source": {
+        "platform": "arXiv 2508.19611",
+        "url": "https://arxiv.org/abs/2508.19611",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "delegation-supervisor-workers",
+        "domain": "education"
+      },
+      "description": "Lead agent decomposes a unit-design request into outline, materials, and assessment sub-tasks delegated to specialists.",
+      "implementation": {
+        "agent_roles": [
+          "InstructionalDesignAssistantAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval",
+          "document-gen"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Faculty reviews unit before publish."
+        },
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-response",
+          "rationale": "Materials checked for academic-integrity violations."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "instructional-design-assistant",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "education.admin.retention-outreach",
+      "name": "Student Retention Outreach Agent",
+      "source": {
+        "platform": "Canvas AI Teaching Agent / Inside Higher Ed Mar 2026",
+        "url": "https://www.insidehighered.com/news/tech-innovation/artificial-intelligence/2026/03/14/instructure-ai-canvas-classrooms",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "continuous-monitor",
+        "domain": "education"
+      },
+      "description": "Continuous monitor on student-engagement signals; flags at-risk learners and drafts outreach messages.",
+      "implementation": {
+        "agent_roles": [
+          "RetentionOutreachAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "retrieval"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "sanitizer",
+          "flavor": "pii",
+          "rationale": "Engagement data redacted for FERPA compliance before LLM exposure."
+        },
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Advisor approves outreach drafts before send."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "retention-outreach",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "energy.grid.impact-study-runner",
+      "name": "Grid Impact Study Runner",
+      "source": {
+        "platform": "Microsoft / MISO / PJM partnership Jan 2026",
+        "url": "https://www.misoenergy.org/about/media-center/miso-and-pjm-collaborate-with-microsoft-on-ai-for-impact-studies/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "sequential-pipeline",
+        "domain": "energy-utilities"
+      },
+      "description": "Pipeline runs interconnection impact studies: load flow, contingency analysis, and report drafting.",
+      "implementation": {
+        "agent_roles": [
+          "ImpactStudyRunnerAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling",
+          "simulator"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Engineer approves study report before issue."
+        },
+        {
+          "mechanism": "eval-event",
+          "flavor": "on-decision-eval",
+          "rationale": "Study scored against simulator ground truth."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "impact-study-runner",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "energy.demand.flexibility-orchestrator",
+      "name": "Demand-Flexibility Orchestrator",
+      "source": {
+        "platform": "PowerAgent concept / smart-grid review",
+        "url": "https://www.sciencedirect.com/science/article/pii/S2210670725004500",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "continuous-monitor",
+        "domain": "energy-utilities"
+      },
+      "description": "Continuous monitor of grid demand signals; dispatches flexibility programs and adjusts pricing in response.",
+      "implementation": {
+        "agent_roles": [
+          "FlexibilityOrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling",
+          "scada"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Dispatch decisions above threshold require operator approval."
+        },
+        {
+          "mechanism": "halt",
+          "flavor": "budget-cap",
+          "rationale": "Curtailment budget capped per program window."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "flexibility-orchestrator",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "public-sector.constituent.311-triage",
+      "name": "311 Constituent Triage Agent",
+      "source": {
+        "platform": "City of Kyle TX / StateTech Feb 2026",
+        "url": "https://statetechmagazine.com/article/2026/02/agentic-ai-state-and-local-government-perfcon",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "handoff-routing",
+        "domain": "public-sector"
+      },
+      "description": "First-touch agent classifies inbound 311 requests and hands off to the correct city department's workflow.",
+      "implementation": {
+        "agent_roles": [
+          "311TriageAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "advisory",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "sanitizer",
+          "flavor": "pii",
+          "rationale": "Constituent identifiers redacted from LLM exposure."
+        },
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-invocation",
+          "rationale": "Route audited; misroutes flagged for triage review."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "311-triage",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "public-sector.licensing.passport-renewal-coordinator",
+      "name": "Passport Renewal Coordinator",
+      "source": {
+        "platform": "UK gov AI assistants / Bobbi police pattern",
+        "url": "https://www.gov.uk/government/news/uk-takes-major-step-towards-ai-revolution",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "planner-executor",
+        "domain": "public-sector"
+      },
+      "description": "Plans the multi-step passport renewal flow per applicant, executes via downstream agency endpoints, halts on missing docs.",
+      "implementation": {
+        "agent_roles": [
+          "PassportRenewalCoordinatorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling",
+          "document-validate"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": false,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "sanitizer",
+          "flavor": "pii",
+          "rationale": "Identity-document fields tokenized before LLM exposure."
+        },
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Caseworker approves before submission to issuing authority."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "passport-renewal-coordinator",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
+    },
+    {
+      "id": "public-sector.case.cross-agency-handoff",
+      "name": "Cross-Agency Case Handoff Mesh",
+      "source": {
+        "platform": "Estonia Bürokratt cross-agency mesh",
+        "url": "https://e-estonia.com/solutions/e-governance/burokratt/",
+        "evidence": "market-scan-2026-06-29"
+      },
+      "matrix_cell": {
+        "coordination_pattern": "handoff-routing",
+        "domain": "public-sector"
+      },
+      "description": "Constituent case routed across agency boundaries via a handoff mesh; each agency owns its segment then re-emits.",
+      "implementation": {
+        "agent_roles": [
+          "CrossAgencyHandoffAgent",
+          "OrchestratorAgent"
+        ],
+        "tools": [
+          "llm-only",
+          "tool-calling"
+        ],
+        "trigger": "request-response",
+        "state": "event-sourced",
+        "hitl_level": "application",
+        "multi_agent": true,
+        "loop_mechanic": "See blueprint folder for the coordination loop specific to this pattern."
+      },
+      "controls": [
+        {
+          "mechanism": "sanitizer",
+          "flavor": "pii",
+          "rationale": "PII scoped per-agency; cross-boundary handoff drops out-of-scope fields."
+        },
+        {
+          "mechanism": "hitl",
+          "flavor": "application",
+          "rationale": "Each agency case-owner approves handoff before release."
+        },
+        {
+          "mechanism": "guardrail",
+          "flavor": "before-agent-invocation",
+          "rationale": "Receiving agency's jurisdiction verified."
+        }
+      ],
+      "akka_sample": {
+        "status": "not-started",
+        "estimated_complexity": "medium",
+        "candidate_name": "cross-agency-handoff",
+        "notes": "Added 2026-06-29 from market-scan horizon scan."
+      }
     }
   ]
 };
   state.classifications = {
   "schema_version": 1,
-  "generated_at": "2026-06-26",
-  "total_entries": 417,
+  "generated_at": "2026-06-29",
+  "total_entries": 455,
   "rules_version": 1,
   "buckets": [
     {
@@ -22095,6 +23934,196 @@ function load(){
       "id": "glean.crossfunc.intelligent-reminders",
       "bucket": "agent+workflow",
       "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "anthropic.finance.pitch-builder",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.meeting-preparer",
+      "bucket": "agent",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.earnings-reviewer",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'planner-executor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.model-builder",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.market-researcher",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'continuous-monitor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.valuation-reviewer",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'evaluator-optimizer' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.gl-reconciler",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.month-end-closer",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.statement-auditor",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'evaluator-optimizer' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "anthropic.finance.kyc-screener",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'human-in-loop-gate' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "n8n.support.multi-agent-customer-router",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'delegation-supervisor-workers' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "n8n.content.subworkflow-pipeline",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "n8n.ops.self-correcting-extraction",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'evaluator-optimizer' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "n8n.content.self-critiquing-writer-loop",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'evaluator-optimizer' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "pydantic-ai.harness.code-mode-sandbox",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'planner-executor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "pydantic-ai.harness.tool-search-discovery",
+      "bucket": "agent",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "pydantic-ai.harness.web-tools-replay",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "google-adk.planning.marathon-planner",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'planner-executor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "google-adk.interop.a2a-interactions",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'handoff-routing' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "aws-bedrock.commerce.agentcore-payments",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "aws-bedrock.ops.agentcore-managed-harness",
+      "bucket": "agent",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "spring-ai.patterns.hierarchical-subagents",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'delegation-supervisor-workers' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "spring-ai.patterns.agent-skills",
+      "bucket": "agent",
+      "rationale": "Bucket inferred from coordination pattern 'single-agent' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "dapr-agents.ops.durable-workflow-agent",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "research.blackboard.shared-knowledge-discovery",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'blackboard' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "research.blackboard.swe-coordination",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'blackboard' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "research.contract-net.distributed-task-allocation",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'contract-net' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "research.contract-net.satellite-task-planner",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'contract-net' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "commerce.auction.real-time-bid-arbitration",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'market-making-auction' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "commerce.auction.agent-to-agent-settlement",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'market-making-auction' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "education.tutor.adaptive-practice-coach",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'evaluator-optimizer' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "education.faculty.instructional-design-assistant",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'delegation-supervisor-workers' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "education.admin.retention-outreach",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'continuous-monitor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "energy.grid.impact-study-runner",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'sequential-pipeline' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "energy.demand.flexibility-orchestrator",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'continuous-monitor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "public-sector.constituent.311-triage",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'handoff-routing' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "public-sector.licensing.passport-renewal-coordinator",
+      "bucket": "agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'planner-executor' + tool usage; market-scan 2026-06-29."
+    },
+    {
+      "id": "public-sector.case.cross-agency-handoff",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "Bucket inferred from coordination pattern 'handoff-routing' + tool usage; market-scan 2026-06-29."
     }
   ]
 };
@@ -22115,11 +24144,12 @@ function load(){
 //=========================================================
 //  Filters UI
 //=========================================================
-function chipBtn(label, count, on, onClick){
+function chipBtn(label, count, on, onClick, tip){
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'chip' + (on ? ' on' : '');
   b.innerHTML = escapeHtml(label) + (count != null ? ` <span class="ct">${count}</span>` : '');
+  if (tip) b.setAttribute('title', tip);
   b.addEventListener('click', onClick);
   return b;
 }
@@ -22144,7 +24174,7 @@ function renderFilters(){
   const compCt = countsBy(e => Array.from(e._components));
   const mechCt = countsBy(e => Array.from(e._mechs));
 
-  function row(label, key, values, counts, formatter){
+  function row(label, key, values, counts, formatter, tipFor){
     const r = document.createElement('div');
     r.className = 'filter-row';
     r.innerHTML = `<div class="flbl">${label}</div>`;
@@ -22152,21 +24182,22 @@ function renderFilters(){
     chips.className = 'chips';
     values.forEach(v => {
       const on = state.filters[key].has(v);
+      const tip = tipFor ? tipFor(v) : null;
       chips.appendChild(chipBtn(formatter ? formatter(v) : v, counts[v] || 0, on, () => {
         if (state.filters[key].has(v)) state.filters[key].delete(v);
         else state.filters[key].add(v);
         renderFilters(); applyFilters();
-      }));
+      }, tip));
     });
     r.appendChild(chips);
     root.appendChild(r);
   }
 
-  row('Pattern', 'pattern', PATTERNS, patternCt, v => PATTERN_LABEL[v] || v);
+  row('Pattern', 'pattern', PATTERNS, patternCt, v => PATTERN_LABEL[v] || v, v => PATTERN_TIP[v]);
   row('Domain', 'domain', DOMAINS, domainCt);
   row('Integration', 'tier', TIERS, tierCt, v => TIER_LABEL[v]);
-  row('Components', 'component', COMPONENTS, compCt);
-  row('Governance', 'mech', MECHS, mechCt);
+  row('Components', 'component', COMPONENTS, compCt, null, v => COMPONENT_TIP[v]);
+  row('Governance', 'mech', MECHS, mechCt, v => MECH_LABEL[v] || v, v => MECH_TIP[v]);
 
   // Reset bar
   const bar = document.createElement('div');
