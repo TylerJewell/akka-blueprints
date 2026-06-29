@@ -153,12 +153,33 @@
   .bar-row .bct{ font-size:12px; font-weight:700; color:var(--yellow); text-align:right; }
 
   .loading{ padding:80px 20px; text-align:center; color:var(--muted); font-size:14px; }
+
+  .intro-block{ margin:0 0 36px; max-width:840px; color:#d7d7dc; font-size:15px; line-height:1.55; }
+  .intro-block p{ margin:0 0 12px; }
+  .intro-block a{ color:var(--yellow); text-decoration:none; border-bottom:1px solid rgba(245,197,24,0.4); }
+  .intro-block a:hover{ border-bottom-color:var(--yellow); }
+  .intro-block .run-steps{ margin:14px 0 0; padding-left:22px; }
+  .intro-block ol.run-steps li{ margin:4px 0; }
+  .intro-block code{ font-family:'SFMono-Regular',Consolas,monospace; font-size:13px;
+    background:rgba(245,197,24,0.08); border:1px solid rgba(245,197,24,0.18);
+    padding:1px 6px; border-radius:4px; color:var(--yellow); }
 </style>
 </head>
 <body>
 <div class="wrap">
 
   <h1>Agentic AI Blueprints</h1>
+
+  <div class="intro-block">
+    <p>A library of agentic AI patterns, each one a runnable system. Every blueprint is a natural-language brief that <a href="https://doc.akka.io/" target="_blank" rel="noopener">Akka Specify</a> turns into a working Akka project &mdash; agents, workflows, governance, UI, and tests &mdash; on your machine.</p>
+    <p class="run-steps"><b>Run any sample:</b></p>
+    <ol class="run-steps">
+      <li>Install <a href="https://doc.akka.io/" target="_blank" rel="noopener">Akka Specify</a> for Claude Code (one-time; see the install guide).</li>
+      <li><code>git clone https://github.com/TylerJewell/akka-blueprints.git</code></li>
+      <li><code>cd akka-blueprints/&lt;sample-folder&gt;</code></li>
+      <li>Open Claude Code and run <code>/akka:specify @SPEC.md</code></li>
+    </ol>
+  </div>
 
   <div class="filters" id="filters">
     <div class="loading">Loading corpus…</div>
