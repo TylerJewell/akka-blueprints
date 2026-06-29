@@ -324,6 +324,28 @@ const COMPONENT_TIP = {
   'Endpoint': 'Akka HttpEndpoint — the request-response surface. Routes HTTP calls to Agents, Workflows, and Entities. Every blueprint has at least one.'
 };
 
+// Context & state axes. The first two are intrinsic to any Agent/AutonomousAgent
+// blueprint (always true) and shown as informational badges, not filterable.
+// The last four vary across the library and become filter chips.
+const CONTEXT_AXES = ['session_memory','long_term_state','documents','vector_semantic','graph_db','summarization_memory'];
+const CONTEXT_FILTER_AXES = ['documents','vector_semantic','graph_db','summarization_memory'];
+const CONTEXT_LABEL = {
+  'session_memory': 'Session memory',
+  'long_term_state': 'Long-term state',
+  'documents': 'Documents',
+  'vector_semantic': 'Vector / semantic',
+  'graph_db': 'Graph DB',
+  'summarization_memory': 'Summarization memory'
+};
+const CONTEXT_TIP = {
+  'session_memory': 'Short-term per-conversation buffer the agent uses within a single task. Implicit for every Akka Agent or AutonomousAgent.',
+  'long_term_state': 'Durable application state — typically an Akka EventSourcedEntity or KeyValueEntity that survives restarts. Implicit for every agent-bearing blueprint.',
+  'documents': 'Reads a corpus of files: PDFs, markdown, spreadsheets, web pages. Retrieval is by id, path, or full-text scan — not embedding similarity.',
+  'vector_semantic': 'Embedding-based similarity search. An Akka View or sidecar vector DB (in-memory, pgvector, qdrant) returns the top-k semantically related chunks.',
+  'graph_db': 'Knowledge-graph-backed retrieval. The agent navigates relationships (entities, edges, paths) rather than text similarity.',
+  'summarization_memory': 'Rolling summary or consolidation memory beyond the session window. Pattern: a Consumer compacts old events into a summary stored on the Entity.'
+};
+
 function escapeHtml(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 //=========================================================
@@ -364,14 +386,17 @@ function inferComponents(entry, bucket){
 const state = {
   corpus: null,
   classifications: null,
+  contextState: null,
   bucketById: {},
-  enriched: [],            // entries with .tier, .bucket, .components, .mechs
+  contextById: {},
+  enriched: [],            // entries with .tier, .bucket, .components, .mechs, .context
   filters: {
     pattern: new Set(),
     domain: new Set(),
     tier: new Set(),
     component: new Set(),
     mech: new Set(),
+    context: new Set(),    // documents, vector_semantic, graph_db, summarization_memory
   },
   rendered: 0,
   pageSize: 30,
@@ -384,14 +409,20 @@ const state = {
 function load(){
   state.corpus = __CORPUS__;
   state.classifications = __CLASSIFICATIONS__;
+  state.contextState = __CONTEXT_STATE__;
   state.classifications.classifications.forEach(c => { state.bucketById[c.id] = c.bucket; });
+  state.contextById = {};
+  state.contextState.context_state.forEach(r => { state.contextById[r.id] = r; });
 
   state.enriched = state.corpus.entries.map(e => {
     const bucket = state.bucketById[e.id] || 'agent';
     const tier = classifyTier(e);
     const components = inferComponents(e, bucket);
     const mechs = new Set((e.controls || []).map(c => c.mechanism));
-    return Object.assign({}, e, { _bucket: bucket, _tier: tier, _components: components, _mechs: mechs });
+    const ctx = state.contextById[e.id] || {};
+    const ctxSet = new Set();
+    CONTEXT_AXES.forEach(a => { if (ctx[a]) ctxSet.add(a); });
+    return Object.assign({}, e, { _bucket: bucket, _tier: tier, _components: components, _mechs: mechs, _context: ctxSet });
   });
 
   renderFilters();
@@ -450,11 +481,14 @@ function renderFilters(){
     root.appendChild(r);
   }
 
+  const ctxCt = countsBy(e => Array.from(e._context).filter(a => CONTEXT_FILTER_AXES.includes(a)));
+
   row('Pattern', 'pattern', PATTERNS, patternCt, v => PATTERN_LABEL[v] || v, v => PATTERN_TIP[v]);
   row('Domain', 'domain', DOMAINS, domainCt);
   row('Integration', 'tier', TIERS, tierCt, v => TIER_LABEL[v]);
   row('Components', 'component', COMPONENTS, compCt, null, v => COMPONENT_TIP[v]);
   row('Governance', 'mech', MECHS, mechCt, v => MECH_LABEL[v] || v, v => MECH_TIP[v]);
+  row('Context & state', 'context', CONTEXT_FILTER_AXES, ctxCt, v => CONTEXT_LABEL[v], v => CONTEXT_TIP[v]);
 
   // Reset bar
   const bar = document.createElement('div');
@@ -488,6 +522,11 @@ function entryMatches(e){
   if (f.mech.size){
     let ok = false;
     for (const m of f.mech) if (e._mechs.has(m)) { ok = true; break; }
+    if (!ok) return false;
+  }
+  if (f.context.size){
+    let ok = false;
+    for (const a of f.context) if (e._context.has(a)) { ok = true; break; }
     if (!ok) return false;
   }
   return true;

@@ -1,0 +1,4110 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-06-29",
+  "total_entries": 455,
+  "axes": [
+    "session_memory",
+    "long_term_state",
+    "documents",
+    "vector_semantic",
+    "graph_db",
+    "summarization_memory"
+  ],
+  "context_state": [
+    {
+      "id": "akka.playground.helloworld",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.pipeline",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.docreview",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.dynamic",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.research",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.consulting",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.support",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.publishing",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.debate",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.negotiation",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.peerreview",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.devteam",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "akka.playground.editorial",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.flows.self-evaluation-loop",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.flows.write-a-book",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.flows.meeting-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.flows.lead-score",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.flows.email-auto-responder",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.flows.content-creator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.game-builder",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.instagram-post",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.landing-page-generator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.marketing-strategy",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.screenplay-writer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.job-posting",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.prep-for-meeting",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.recruitment",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.stock-analysis",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.match-profile-to-positions",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.meta-quest-knowledge",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.markdown-validator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.surprise-trip",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.trip-planner",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.teams.industry-agents",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.sales-offer-generator-team",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.prospect-analysis-team",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.lead-scoring-and-strategy-team",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.customer-fraud-flagging-team",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.marketing-strategy",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.landing-page-generator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.content-creator-flow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.email-auto-responder-flow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.lead-score-flow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.meeting-assistant-flow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.game-builder-team",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.instagram-post-team",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.screenplay-writer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "crewai.marketplace.recruitment-team",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "autogen.samples.agentchat-chess-game",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "autogen.samples.agentchat-graphrag",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": true,
+      "summarization_memory": false
+    },
+    {
+      "id": "autogen.samples.core-async-human-in-the-loop",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "autogen.samples.core-distributed-group-chat",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "autogen.samples.core-semantic-router",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "autogen.samples.core-streaming-handoffs-fastapi",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "autogen.samples.gitty",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "autogen.samples.task-centric-memory",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "autogen.magentic-one",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.patterns.prompt-chaining",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.patterns.routing",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.patterns.parallelization",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.patterns.orchestrator-workers",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.patterns.evaluator-optimizer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.patterns.autonomous-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.cookbook.sub-agents",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.cookbook.customer-service-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.customer-support",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.code-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.plan-and-execute",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.llm-compiler",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.rewoo",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.lats",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.reflection",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.reflexion",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.self-discover",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.multi-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.rag",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.web-navigation",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.chatbot-simulation-evaluation",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.human-in-the-loop",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.extraction",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.templates.usaco",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": true
+    },
+    {
+      "id": "langgraph.templates.chatbots",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langgraph.agents-from-scratch.email-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.agent.function-calling-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.agent.react-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.agent.codeact-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.agent.multi-agent-workflow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.human-in-loop-story-crafting",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.reliable-structured-generation",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.query-planning",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.corrective-rag",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.self-discover",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.sub-question-query",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.router-query",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.text-to-sql",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.multi-step-query",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.long-rag",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.multi-strategy",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.llama-agents.document-agents-finance-triage",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.llama-agents.workflow-server",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.llama-agents.dbos-durable",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.llama-agents.observability",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.basic-rag",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.citation-query",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "llamaindex.workflow.json-query-engine",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.agent-from-any-llm",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.async-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.gradio-ui",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.inspect-multiagent-run",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.multi-llm-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.multiple-tools",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.open-deep-research",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.plan-customization",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.rag",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.rag-using-chromadb",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.sandboxed-execution",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.server",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.smolagents-benchmark",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.structured-output-tool",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "smolagents.examples.text-to-sql",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.finance-assistant-swarm",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.genai-financial-advisor",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.personal-finance-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.whatsapp-fintech",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.medical-doc-processing",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.airline-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.ai-ads-crypto",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.startup-advisor-mcp",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.email-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.personal-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.research-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.scrum-master",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.restaurant-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.dataprocessing-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.aws-assistant-mcp",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.aws-audit-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.code-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.data-warehouse-optimizer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.lambda-error-analysis",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.industry.sre-incident-response",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.tech.library-book-renewal",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.tech.pokemon-team-advisor",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.tech.rag",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.eval.ab-testing-models",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.eval.multi-agent-eval",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.eval.multi-turn-actor-sim",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.eval.trajectory-eval",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.ux.ag-ui-copilotkit",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.ux.human-in-loop-approval",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.ux.hvac-analytics",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.ux.slack-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.ux.triage-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.ux.video-games-sales",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.edge.strands-spot",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.learn.swarm",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.learn.graph",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.learn.agents-as-tools",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.learn.hitl",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.learn.self-improving",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-strands.learn.guardrails",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.agent.code-interpretation",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.agent.guardrails",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.agent.knowledge-base",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.agent.long-term-memory",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": true
+    },
+    {
+      "id": "aws-bedrock.agent.computer-use",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.agent.connected-house",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.agent.custom-orchestration",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.agent.hitl",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.agent.inline",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.agent.user-confirmation",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.agent.ragas-eval",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.hello-world",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.contract-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.devops",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.energy-efficiency",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.financial-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.investment-research",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.mortgage-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.portfolio-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.real-estate",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.startup-advisor",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.support",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.team-poems",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.trip-planner",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.mac.voyage-virtuoso",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.ux.foursquare-location",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.ux.hr-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.ux.video-games-sales",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.rag",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.academic-research",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.adk-ae-oauth",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.agent-observability-bq",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.agent-skills-tutorial",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.ai-security-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.airflow-upgrade",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.ambient-expense",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.antom-payment",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.auto-insurance",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.bidi-demo",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.blog-writer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.brand-aligned-presentations",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.brand-aligner",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.brand-search-optimization",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.camel",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.claim-adjudication",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.currency-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.customer-service",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.cyber-guardian",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.data-engineering",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.data-science",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.deep-search",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.earth-engine",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.economic-research",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.financial-advisor",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.fomc-research",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.fun-facts",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.gemini-fullstack",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.gemma-food-tour",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.genmedia-commerce",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.global-kyc",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.google-trends",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.hierarchical-workflow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.high-volume-docs",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.image-scoring",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.incident-management",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.invoice-processing",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.llm-auditor",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.ml-engineering",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.marketing-agency",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.medical-preauth",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.memory-bank",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.multiformat-rag",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.nexshift",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.nurse-handover",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.on-brand-genmedia",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.order-processing",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.parallel-decomposition",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.personalized-shopping",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.plumber-de-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.podcast-transcript",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.policy-as-code",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.product-catalog-ads",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.realtime-conversational",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.retail-location",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.safety-plugins",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.sdlc-task-planner",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.sdlc-technical-designer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.sdlc-user-story-refiner",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.short-movie",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.small-business-loan",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.software-bug-assistant.python",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.story-teller",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.supply-chain",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.swe-benchmark",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.tau2-benchmark",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.travel-concierge",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.travel-planner-maps",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.workflow-concurrent-research-writer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.workflow-morning-email",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.workflows-HITL-concierge",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.workflows-sequential",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.youtube-analyst",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.java.software-bug-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.java.time-series-forecasting",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "dapr-agents.quickstart.llm-client",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "dapr-agents.quickstart.durable-agent-workflow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "dapr-agents.quickstart.durable-agent-http",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "dapr-agents.quickstart.durable-agent-pubsub",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "dapr-agents.quickstart.workflow-llm-activities",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "dapr-agents.quickstart.workflow-multi-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "dapr-agents.quickstart.tracing-zipkin",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "dapr-agents.quickstart.hot-reload",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.bedrock.basic",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.bedrock.signals-queries",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.bedrock.entity",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.openai-agents.handoffs",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.openai-agents.research-bot",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.openai-agents.financial-research",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.openai-agents.customer-service",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.openai-agents.input-guardrails",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.openai-agents.llm-as-judge",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.openai-agents.routing",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.openai-agents.parallelization",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.openai-agents.agents-as-tools",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.openai-agents.deterministic-pipeline",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.strands.human-in-the-loop",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.strands.activity-interrupt",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.strands.hooks",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.langgraph.functional",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.langgraph.graph-api",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "temporal.google-adk",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "letta.cookbook.multi-agent-async",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": true
+    },
+    {
+      "id": "letta.cookbook.hello-world",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "letta.cookbook.sleeptime",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": true
+    },
+    {
+      "id": "letta.cookbook.shared-memory",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": true
+    },
+    {
+      "id": "letta.cookbook.customer-crm",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "letta.cookbook.self-improving-deep-research",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "letta.cookbook.letta-code",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "mastra.examples.agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "mastra.examples.durable-agents",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "mastra.examples.evals-with-memory",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "mastra.examples.inngest",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "mastra.examples.voice",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "vercel.templates.ai-chatbot",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "vercel.templates.lead-qualification-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "vercel.templates.sales-call-analyzer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "vercel.templates.assistloop-support",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "inngest.agentkit.code-assistant-agentic",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "inngest.agentkit.deep-research",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "inngest.agentkit.support-agent-human-in-the-loop",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "inngest.agentkit.swebench",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "inngest.agentkit.reddit-search-browserbase",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "voltagent.examples.with-subagents",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "voltagent.examples.with-youtube-to-blog",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "voltagent.examples.with-research-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "voltagent.examples.with-planagents",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "voltagent.examples.with-guardrails",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "voltagent.examples.with-live-evals",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "voltagent.examples.with-whatsapp",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "voltagent.examples.with-ad-creator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "pydantic-ai.examples.bank-support",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "pydantic-ai.examples.flight-booking",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "pydantic-ai.examples.medical-agent-delegation",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "pydantic-ai.examples.sql-gen",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "pydantic-ai.examples.slack-lead-qualifier",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "pydantic-ai.examples.weather-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "pydantic-ai.examples.rag",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "agno.cookbook.demo.localwiki",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "agno.cookbook.demo.gitwiki",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "agno.cookbook.demo.codesearch",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "agno.cookbook.teams.multi-agent-coordination",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "agno.cookbook.workflows.orchestration",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "agno.cookbook.evals.framework",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "semantic-kernel.demos.assistants-group-chat",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "semantic-kernel.demos.booking-restaurant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "semantic-kernel.demos.document-generator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "semantic-kernel.demos.guided-conversations",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "semantic-kernel.demos.process-with-dapr",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "semantic-kernel.agents.handoff",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "dspy.tutorials.customer-service-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "dspy.tutorials.mem0-react-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": true
+    },
+    {
+      "id": "dspy.tutorials.math-wiki-react",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "spring-ai.agentic-patterns.chain-workflow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "spring-ai.agentic-patterns.evaluator-optimizer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "spring-ai.agentic-patterns.orchestrator-workers",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "spring-ai.agentic-patterns.parallelization",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "spring-ai.agentic-patterns.routing",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "spring-ai.agents.reflection",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "spring-ai.misc.claude-skills-demo",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.basic-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.sequential-workflow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.loop-workflow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.parallel-workflow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.conditional-workflow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.composed-workflow",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.supervisor-orchestration",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.non-ai-agents",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.human-in-the-loop",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langchain4j.customer-support-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "langchain4j.mcp-github",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.web-scraper-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.stock-analysis-team",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.competitor-research-exa-notion",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.social-media-amplifier",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.blog-writer-ollama",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.claude-content-generator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.discord-router-bot",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.instagram-dm-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.supportflow-lite",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.lead-mgmt-erpnext",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.candidate-shortlist-erpnext",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.pipedrive-reply-qualifier",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.pdf-extract-claude-gemini",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.pdf-extract-hitl-cradl",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.chat-with-pdf-cited",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.info-monitor-openai-slack",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.sentiment-tracking-linear-slack",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.chatbot-memory-tool-routing",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": true,
+      "graph_db": false,
+      "summarization_memory": true
+    },
+    {
+      "id": "n8n.templates.line-assistant-calendar-gmail",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.zoom-meeting-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.inbox-zero-lite",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.leadpilot-lite",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.agentic-telegram-langchain",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.notion-ai-assistant-generator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.wordpress-autotag",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.conversational-interview-form",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.postgres-nl-query",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.siem-alert-enrichment",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.gitlab-code-review",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.templates.todoist-ai-organizer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "salesforce.agentforce.service-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "salesforce.agentforce.sdr",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "salesforce.agentforce.sales-coach",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "salesforce.agentforce.campaign-optimizer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "salesforce.agentforce.merchandiser",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "salesforce.agentforce.employee-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "microsoft.copilot.case-management",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "microsoft.copilot.supplier-comms",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "microsoft.copilot.finance-reconciliation",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "microsoft.copilot.scheduling-ops",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "microsoft.copilot.wellness-check",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "microsoft.copilot.facilitator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "microsoft.copilot.project-manager",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "servicenow.now-assist.itsm-change-mgmt",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "servicenow.now-assist.incident-categorization",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "servicenow.now-assist.post-incident-review",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "servicenow.now-assist.hrsd",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "servicenow.now-assist.secops-triage",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "servicenow.partner.customer-churn",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "glean.engineering.spec-to-pr",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "glean.engineering.pr-review",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "glean.crossfunc.ghostwriter",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "glean.sales.deal-strategy",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "glean.support.ticket-next-steps",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "glean.marketing.seo-evaluator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "glean.it.helpdesk",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "glean.crossfunc.intelligent-reminders",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.finance.pitch-builder",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.finance.meeting-preparer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.finance.earnings-reviewer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.finance.model-builder",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.finance.market-researcher",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.finance.valuation-reviewer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.finance.gl-reconciler",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.finance.month-end-closer",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.finance.statement-auditor",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "anthropic.finance.kyc-screener",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.support.multi-agent-customer-router",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.content.subworkflow-pipeline",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "n8n.ops.self-correcting-extraction",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": true
+    },
+    {
+      "id": "n8n.content.self-critiquing-writer-loop",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "pydantic-ai.harness.code-mode-sandbox",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "pydantic-ai.harness.tool-search-discovery",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "pydantic-ai.harness.web-tools-replay",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.planning.marathon-planner",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "google-adk.interop.a2a-interactions",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.commerce.agentcore-payments",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "aws-bedrock.ops.agentcore-managed-harness",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "spring-ai.patterns.hierarchical-subagents",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "spring-ai.patterns.agent-skills",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "dapr-agents.ops.durable-workflow-agent",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "research.blackboard.shared-knowledge-discovery",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": true
+    },
+    {
+      "id": "research.blackboard.swe-coordination",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "research.contract-net.distributed-task-allocation",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "research.contract-net.satellite-task-planner",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "commerce.auction.real-time-bid-arbitration",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "commerce.auction.agent-to-agent-settlement",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "education.tutor.adaptive-practice-coach",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "education.faculty.instructional-design-assistant",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "education.admin.retention-outreach",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "energy.grid.impact-study-runner",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "energy.demand.flexibility-orchestrator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "public-sector.constituent.311-triage",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "public-sector.licensing.passport-renewal-coordinator",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": true,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    },
+    {
+      "id": "public-sector.case.cross-agency-handoff",
+      "session_memory": true,
+      "long_term_state": true,
+      "documents": false,
+      "vector_semantic": false,
+      "graph_db": false,
+      "summarization_memory": false
+    }
+  ]
+}
