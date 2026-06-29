@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: statement-auditor
+coordination_pattern: evaluator-optimizer
+domain: legal-compliance
+
+controls:
+  - id: G1
+    name: Block finding reports with unresolvable working-paper citations before the reviewer runs
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Audit findings are evidence-of-record. A finding that cites a working paper
+      not present in the engagement registry is unsupported by definition — forwarding
+      it to the reviewer wastes a review cycle and risks the reviewer giving substantive
+      feedback on a finding that cannot be traced to source material. A deterministic
+      citation check after each analysis pass catches the gap, returns a structured
+      list of unresolvable references to the Auditor, and keeps the Reviewer focused
+      on materiality and accuracy rather than provenance repair. Every blocked iteration
+      still counts toward the retry ceiling so the loop cannot spin indefinitely on
+      a persistently mis-citing Auditor.
+    implementation: |
+      Wired as the `citationGuardrailStep` of `AuditWorkflow`, immediately after
+      `analyzeStep`. A pure-function check verifies that every `Finding.citedWorkingPaper`
+      value in the returned `FindingReport` appears in the engagement's `workingPaperRefs`
+      list. On failure, emits `IterationCitationVerdictRecorded` with `verdict.passed = false`,
+      `reasonCode = "UNRESOLVED_CITATION"`, and `unresolvedRefs` listing each missing
+      reference. The workflow then transitions back to `analyzeStep` with a structured
+      `ReviewNotes` payload whose first bullet reads "Citations reference working papers
+      not in the engagement registry; correct and resubmit: [refs]". The Auditor's
+      next call receives this payload as prior review feedback.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every review cycle's verdict as a scored eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The reviewer's approved-or-revise verdict, combined with the materiality score,
+      is the highest-information signal the audit loop produces. Recording it as a
+      typed event per iteration gives compliance officers a continuous quality stream —
+      approval rate by iteration number, distribution of materiality scores, citation
+      failure frequency — without any instrumentation inside the workflow itself. This
+      data also supports retrospective audits: when a question arises about why a
+      finding report was accepted or rejected, the full event trail is queryable
+      without reconstructing workflow state.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `EngagementsView.getAllEngagements`, finds iterations that have been reviewed but
+      do not yet have a matching `EvalRecorded` event, and calls
+      `EngagementEntity.recordEval(iterationNumber, verdict, materialityScore,
+      citationsPassed)`. The call is idempotent on `(engagementId, iterationNumber)`.
+      The workflow itself also emits one `EvalRecorded` event on the terminal
+      transition (`EngagementSignedOff` or `EngagementUnresolved`) carrying the
+      whole loop's outcome — total iterations, final verdict, and whether any
+      citation guardrail was triggered.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Citation guardrail · working-paper registry check
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: runs-out-of-the-box
+  - id: E1
+    label: Per-iteration eval recorder · materiality + citation status
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: runs-out-of-the-box

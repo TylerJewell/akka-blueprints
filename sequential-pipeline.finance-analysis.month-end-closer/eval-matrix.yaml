@@ -1,0 +1,93 @@
+schema_version: 1
+sample_id: month-end-closer
+coordination_pattern: sequential-pipeline
+domain: finance-analysis
+
+controls:
+  - id: H1
+    name: Require accounting approval before each downstream phase starts
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      In a month-end close pipeline, a journal entry set produced by an AI
+      agent carries financial materiality. Advancing to the next phase
+      without human review removes the accounting team's ability to catch
+      errors before they are formalised in the close package. The
+      application-level HITL gate is the correct cut: after the GATHER phase
+      records a LedgerSnapshot and after the VALIDATE phase records a
+      JournalEntrySet, the workflow parks and waits for an explicit approval
+      decision from an accounting user. No timer auto-advances the gate;
+      only a human POST to the approve or reject endpoint does. A rejection
+      replays the preceding task step so the agent can produce a corrected
+      output for re-review. Every approval and rejection is recorded as a
+      durable event on CloseRunEntity with the approver identity, decision,
+      and timestamp.
+    implementation: |
+      `CloseRunWorkflow` contains two `approvalGate` steps — one after
+      `gatherStep` records `LedgerDataGathered`, one after `validateStep`
+      records `EntriesValidated`. Each gate step polls
+      `CloseRunEntity.status` until it observes either a `StepApproved` or
+      `StepRejected` event (written by `CloseRunEndpoint` when an accounting
+      user calls `POST /api/close-runs/{id}/approve` or `.../reject`). On
+      `StepApproved`, the workflow transitions the entity to the next active
+      status and advances to the next step. On `StepRejected`, the workflow
+      emits the corresponding lifecycle start event and re-runs the preceding
+      task step, consuming another iteration from `CloseAgent`'s 4-iteration
+      budget. The approval gate has a `stepTimeout` of 3600 s to accommodate
+      human review time while keeping the workflow durable. The gate does not
+      apply after `reportStep`; the close report flows directly to `evalStep`
+      because the reconciliation score surfaces any output quality gap for the
+      reader before they act on the package.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every close package for reconciliation accuracy
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A close package that passes the HITL approval gates can still contain
+      subtle reconciliation errors — journal entries whose debits and credits
+      do not net to zero, entries referencing account codes not in the chart
+      of accounts, accrual entries missing their required reversal date, or a
+      trial-balance variance that exceeds the materiality threshold. An
+      on-decision evaluator surfaces these patterns without blocking the
+      package itself, giving the accounting team a fast signal about which
+      close packages require a closer inspection before they are filed.
+    implementation: |
+      `ReconciliationScorer` runs inside `CloseRunWorkflow.evalStep`, fired
+      immediately after `CloseReportWritten` lands. The scorer is
+      deterministic and rule-based (no LLM call — keeping the single-agent
+      sequential-pipeline invariant honest). Four checks, one point per
+      check satisfied, on a base of 1:
+      (1) Debit/credit balance — `TrialBalanceSummary.totalDebits` equals
+      `TrialBalanceSummary.totalCredits` across the full `JournalEntrySet`.
+      (2) Account-code validity — every `JournalEntry.debitAccount` and
+      `JournalEntry.creditAccount` appears in the chart of accounts recorded
+      on `LedgerSnapshot.chartOfAccounts`.
+      (3) Accrual reversal completeness — every `JournalEntry` whose
+      `narration` contains "accrual" has a non-empty `reversalDate`.
+      (4) Variance within threshold — `TrialBalanceSummary.variance.abs()`
+      is less than or equal to the configured materiality threshold (default
+      `BigDecimal.ZERO` for the sample). Emits
+      `ReconciliationScored{score: 1-5, rationale: String}` with a rationale
+      sentence naming the largest gap. The score is surfaced on the App UI
+      tab; close runs with score ≤ 2 are flagged for mandatory human
+      inspection before the package is filed.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Accounting approval gate
+    mechanism: HITL
+    implementation: application-level approval pause
+    source: —
+  - id: E1
+    label: Reconciliation accuracy eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: adaptive-practice-coach
+coordination_pattern: evaluator-optimizer
+domain: education
+
+controls:
+  - id: G1
+    name: Enforce curriculum alignment before the learner sees an item
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      A practice item that drifts off-topic wastes the learner's time and
+      distorts the mastery estimate. If the generator produces an item whose
+      subject diverges from the declared session topic — or one with an
+      empty question or answer key — that item must never reach the learner.
+      A deterministic pre-delivery guardrail catches the misalignment,
+      returns structured feedback to the generator, and ensures every item
+      the learner sees is relevant to the skill being assessed. Because the
+      check is deterministic it adds no latency and carries no false-negative
+      risk from probabilistic scoring.
+    implementation: |
+      Wired as the `curriculumStep` of `PracticeSessionWorkflow`, immediately
+      after `generateStep`. A pure-function check that verifies `item.topic`
+      contains the session's declared topic string (case-insensitive) and that
+      `item.question` and `item.answerKey` are non-empty. On failure, emits
+      `ItemCurriculumVerdictRecorded` with `verdict.passed = false` and
+      `reasonCode = "CURRICULUM_MISMATCH"`, then transitions back to
+      `generateStep` with a fixed `CurriculumFeedback("Item topic does not
+      match the session topic; regenerate on-topic.")`. The replacement item
+      still counts toward `maxItems` so the ceiling remains an absolute bound.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record each item's diagnostic value as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The scorer's verdict per item — correctness, mastery delta, and
+      diagnostic tag — is the primary signal for measuring how well the
+      system calibrates to a learner. Recording it as a typed event per item
+      gives operators a continuous quality stream: mastery-gain per item
+      number, frequency of curriculum mismatches, distribution of diagnostic
+      tags across topics. This signal is non-blocking; it does not affect the
+      session in flight but is indispensable for offline quality analysis and
+      for surfacing the per-item timeline in the App UI.
+    implementation: |
+      `DiagnosticSampler` (TimedAction) fires every 30 s. Queries
+      `SessionsView.getAllSessions`, finds `SessionItem` entries where
+      `scoreReport` is present but no matching `DiagnosticRecorded` event
+      has been written, and calls
+      `LearnerSessionEntity.recordDiagnostic(itemNumber, diagnosticTag,
+      masteryDelta, correct)`. The call is idempotent on
+      `(sessionId, itemNumber)`. The workflow itself also emits one
+      `DiagnosticRecorded` event on each terminal transition
+      (SessionMastered or SessionCapReached) carrying the session-level
+      mastery outcome. Events surface in the App UI's per-item timeline
+      and in `/api/sessions/{id}`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Curriculum-alignment guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: runs-out-of-the-box
+  - id: E1
+    label: Per-item diagnostic recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: runs-out-of-the-box

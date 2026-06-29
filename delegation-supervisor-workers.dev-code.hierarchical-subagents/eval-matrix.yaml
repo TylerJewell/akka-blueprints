@@ -1,0 +1,64 @@
+# Eval Matrix for the hierarchical-subagents Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (dev-code domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: hierarchical-subagents
+generated_at: 2026-06-29
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: dev-code
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Validate sub-agent input schema before each specialist invocation
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: schema-validation
+    enforcement: blocking
+    rationale: >
+      Each specialist accepts a strictly typed query from the orchestrator's DelegationPlan.
+      Running a schema check before the call is made catches malformed plans produced by
+      the orchestrator before they reach a specialist, preventing a wasted LLM call and
+      surfacing the failure at the point closest to its cause.
+    implementation: >
+      A before-agent-invocation guardrail in DelegationWorkflow.guardrailStep validates
+      the DelegationPlan returned by TaskOrchestrator: both designQuery and implementationQuery
+      must be non-null and non-blank. On failure the workflow transitions to rejectStep,
+      calls TaskDelegationEntity.reject, and the task enters REJECTED before either
+      ArchitectSpecialist or ImplementationSpecialist is invoked.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score each specialist contribution before synthesis
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The orchestrator's synthesis decision depends entirely on the quality of the two
+      specialist contributions it merges. Scoring each contribution independently with a
+      rubric judge before synthesis gives the orchestrator signal about input quality and
+      surfaces per-specialist scores on the task record without blocking delivery.
+    implementation: >
+      ContributionEvaluator (TimedAction, every 5 minutes) queries DelegationView for
+      SYNTHESISED tasks without an architectScore, runs a 1-5 rubric judge over each
+      specialist's output independently, and calls TaskDelegationEntity.recordContributionScores
+      (architectScore, implementationScore, rationale), emitting ContributionScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Sub-agent input guardrail
+    mechanism: "guardrail · before-agent-invocation"
+    short: Block delegation when the orchestrator's plan fails schema validation.
+  - id: E1
+    name: Contribution quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score each specialist's contribution before it enters synthesis.

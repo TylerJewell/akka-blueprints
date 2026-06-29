@@ -1,0 +1,80 @@
+schema_version: 1
+sample_id: impact-study-runner
+
+# ---- Purpose ----
+purpose:
+  primary_function: interconnection-impact-study-pipeline
+  sector: energy-utilities
+  decisions_surface: engineer-reviewed-recommendation
+  user_type: transmission-planning-engineer
+
+# ---- Data ----
+data:
+  inputs:
+    - interconnection-request-id
+    - in-process-load-flow-corpus
+    - in-process-grid-parameters
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: engineer-reviewed-recommendation
+  decision_subject: interconnection-impact-study-report
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-before-issuance
+  engineer_approves_every_report_before_issuance: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-interconnection-study
+  failure_modes:
+    - binding-violation-not-covered-in-report
+    - n1-criterion-flag-mismatch
+    - voltage-bounds-not-checked
+    - section-count-mismatch
+    - report-issued-without-engineer-approval
+    - load-flow-divergence
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: transmission-planning-engineer
+  reviewer_must_approve_before_issuance: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_study: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  grid-data-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  nerc-reliability-standards-applicable: TO_BE_COMPLETED_BY_DEPLOYER

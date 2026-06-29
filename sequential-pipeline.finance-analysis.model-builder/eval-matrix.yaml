@@ -1,0 +1,64 @@
+schema_version: 1
+sample_id: financial-model-builder
+coordination_pattern: sequential-pipeline
+domain: finance-analysis
+
+controls:
+  - id: H1
+    name: Require analyst approval before scoring a financial model
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Financial models derived from SEC filings feed investment decisions that carry real capital
+      consequences. A model with unsupported derivations, aggressive assumptions, or missing
+      validation flags can cause material harm if distributed without review. The analyst approval
+      gate ensures that a qualified human evaluates every model before it is scored and made
+      available downstream. No model reaches the EVALUATED state without an explicit approve
+      command from an authenticated analyst.
+    implementation: |
+      FinancialModelPipelineWorkflow pauses at reviewStep after ModelValidated transitions the
+      entity to PENDING_REVIEW. The workflow uses asyncEffect to observe the entity state; it
+      does not poll. An analyst calls POST /api/models/{id}/approve or POST /api/models/{id}/reject
+      with an optional analystNote. The entity emits ModelApproved or ModelRejected. On approval,
+      the workflow advances to evalStep. On rejection, the entity moves to REJECTED (terminal) and
+      the workflow ends without scoring.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every approved model for filing fidelity and assumption quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Approved models can still contain thin derivations or assumptions that deviate significantly
+      from the underlying filing data. FilingFidelityScorer surfaces these issues after approval
+      without blocking distribution, giving consumers a quality signal alongside the model. The
+      score does not gate the EVALUATED state — it informs downstream users about the degree of
+      grounding between the model and its source filings.
+    implementation: |
+      FilingFidelityScorer runs inside evalStep after ModelApproved. It performs four deterministic
+      checks: (1) row provenance — every ModelRow.derivation traces to a LineItem.sourceRef;
+      (2) assumption deviation — no Assumption.assumedValue deviates more than 20% from the median
+      of matching LineItem values; (3) confidence threshold — ValidationReport.confidence >= 60;
+      (4) no critical flags — ValidationReport.flags contains no entry with severity CRITICAL.
+      Each check contributes one point to a score in the range 1–5. The scorer emits EvaluationScored,
+      which transitions the entity to EVALUATED. No LLM call is made inside the scorer.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Analyst approval gate
+    mechanism: HITL
+    implementation: application
+    integration_tier: runs-out-of-the-box
+    source: —
+  - id: E1
+    label: Filing fidelity eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    integration_tier: runs-out-of-the-box
+    source: —

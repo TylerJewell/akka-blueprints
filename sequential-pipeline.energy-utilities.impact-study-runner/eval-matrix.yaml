@@ -1,0 +1,91 @@
+schema_version: 1
+sample_id: impact-study-runner
+coordination_pattern: sequential-pipeline
+domain: energy-utilities
+
+controls:
+  - id: H1
+    name: Require engineer approval before a study report is issued
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Interconnection impact studies carry regulatory weight: a report that
+      incorrectly assesses N-1 compliance can result in a generator being
+      connected to a grid that cannot safely absorb its output. The cost of
+      an incorrect approval is a potential cascade fault; the cost of a
+      false rejection is project delay. Neither error should happen without
+      a qualified engineer having reviewed the pipeline's findings. The
+      human-in-the-loop gate is structural — the workflow pauses in
+      AWAITING_APPROVAL and the entity accepts no terminal transition until
+      an explicit approve or reject command arrives from an authenticated
+      engineer. Automation cannot override it.
+    implementation: |
+      `StudyPipelineWorkflow.approvalStep` pauses the workflow after
+      `EvaluationScored` and `ApprovalRequested` have been written onto
+      `StudyEntity`. The step carries a null timeout — there is no
+      auto-approval deadline. The only paths out of `AWAITING_APPROVAL`
+      are `StudyEntity.approve(note)` and `StudyEntity.reject(reason)`,
+      both reachable only via `POST /api/studies/{id}/approve` and
+      `POST /api/studies/{id}/reject` on `StudyEndpoint`. The approve
+      command writes `StudyApproved` and transitions status to `APPROVED`;
+      the reject command writes `StudyRejected` and transitions to
+      `REJECTED`. Both are terminal. `SimulatorScorer`'s eval score and
+      rationale are surfaced on the App UI approval card so the engineer
+      reviewing the study has the automated scoring in view alongside the
+      full drafted report.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every drafted study report against simulator ground truth
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Even a syntactically well-formed study report can contain errors that
+      the drafting phase introduced: a binding contingency violation not
+      mentioned in any section, a bus voltage outside its operating limits
+      not flagged, a meetsN1Criterion flag set to true when binding
+      violations exist. An on-decision evaluator surfaces these patterns
+      before the approval gate, giving the reviewing engineer a structured
+      signal about which specific checks the pipeline passed or failed. The
+      score does not gate issuance — the engineer can approve despite a low
+      score — but a score ≤ 2 highlights the card so the reviewer cannot
+      overlook it. The evaluator is deterministic: the same report always
+      scores the same, making the score reproducible for audit purposes.
+    implementation: |
+      `SimulatorScorer` runs inside `StudyPipelineWorkflow.evalStep`,
+      fired immediately after `ReportDrafted` lands and before
+      `approvalStep` pauses the workflow. The scorer is deterministic and
+      rule-based (no LLM call — keeping the single-agent sequential-pipeline
+      invariant honest). Four checks, one point per check satisfied, on a
+      base of 1: (1) violation coverage — every binding
+      `ContingencyResult.violations[i]` (`violation.isBinding == true`)
+      has a matching `StudyReport.sections[j]` where
+      `section.findingId == violation.contingencyId`; (2) voltage bounds —
+      every `LoadFlowResult.busReadings[k].voltageKv` falls within the
+      bus-level lower/upper limits from `grid-params.json`; (3) N-1
+      criterion parity — `report.meetsN1Criterion` equals
+      `!hasBindingViolations(contingencyResult)`; (4) section count parity —
+      `report.sections.size()` equals the count of binding violations in
+      `ContingencyResult`. Emits `EvaluationScored{score: 1-5, rationale:
+      String}` with a rationale sentence naming the largest gap. Reports
+      scoring ≤ 2 are highlighted on the App UI approval card.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Engineer approval gate
+    mechanism: Human-in-the-loop
+    implementation: application
+    integration_tier: runs-out-of-the-box
+    source: —
+  - id: E1
+    label: Study report completeness eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    integration_tier: runs-out-of-the-box
+    source: —

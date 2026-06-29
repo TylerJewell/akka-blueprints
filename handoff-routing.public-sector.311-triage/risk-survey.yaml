@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: 311-constituent-triage
+
+# ---- Purpose ----
+purpose:
+  primary_function: constituent-services
+  sector: public-sector
+  decisions_surface: constituent-reply
+  user_type: city-311-operator
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-constituent-311-service-requests
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-with-guardrail
+  decision_subject: constituent
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible-until-published
+  routing_decisions_made_by_ai: true
+  response_decisions_made_by_ai: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-constituent
+  failure_modes:
+    - wrong-department-routing
+    - incorrect-permit-guidance
+    - pii-leakage-via-llm
+    - invented-permit-number
+    - out-of-jurisdiction-advice
+    - fabricated-sla-commitment
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: city-triage-supervisor
+  reviewer_must_approve_every_outgoing: false
+  reviewer_must_resolve_flagged_routes: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_request: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  constituent_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,44 @@
+schema_version: 1
+sample_id: web-tools-replay
+coordination_pattern: single-agent
+domain: research-intel
+
+controls:
+  - id: E1
+    name: Replay recorded search traces to detect provider-side drift
+    mechanism:
+      kind: eval-periodic
+      hook: post-trace-recorded
+      flavor: replay-eval
+    enforcement: non-blocking
+    rationale: |
+      Provider-side web-search tools are not stable contracts. Result sets change
+      as ranking algorithms update, index freshness shifts, or provider APIs roll
+      new versions. A research-intel system that treats search results as invariant
+      will silently return stale or drifted information without any signal to the
+      operator. Replaying recorded traces against the live provider and scoring
+      result-set overlap surfaces these changes deterministically — without
+      requiring a human to compare outputs manually and without an LLM making the
+      drift judgment.
+    implementation: |
+      `ReplayDriftScorer` runs inside `ReplayWorkflow.scoreStep`, fired immediately
+      after `TraceRecorded` lands (for automatic replay) or when a manual replay
+      is triggered via `GET /api/runs/{id}/replay`. The scorer is deterministic and
+      rule-based (no LLM call — keeping the single-agent invariant honest):
+      for each matched `WebSearchCall` pair (original vs. replay, keyed by callId),
+      it computes `titleOverlapPct` as the percentage of original result titles
+      present in the replay result set. The aggregate drift score is
+      `100 − mean(titleOverlapPct)` across all call pairs, clamped 0–100. A run
+      with drift score ≥ 30 is classified `DRIFT_DETECTED`; below 30 it closes as
+      `DRIFT_CLEAR`. The full `DriftReport` with per-query `DriftEntry` rows is
+      written via `SearchRunEntity.recordDrift` and surfaced on the App UI tab.
+      `SearchReplayAgent` re-issues each query using the same `WebSearchStub` tool
+      binding — ensuring that any observed difference is provider-side, not agent-side.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Replay-eval drift detection
+    mechanism: Eval · periodic
+    implementation: replay-eval
+    source: —

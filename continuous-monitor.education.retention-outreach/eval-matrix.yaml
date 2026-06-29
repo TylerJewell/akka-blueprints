@@ -1,0 +1,66 @@
+schema_version: 1
+sample_id: retention-outreach
+coordination_pattern: continuous-monitor
+domain: education
+
+controls:
+  - id: S1
+    name: Redact student PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Student engagement records regularly contain names, email addresses, student
+      ID numbers, phone numbers, and location data that fall under FERPA's definition
+      of personally identifiable education records. Exposing this data to a language
+      model is not required to assess attrition risk — only the behavioral pattern
+      (engagement score, signal type, course context) is necessary. Redaction happens
+      inside a Consumer, upstream of the workflow, so there is no code path that can
+      route a raw record to the LLM.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `EngagementSignalReceived` events on
+      `EngagementEventQueue`. It applies a two-stage pipeline: a regex stage targeting
+      well-known formats (email addresses, US/international phone numbers, student ID
+      patterns), then a heuristic stage for names and addresses found in the rawNotes
+      field. The output `SanitizedSignal` retains the behavioral fields
+      (`signalType`, `engagementScore`) unchanged and carries a `piiCategoriesFound`
+      list for auditing. Only the `SanitizedSignal` is forwarded to
+      `StudentOutreachWorkflow` and thence to any agent call.
+    regulation_anchors: []
+
+  - id: H1
+    name: Advisor approval required before outreach is sent
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Automated outreach to students about academic standing carries reputational and
+      pastoral risk if the message is inaccurate, poorly timed, or sent to a student
+      who has already resolved the issue through another channel. Requiring an advisor
+      to review and approve every draft before dispatch means the AI's judgment is
+      always intermediated by a human who has access to the full student context
+      that the sanitized signal cannot provide. No outreach is ever dispatched by the
+      system; it is dispatched by the advisor's explicit Approve action.
+    implementation: |
+      `StudentOutreachWorkflow` transitions every AT_RISK alert to AWAITING_APPROVAL
+      after `OutreachDraftAgent` finishes, and then polls `StudentOutreachEntity`
+      every 5 seconds waiting for an `AdvisorDecision` event. The only code paths
+      that can emit `OutreachApproved` or `OutreachRejected` — and therefore advance
+      the workflow — are `OutreachEndpoint.approve` and `OutreachEndpoint.reject`.
+      There is no timeout on the approval wait; drafts remain in AWAITING_APPROVAL
+      indefinitely until an advisor acts.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Student PII redaction
+    mechanism: Sanitizer
+    integration_tier: runs-out-of-the-box
+    source: —
+  - id: H1
+    label: Advisor approve-before-send gate
+    mechanism: HITL
+    integration_tier: runs-out-of-the-box
+    source: —

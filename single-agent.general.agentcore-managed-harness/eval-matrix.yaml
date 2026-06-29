@@ -1,0 +1,49 @@
+schema_version: 1
+sample_id: managed-harness-tool-use-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Block disallowed tool calls before dispatch
+    mechanism:
+      kind: guardrail
+      hook: before-tool-invocation
+      flavor: tool-allowlist
+    enforcement: blocking
+    rationale: |
+      When a managed runtime executes the tool-calling loop on behalf of an
+      agent, the agent's declared tool list defines what the runtime is
+      permitted to dispatch. Without an explicit allowlist check at the
+      invocation boundary, a prompt-injection or a planning error can cause
+      the agent to request a tool that carries write access, administrative
+      privileges, or data from a different tenant's namespace. The
+      before-tool-invocation hook is the correct insertion point: it fires
+      inside the managed loop before any tool code runs, so a rejection
+      is returned to the agent as structured feedback and the agent can
+      select an allowed alternative without the call ever reaching the stub
+      or the real external service.
+    implementation: |
+      `ToolAllowlistGuardrail` is registered on `OperationsAgent` via the
+      agent's guardrail-configuration block, bound to the
+      `before-tool-invocation` hook. On each pending tool call it (1) looks
+      up the active `AgentProfile` by the `profileId` carried in the task
+      context, (2) checks that the requested tool name appears in
+      `profile.allowedTools()`, (3) asserts that no argument value is a
+      bare wildcard (`"*"`), and (4) asserts that no required argument is
+      empty. `AgentProfiles` is the static registry consulted for the lookup.
+      On any check failure, `ToolAllowlistGuardrail` returns
+      `Guardrail.reject(<structured-error>)` naming the check that failed
+      and the disallowed tool or argument; the managed runtime returns the
+      structured error to the agent loop so the agent can revise its plan.
+      On all checks passing, it returns `Guardrail.allow()` and the runtime
+      dispatches the call to `ToolStubs`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-call allowlist guardrail
+    mechanism: Guardrail
+    implementation: before-tool-invocation
+    integration_tier: runs-out-of-the-box
+    source: —

@@ -1,0 +1,98 @@
+schema_version: 1
+sample_id: 311-constituent-triage
+coordination_pattern: handoff-routing
+domain: public-sector
+
+controls:
+  - id: S1
+    name: Redact constituent PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound 311 requests routinely carry constituent names, home addresses, phone
+      numbers, and email addresses. None of that is necessary for the triage classifier
+      or the department specialists to do their jobs. Redaction happens inside a Consumer
+      before the request enters the workflow, so no LLM call ever sees raw constituent
+      identifiers. Street names are preserved for routing context; unit numbers and
+      personal identifiers are replaced with category tokens.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `RequestQueue` events. For each
+      `InboundRequestReceived` it runs a regex stage (email patterns, E.164 and NANP
+      phone numbers, address unit/apartment numbers matching Apt|Unit|#\s*\d+) and a
+      heuristic stage (names in greeting/salutation positions, street-level patterns
+      matching \d+ [A-Z][a-z]+ [St|Ave|Blvd|Rd|Dr|Ln|Way|Ct]+), produces a
+      `SanitizedServiceRequest` carrying the redacted text plus the list of categories
+      found, and calls `ServiceRequestEntity.registerInbound` then `attachSanitized`.
+      The categories list is kept for audit; only the redacted text is passed to the
+      agents.
+    regulation_anchors: []
+
+  - id: G1
+    name: Audit the routing decision before invoking any department specialist
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: route-rubric
+    enforcement: blocking
+    rationale: |
+      A triage decision that names the wrong department — or that is made with too
+      little confidence to be trusted — wastes department capacity and exposes
+      constituents to an incorrect or jurisdiction-inappropriate response. The
+      before-agent-invocation guardrail checks the proposed route against a policy
+      rubric before any specialist is ever called. A flagged route puts the request
+      into human review without invoking the specialist at all, which is the safest
+      failure mode for a government-facing system.
+    implementation: |
+      `RouteGuardrail` is a typed Agent. `RequestWorkflow.routeGuardrailStep` invokes
+      it after `TriageAgent` returns but before any specialist is called. The agent
+      receives the `SanitizedServiceRequest` and the `TriageDecision` and returns
+      `RouteVerdict { approved, flags, rubricVersion }`. On `approved=false` the
+      workflow emits `RequestFlagged` (terminal `FLAGGED_FOR_REVIEW`) and no specialist
+      is invoked. A human triage reviewer can approve via `POST /api/requests/{id}/review`
+      with `decision="approve"` to resume the workflow at `routeStep`, or
+      `decision="escalate"` to terminate.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every routing decision inline
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The routing decision is the most consequential step: a mis-routed 311 request
+      reaches the wrong department, generates a useless response, and erodes constituent
+      trust. An on-decision eval gives a continuous, per-request signal independent of
+      supervisor spot-checks, and surfaces in the UI as a per-request score chip visible
+      to any reviewer examining the queue.
+    implementation: |
+      `TriageEvalScorer` Consumer subscribes to `ServiceRequestEntity` events. On every
+      `TriageDecided` it calls `TriageJudge` (typed Agent) with the `SanitizedServiceRequest`
+      and the `TriageDecision`. The judge returns `TriageScore { score: 1–5, rationale }`.
+      The Consumer then calls `ServiceRequestEntity.recordTriageScore` which emits
+      `TriageScored`. The score is non-blocking — a low score does not change the workflow
+      flow; it surfaces on the App UI tab and (in a deployed setting) would feed a
+      supervisor alert when sustained low scores signal a classification regression.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    integration_tier: runs-out-of-the-box
+    source: —
+  - id: G1
+    label: Before-invocation route guardrail
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    integration_tier: runs-out-of-the-box
+    source: —
+  - id: E1
+    label: On-decision triage eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    integration_tier: runs-out-of-the-box
+    source: —

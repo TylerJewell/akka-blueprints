@@ -1,0 +1,92 @@
+# Eval Matrix for the blackboard-swe-coordination Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community developer-tooling sample (dev-code domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: blackboard-swe-coordination
+generated_at: 2026-06-29
+
+matrix_cell:
+  coordination_pattern: blackboard
+  domain: dev-code
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Validate code writes against type and lint rules before committing to the blackboard
+    mechanism:
+      kind: guardrail
+      hook: before-state-write
+      flavor: before-state-write
+    enforcement: blocking
+    rationale: |
+      Nine specialist agents write code artifacts to a shared blackboard that downstream
+      agents — reviewers, testers, integrators — read as their ground truth. An artifact
+      with a placeholder stub, a wrong-layer path, or an empty file silently propagates
+      through the rest of the pipeline: the reviewer approves code that was never written,
+      the tester generates results for a non-existent implementation, and the integration
+      planner builds a deployment plan around a blank artifact. The guardrail fires inside
+      the `BlackboardEntity` command handler, before the event is persisted, so a bad
+      artifact never enters the event log. The controller receives the validation error,
+      retries the agent once with the failure reasons, and records the blocked state if
+      the second attempt also fails.
+    implementation: |
+      `CodeValidator` is a deterministic pure function (not an LLM call) over a
+      `CodeArtifact`. It returns a `ValidationResult` that fails when any `CodeFile`
+      has a blank path, a blank content string, a stub marker (`TODO` or
+      `throw new UnsupportedOperationException`), or a path that does not start with
+      the artifact's declared layer prefix (`backend/` or `frontend/`). The
+      `BlackboardEntity.writeBackendCode` and `writeFrontendCode` command handlers
+      invoke `CodeValidator` before calling `effects().persist()`. On a validation
+      failure the handler returns `effects().error(validationMessage)` — no event is
+      emitted. `ControllerWorkflow.codeStep` receives the error reply, logs the
+      validation message to the blackboard as a `guardedReason`, and re-invokes the
+      agent once with the error text injected into the prompt. A second failure marks
+      the board `stuckAlert`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require lead-engineer approval before advancing the blackboard to MERGED
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      A nine-agent pipeline that runs without human oversight can produce a technically
+      valid but strategically wrong merge: security findings ignored, architectural
+      shortcuts accepted, integration steps missing a rollback path. The signoff gate
+      ensures that a human with full context — the lead engineer — reviews the complete
+      blackboard (plan, architecture, code, review findings, security findings, test
+      results, documentation, integration plan) before the ticket transitions to
+      `MERGED`. Without this gate the pipeline is fully autonomous; with it the lead
+      engineer becomes the accountability anchor for every merge.
+    implementation: |
+      `SignoffWorkflow` is a durable two-step workflow. After `ControllerWorkflow`
+      completes `integrateStep`, it starts `SignoffWorkflow(ticketId)`. The workflow's
+      `requestStep` creates a `SignoffEntity` record and calls
+      `BlackboardEntity.awaitSignoff` (stage → `AWAITING_SIGNOFF`). The `waitStep`
+      pauses the workflow durably — no polling, no timeout. `POST /api/signoff/{ticketId}`
+      on `BoardEndpoint` records the decision on `SignoffEntity` and resumes the workflow.
+      `finalizeStep` reads the decision: on approval it calls `BlackboardEntity.approve`
+      (stage → `MERGED`) and `TicketEntity.complete`; on rejection it calls
+      `BlackboardEntity.reject` (stage → `IN_REVIEW`) and restarts `ControllerWorkflow`
+      from `reviewStep`. The App UI exposes an Approve / Reject control visible only
+      when the board is in `AWAITING_SIGNOFF`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Code write guardrail
+    mechanism: Guardrail
+    implementation: before-state-write
+    source: —
+  - id: H1
+    label: Lead-engineer merge signoff
+    mechanism: HITL
+    implementation: application
+    source: —

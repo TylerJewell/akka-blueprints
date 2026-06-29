@@ -1,0 +1,93 @@
+# Eval Matrix for the kyc-screener Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (legal-compliance domain) with no
+# jurisdiction-specific anchors locked at authoring time, so regulation_anchors is
+# intentionally an empty list across all controls.
+
+schema_version: 1
+sample_id: kyc-screener
+generated_at: 2026-06-29
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: legal-compliance
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: S1
+    name: Tokenize entity PII before LLM exposure
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Entity files assembled during KYC screening contain names, national ID
+      numbers, and postal addresses. Passing raw PII to an LLM creates unnecessary
+      exposure risk and may violate data-minimization requirements under
+      applicable privacy regulations. A PII sanitizer replaces sensitive values
+      with stable tokens before the entity file is handed to ScreenerAgent, so the
+      model never processes original identity data.
+    implementation: >
+      A PII sanitizer intercepts the entity file before it is passed to
+      ScreenerAgent. It replaces names with [NAME_n], national ID numbers with
+      [ID_n], and postal addresses with [ADDR_n], and stores a reverse map on
+      CaseEntity. ScreenerAgent operates only on tokenized text. The compliance
+      officer UI reconstructs original values from the reverse map after approval.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require compliance-officer approval before closing a case
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      A KYC verdict has legal and financial consequences for the subject. No case
+      may be closed without a designated compliance officer reviewing the screening
+      findings and making an explicit approval or rejection decision. The
+      human-in-loop-gate pauses the pipeline at this decision point; the close step
+      is unreachable unless an officer approves via the API.
+    implementation: >
+      ScreeningWorkflow pauses in awaitApprovalStep, polling CaseEntity status.
+      POST /api/cases/{id}/approve and POST /api/cases/{id}/reject transition the
+      entity to OFFICER_APPROVED or REJECTED; the workflow resumes on the next
+      poll. VerdictAgent's close step is entered only when status is
+      OFFICER_APPROVED.
+    regulation_anchors: []
+
+  - id: G1
+    name: Require source-document citations in every screening verdict
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      A screening finding that cannot be traced to a specific source document is
+      not auditable and should not reach a compliance officer for review. An output
+      guardrail forces ScreenerAgent to include at least one citation before the
+      result is persisted, ensuring every verdict presented for approval carries a
+      verifiable evidence trail.
+    implementation: >
+      A before-agent-response guardrail on ScreenerAgent inspects the
+      ScreeningResult.findings field for at least one source-document citation
+      token (e.g., [DOC:n] or a document reference string). If no citation is
+      present, the guardrail rejects the response and the agent retries up to its
+      configured maxIterationsPerTask limit before the step fails.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: PII tokenizer
+    mechanism: "sanitizer · pii"
+    short: Replace entity PII with tokens before passing to ScreenerAgent.
+  - id: H1
+    name: Compliance-officer approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for officer approve/reject before case close.
+  - id: G1
+    name: Citation guardrail on screening verdict
+    mechanism: "guardrail · before-agent-response"
+    short: Block findings with no source-document citation from reaching reviewer.

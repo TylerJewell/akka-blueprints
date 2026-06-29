@@ -1,0 +1,95 @@
+# Eval Matrix for the real-time-bid-arbitration Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (sales-marketing domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: real-time-bid-arbitration
+generated_at: 2026-06-29
+
+matrix_cell:
+  coordination_pattern: market-making-auction
+  domain: sales-marketing
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Halt further bids when the per-window spend cap is reached
+    mechanism:
+      kind: halt
+      hook: pre-decision
+      flavor: budget-cap
+    enforcement: blocking
+    rationale: >
+      The agent bids continuously against a live auction stream. Without a hard spending
+      boundary, a misconfigured campaign or a runaway request burst can exhaust the budget
+      in seconds. The per-window cap in CampaignBudgetEntity creates a deterministic stop
+      point: once CapBreached is emitted, BidWorkflow routes every subsequent slot directly
+      to HALTED without invoking the agent, so no further spend is possible until the window
+      resets.
+    implementation: >
+      CampaignBudgetEntity maintains windowSpent and windowCapAmount. BidWorkflow.budgetCheckStep
+      reads getBudget before calling BidArbitrationAgent. If capBreached is true, the step
+      transitions immediately to haltStep, which calls AuctionSlotEntity.haltSlot (emitting
+      BudgetCapHalted) and ends the workflow. The CapBreached event is projected into
+      BidLedgerView so the UI budget bar shows the breached state in real time.
+    regulation_anchors: []
+
+  - id: E1
+    name: Evaluate win-rate and ROAS against the budget envelope on a schedule
+    mechanism:
+      kind: eval-periodic
+      hook: on-decision-eval
+      flavor: scheduled-eval
+    enforcement: non-blocking
+    rationale: >
+      Bid price decisions are made slot by slot with no view of aggregate campaign performance.
+      A periodic evaluation that computes win-rate and return on ad spend across the resolved
+      slots in the current window gives operators a feedback signal they can act on without
+      interrupting the live bidding stream.
+    implementation: >
+      PerformanceSampler (TimedAction, every 5 minutes) queries BidLedgerView.getAllSlots and
+      filters for WON and LOST slots in the current budget window. It computes win-rate
+      (WON / (WON + LOST)) and ROAS (revenue attributed / windowSpent) per campaignId, then
+      calls AuctionSlotEntity.recordPerformanceEval for each resolved slot in that window,
+      emitting PerformanceEvalRecorded. The App UI row expands to show the snapshot. Delivery
+      of existing bids is never blocked.
+    regulation_anchors: []
+
+  - id: S1
+    name: Escalate anomalous bid bursts to ops for human review
+    mechanism:
+      kind: hitl
+      hook: on-anomaly
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      A sudden spike in bid placements — caused by a simulator misconfiguration, a feedback
+      loop in the campaign settings, or external manipulation — can exhaust budget and distort
+      auction market signals before a human notices. Detecting the burst at the workflow level
+      and routing affected slots to an escalation queue gives ops a chance to intervene before
+      the window closes.
+    implementation: >
+      BidWorkflow maintains an in-memory counter keyed by campaignId + minute-bucket. After
+      each successful placeStep the counter increments. If the count exceeds the configured
+      burstThreshold (default 20 per 60 s), the workflow transitions to escalateStep, which
+      calls AuctionSlotEntity.escalateSlot (emitting BurstEscalated) and writes an alert to
+      the OpsQueue. The slot is terminal as ESCALATED — it is not retried. The App UI shows
+      ESCALATED slots with a distinct status pill so ops can see the affected range.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Per-window spend cap halt
+    mechanism: "halt · budget-cap"
+    short: Stop all bidding once the window spend cap is reached.
+  - id: E1
+    name: Scheduled win-rate and ROAS eval
+    mechanism: "eval-periodic · scheduled-eval"
+    short: Score campaign performance every 5 minutes without blocking bids.
+  - id: S1
+    name: Bid-burst escalation to ops
+    mechanism: "hitl · application"
+    short: Route anomalous burst slots to the ops queue for human review.

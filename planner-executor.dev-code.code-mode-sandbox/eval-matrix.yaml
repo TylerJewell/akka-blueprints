@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: code-mode-sandbox
+coordination_pattern: planner-executor
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Check capability token before every sandbox invocation
+    mechanism:
+      kind: guardrail
+      hook: before-tool-invocation
+      flavor: before-tool-invocation
+    enforcement: blocking
+    rationale: |
+      The Executor produces code that may require elevated runtime permissions —
+      file writes, network calls, subprocess spawning, or reflection. Granting
+      every job every permission by default defeats the principle of least
+      privilege. A capability token issued by the operator declares exactly which
+      scopes are allowed for the current deployment. The guardrail checks, before
+      each sandbox invocation, that the step's required scopes are a subset of
+      the token's granted scopes and that the token has not been revoked or
+      expired. Steps that exceed their grant are blocked before the sandbox
+      receives any code, and the Planner is asked to revise within the granted
+      scope set.
+    implementation: |
+      `CapabilityGuardrail.check(SandboxStep, CapabilityToken)` is called by
+      `ExecutionWorkflow`'s `gateStep` after `sanitizePromptStep` and before
+      `executeStep`. The guardrail reads the active token from
+      `CapabilityRegistryEntity.get("default")` on every iteration — no caching
+      — so a revocation that occurs mid-execution takes effect on the next gate
+      check. On a BLOCK result, the workflow records a `StepBlocked` entry via
+      `ExecutionJobEntity.recordBlock(ordinal, reason)` and transitions to
+      `revisePlanStep`, where `PlannerAgent` receives the block record and
+      produces a revised `ExecutionPlan` that requests only granted scopes.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip secrets from code-generation prompts before the Executor sees them
+    mechanism:
+      kind: sanitizer
+      hook: prompt
+      flavor: prompt
+    enforcement: blocking
+    rationale: |
+      Users and the job simulator submit natural-language coding tasks. Those
+      prompts can inadvertently include credential-shaped strings — an API key
+      copy-pasted from a terminal, a JWT from a debug session, a bearer token
+      from a curl example. If the Executor sees a credential in its prompt, it
+      may reproduce or reference it in generated code, embedding the secret in
+      source that lands in execution logs and the UI's step-records view. The
+      prompt sanitizer makes the scrubbing unconditional: the Executor never
+      receives the raw codeGoal — it always receives the sanitized form.
+    implementation: |
+      `PromptSanitizer.scrub(String)` runs in `ExecutionWorkflow`'s
+      `sanitizePromptStep` between `pickStepStep` and `gateStep`. It applies a
+      sequence of labelled-replacement regexes: AWS access key
+      (`AKIA[0-9A-Z]{16}`), GitHub tokens (`gh[pousr]_[A-Za-z0-9]{36}`), JWTs
+      (`ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`), OpenAI keys
+      (`sk-[A-Za-z0-9]{32,}`), generic bearer tokens
+      (`Bearer [A-Za-z0-9._-]{20,}`), and a high-entropy fallback for tokens
+      ≥ 32 characters whose Shannon entropy exceeds 4.5 bits/char. Each match
+      is replaced with a tagged redaction: `[REDACTED:aws-access-key]`,
+      `[REDACTED:github-token]`, `[REDACTED:jwt]`, `[REDACTED:openai-key]`,
+      `[REDACTED:bearer-token]`, `[REDACTED:high-entropy]`. The sanitized goal
+      is stored in `StepRecord.sanitizedGoal` — it is what `ExecutorAgent` and
+      every subsequent `PlannerAgent` prompt receives.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Capability guardrail
+    mechanism: Guardrail
+    implementation: before-tool-invocation (CapabilityRegistryEntity gate)
+    source: —
+  - id: S1
+    label: Prompt sanitizer
+    mechanism: Sanitizer
+    implementation: prompt (regex + entropy redactor on codeGoal)
+    source: —

@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: pitch-builder
+
+# ---- Purpose ----
+purpose:
+  primary_function: investment-pitchbook-pipeline
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-only
+  user_type: investment-banking-analyst-or-associate
+
+# ---- Data ----
+data:
+  inputs:
+    - user-supplied-target-company-name
+    - in-process-research-corpus
+    - in-process-comparables-corpus
+  data_classes:
+    pii: true          # raw research items may contain counterparty contact names / emails
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: investment-pitchbook-draft
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  analyst_reviews_every_pitchbook_before_client_send: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-pitchbook
+  failure_modes:
+    - hallucinated-peer
+    - out-of-range-multiple
+    - pii-in-draft
+    - missing-comps-coverage
+    - citation-violation
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: investment-banking-analyst-or-associate
+  reviewer_must_approve_before_client_send: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_pitchbook: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  research-corpus-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  broker-dealer-conduct-rules-reviewed: TO_BE_COMPLETED_BY_DEPLOYER

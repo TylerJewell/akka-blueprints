@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: market-researcher
+coordination_pattern: continuous-monitor
+domain: finance-analysis
+
+controls:
+  - id: G1
+    name: Validate flag output before committing to downstream desks
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-validation
+    enforcement: blocking
+    rationale: |
+      Risk flags generated for analyst desks carry material implications — a false
+      HIGH-risk flag can trigger unnecessary credit-committee attention; an imprecise
+      flag damages trust in the pipeline over time. The guardrail intercepts the
+      SectorBrief returned by SectorSynthesisAgent before it is committed to
+      SectorStateEntity. It enforces two rules: (1) a HIGH riskFlag must have a
+      confidenceScore >= 0.7 to be published — below that threshold the brief routes
+      to PENDING_REVIEW for analyst confirmation; (2) the brief's narrative must not
+      contain explicit buy/sell/hold/overweight/underweight language, which the system
+      is not licensed to produce. Any violation blocks the commit and surfaces a
+      rejection reason visible in the UI.
+    implementation: |
+      `guardrailStep` inside `SectorSynthesisWorkflow` runs synchronously after
+      `SectorSynthesisAgent` returns its `SectorBrief`. The check is a pure Java
+      predicate — no additional LLM call. On pass: `commitStep` emits `BriefUpdated`
+      to `SectorStateEntity` and `ItemFlagged` to `ResearchItemEntity`. On rejection:
+      `SectorStateEntity` receives `BriefPendingReview` and `ResearchItemEntity`
+      receives `ItemPendingReview` with the rejection reason. The analyst then calls
+      `POST /api/research/{id}/confirm-flag` or `dismiss-flag` to resolve.
+    integration_tier: runs-out-of-the-box
+    regulation_anchors: []
+
+  - id: E1
+    name: Score daily flag precision and recall against ground-truth labels
+    mechanism:
+      kind: eval-periodic
+      hook: scheduled-eval
+      flavor: precision-recall-monitor
+    enforcement: non-blocking
+    rationale: |
+      A market-research pipeline is only useful if its flags are accurate over time.
+      Model drift, new signal patterns, or corpus changes can degrade flag quality
+      without any single-item failure being visible. The daily eval replay scores
+      a sample of delivered flags against analyst-labelled ground-truth data,
+      producing per-item precision and recall estimates. The aggregate score surfaces
+      on the Eval Matrix tab and provides an early-warning signal before quality
+      degradation reaches the desk.
+    implementation: |
+      `EvalRunner` TimedAction fires every 24 hours. It queries `ResearchView` for
+      up to 5 FLAGGED items that have no `evalScore`, oldest-first. For each, it
+      loads the matching ground-truth label from
+      `src/main/resources/eval/ground-truth-flags.jsonl`, calls `FlagEvalJudge`
+      (a tight AutonomousAgent with maxIterationsPerTask 2), and writes the returned
+      `FlagEvalResult` back to `ResearchItemEntity` via `recordEval`. The score
+      (1–5) and rationale are visible in the detail pane of the App UI tab.
+    integration_tier: runs-out-of-the-box
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Flag output guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Daily precision/recall eval
+    mechanism: Eval · periodic
+    implementation: precision-recall-monitor
+    source: —

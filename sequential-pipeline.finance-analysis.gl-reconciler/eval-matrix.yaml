@@ -1,0 +1,106 @@
+schema_version: 1
+sample_id: gl-reconciler
+coordination_pattern: sequential-pipeline
+domain: finance-analysis
+
+controls:
+  - id: G1
+    name: Validate every drafted journal entry before accepting it as the task result
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Journal entries posted to a general ledger are audit-material: an
+      unbalanced entry corrupts the books of record and can only be undone
+      with a correcting entry, creating a permanent audit trail of the
+      error. The before-agent-response hook is the correct cut for this
+      constraint — it fires after the agent has assembled the full
+      JournalEntry but before the workflow writes it onto the entity. By
+      intercepting at the task-result boundary rather than at an individual
+      tool call, the guardrail sees the complete, assembled entry and can
+      apply multi-line rules (debit/credit balance across all lines,
+      account-code membership across the full chart of accounts) that
+      would be impossible to enforce tool-call by tool-call. A rejected
+      draft is returned to the agent loop as a structured
+      posting-safety-violation error so the agent can self-correct within
+      its iteration budget without the workflow needing to manage the
+      retry.
+    implementation: |
+      `PostingGuardrail` is registered on `LedgerAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response`
+      hook. It fires on every task result the agent returns. For tasks
+      FETCH_ENTRIES and RECONCILE_ACCOUNTS it passes immediately (those
+      results are not financial writes). For DRAFT_JOURNAL it applies two
+      rules: (1) balance rule — `totalDebits.compareTo(totalCredits) == 0`
+      across all lines in the returned `JournalEntry`; (2) account-code
+      rule — every `JournalLine.accountId` is present in the
+      `ChartOfAccounts` loaded at startup from
+      `src/main/resources/sample-data/coa.json`. On any rule failure the
+      guardrail returns `Guardrail.reject("posting-safety-violation:
+      <rule>: <detail>")` to the agent loop and calls
+      `LedgerReconciliationEntity.recordValidationFailed(findings)` so
+      the failure is visible in the UI's validation-failure strip and in
+      the audit log. On accept for DRAFT_JOURNAL, the workflow writes
+      `ValidationPassed` and `JournalPosted` immediately — no separate
+      validation step is needed because the guardrail already enforced
+      correctness.
+    regulation_anchors: []
+
+  - id: H1
+    name: Escalate runs with material variances to the controller before drafting
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      A variance between the expected and actual account balance is
+      material when its absolute value exceeds a defined threshold
+      relative to the expected balance (default: 1 % of the expected
+      balance). Material variances in a GL reconciliation can indicate
+      accounting errors, missing transactions, or fraud. Posting a
+      correcting journal entry without controller review in such cases
+      exposes the organisation to regulatory and audit risk. The
+      application-level HITL path is the right mechanism here: the
+      workflow must pause, route the variance table to a named controller,
+      and record the controller's explicit approve or reject decision
+      before any draft proceeds. The HITL path is wired as an explicit
+      workflow state (PENDING_APPROVAL) so every escalation and decision
+      is in the entity's immutable event log — not in a notification
+      side-channel.
+    implementation: |
+      `MaterialVarianceChecker` is a pure deterministic class (no LLM
+      call) called from `ReconciliationWorkflow.reconcileStep` immediately
+      after `ReconciliationCompleted` is written onto
+      `LedgerReconciliationEntity`. The checker compares each
+      `Variance.delta.abs()` against the configured threshold. If any
+      variance is material, the workflow writes `EscalationRaised{reason}`
+      onto the entity (setting status to PENDING_APPROVAL) and transitions
+      to `hitlStep`. `hitlStep` has a 72 h timeout — long enough for a
+      controller to review during business hours. The controller POSTs to
+      `ReconciliationEndpoint.approve({reviewedBy})` or
+      `ReconciliationEndpoint.reject({reviewedBy, reason})`. These
+      commands write `EscalationApproved` or `EscalationRejected` onto
+      the entity. On approval the workflow resumes `draftStep`; on
+      rejection the workflow writes `RunFailed` and ends at `REJECTED`.
+      If `hitlStep` times out without a decision, the step fails over to
+      the error step and the run ends at `FAILED`. Every escalation record
+      carries `raisedAt`, `reviewedBy`, `decision`, and `decidedAt` for
+      the audit trail.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Journal posting-safety guardrail
+    mechanism: Guardrail
+    integration_tier: runs-out-of-the-box
+    implementation: before-agent-response
+    source: —
+  - id: H1
+    label: Material-variance controller escalation
+    mechanism: HITL · application
+    integration_tier: runs-out-of-the-box
+    implementation: application-workflow-pause
+    source: —

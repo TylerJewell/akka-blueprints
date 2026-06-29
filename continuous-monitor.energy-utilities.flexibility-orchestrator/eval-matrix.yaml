@@ -1,0 +1,60 @@
+schema_version: 1
+sample_id: flexibility-orchestrator
+coordination_pattern: continuous-monitor
+domain: energy-utilities
+
+controls:
+  - id: H1
+    name: Require operator approval for high-impact dispatches
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Grid flexibility dispatches above a configured curtailment threshold (default 50 MW)
+      carry material grid-stability and customer-impact risk. An AI recommendation alone
+      is not sufficient authority to execute. The workflow pauses in AWAITING_APPROVAL
+      and only an authenticated grid operator can advance it — the AI cannot self-approve
+      or retry around the gate.
+    implementation: |
+      `DispatchWorkflow` emits `DispatchAwaitingApproval` on `DispatchEntity` whenever the
+      recommended `curtailmentMW` exceeds the configured threshold. The workflow then polls
+      `DispatchEntity.getDispatch` every 5 seconds. The poll advances only when an
+      `OperatorDecision` event is present, which can only be emitted by
+      `FlexibilityEndpoint.approve` or `FlexibilityEndpoint.cancel`. The operator's
+      `decidedBy` identity is recorded on the entity for audit.
+    regulation_anchors: []
+
+  - id: B1
+    name: Halt dispatch when program curtailment budget is exhausted
+    mechanism:
+      kind: halt
+      flavor: budget-cap
+    enforcement: blocking
+    rationale: |
+      Each flexibility program carries a pre-committed curtailment budget for its window
+      (e.g., 200 MW across a 4-hour peak period). If AI recommendations could exceed this
+      cap, the operator's contractual obligation to customers and the ISO would be violated.
+      The budget-cap guard runs before the HITL gate so the operator is never asked to approve
+      a dispatch that would breach the cap — the system refuses it outright.
+    implementation: |
+      `DispatchWorkflow.budgetCheckStep` reads `FlexibilityProgramEntity.getProgram` to
+      compare `budgetUsedMW + curtailmentMW` against `maxCurtailmentMW`. If the sum would
+      exceed the cap, the workflow emits `BudgetCapExceeded` on `DispatchEntity` and ends
+      without entering AWAITING_APPROVAL. The operator is never prompted; the dispatch
+      record shows status BUDGET_EXCEEDED with the MW values recorded for audit.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Operator approval gate
+    mechanism: HITL
+    implementation: application
+    integration_tier: runs-out-of-the-box
+    source: —
+  - id: B1
+    label: Curtailment budget cap
+    mechanism: Halt
+    implementation: budget-cap
+    integration_tier: runs-out-of-the-box
+    source: —

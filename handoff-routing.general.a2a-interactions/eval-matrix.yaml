@@ -1,0 +1,67 @@
+schema_version: 1
+sample_id: a2a-interactions
+coordination_pattern: handoff-routing
+domain: general
+
+controls:
+  - id: G1
+    name: Verify receiver-agent identity before any handoff
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: before-agent-invocation
+    enforcement: blocking
+    rationale: |
+      In a peer interactions API, the sender's claimed agent identity is the
+      primary trust signal. An unverified sender could inject arbitrary payloads
+      into the fulfillment pipeline before any LLM call. The before-agent-invocation
+      guardrail checks the sender's `senderAgentId` against a registered identity list
+      inside a Consumer before the workflow is started — no agent ever sees the payload
+      of an unverified sender.
+    implementation: |
+      `IdentityVerifier` Consumer subscribes to `InteractionQueue` events. For each
+      `InboundInteractionReceived` it checks `senderAgentId` against a built-in
+      registry of known agent identifiers (e.g. "agent-alpha", "agent-beta",
+      "agent-gamma") and confirms `senderCapability` is non-empty. If the check
+      passes, it calls `InteractionEntity.registerIncoming` then `attachVerified`
+      (identityConfirmed=true) and starts `InteractionWorkflow`. If the check
+      fails, it calls `registerIncoming` then `reject` with a reason message;
+      the workflow is never started and no LLM processes the payload. The
+      rejection is recorded in `InteractionEntity` and surfaced in the App UI
+      with status `REJECTED`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every delegation decision inline
+    mechanism:
+      kind: eval-event
+      flavor: on-handoff-eval
+    enforcement: non-blocking
+    rationale: |
+      The delegation decision is the most consequential step of the handoff: an
+      incorrect receiver assignment means the wrong agent's capabilities and
+      scope are applied to the task. An on-handoff eval gives a continuous,
+      per-interaction signal independent of the operator's spot checks — and
+      surfaces in the UI as a per-interaction score chip.
+    implementation: |
+      `HandoffEvalScorer` Consumer subscribes to `InteractionEntity` events. On
+      every `DelegationDecided` it calls `HandoffJudge` (typed Agent) with the
+      `IncomingInteraction` and the `DelegationDecision`. The judge returns
+      `HandoffScore { score: 1–5, rationale }`. The Consumer then calls
+      `InteractionEntity.recordHandoffScore` which emits `HandoffScored`. The
+      score is non-blocking — a low score does not change the workflow flow; it
+      surfaces on the App UI tab and (in a deployed setting) would feed a
+      system-level alert.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Receiver-agent identity guardrail
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —
+  - id: E1
+    label: On-handoff delegation eval
+    mechanism: Eval · event
+    implementation: on-handoff-eval
+    source: —

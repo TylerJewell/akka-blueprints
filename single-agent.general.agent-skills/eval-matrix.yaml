@@ -1,0 +1,33 @@
+schema_version: 1
+blueprint_id: spring-ai.patterns.agent-skills
+
+controls:
+  - id: G-001
+    name: Validate skill capability before tool invocation
+    mechanism:
+      kind: guardrail
+      hook: before-tool-invocation
+      flavor: before-tool-invocation
+    enforcement: blocking
+    rationale: |
+      Before the TaskDispatchAgent invokes any skill tool, the system checks the requested
+      capability against the SkillRegistryEntity. If the skill is disabled or the capability
+      is not present in the registry, the invocation is blocked and a SkillRejected event
+      is emitted. This prevents unauthorized or misconfigured skills from executing tasks.
+      The check runs at tool-call time — not at task-submission time — so that a skill
+      disabled between dispatch and invocation is still caught. Blocking enforcement means
+      the agent cannot proceed past the guardrail; there is no advisory-only mode.
+    implementation: |
+      The SkillLoaderWorkflow's validate step calls SkillRegistryEntity to confirm the
+      skill is enabled and the requested capability is listed. On failure, the workflow
+      transitions to REJECTED and AgentOrchestrationEndpoint returns HTTP 422 with the
+      rejection reason. On success, the workflow transitions to GUARDRAIL_PASSED before
+      handing control back to the agent for execution. The guardrail hook is declared in
+      the TaskDispatchAgent configuration, not in business logic, so it applies to every
+      tool call without per-tool annotation.
+    regulation_anchors: []
+    simplified_view:
+      what_it_does: Blocks skill invocation if the capability is not in the enabled registry
+      when_it_fires: Before any tool call inside TaskDispatchAgent
+      what_happens_on_block: Task moves to REJECTED; HTTP 422 returned to caller with reason
+      integration_tier: runs-out-of-the-box

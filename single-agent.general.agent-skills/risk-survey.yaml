@@ -1,0 +1,36 @@
+schema_version: 1
+blueprint_id: spring-ai.patterns.agent-skills
+
+sector: general
+
+decisions:
+  autonomous_actions: true
+  human_in_the_loop: false
+  processes_pii: TO_BE_COMPLETED_BY_DEPLOYER
+  cross_border_data: TO_BE_COMPLETED_BY_DEPLOYER
+
+data_classes:
+  - task_descriptions
+  - skill_metadata
+  - TO_BE_COMPLETED_BY_DEPLOYER
+
+capabilities:
+  - skill_registry_lookup
+  - tool_invocation
+  - task_dispatch
+
+model_family: TO_BE_COMPLETED_BY_DEPLOYER
+
+oversight:
+  logging: true
+  audit_trail: true
+  human_review_threshold: TO_BE_COMPLETED_BY_DEPLOYER
+
+deployer_notes: >
+  Complete all TO_BE_COMPLETED_BY_DEPLOYER fields before deploying to production.
+  Whether tasks contain PII depends on the task descriptions your callers send —
+  review the content of POST /tasks payloads in your deployment context.
+  Cross-border data handling depends on where the Akka runtime is hosted and where
+  callers reside. Model family determines which AI provider key to configure.
+  Human review threshold should reflect your organization's risk tolerance for
+  autonomous skill invocations without oversight.

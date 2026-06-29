@@ -1,0 +1,77 @@
+# Eval Matrix for the satellite-task-planner Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (research-intel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: satellite-task-planner
+generated_at: 2026-06-29
+
+matrix_cell:
+  coordination_pattern: contract-net
+  domain: research-intel
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Check bid feasibility against satellite ephemeris before accepting
+    mechanism:
+      kind: guardrail
+      hook: before-bid-acceptance
+      flavor: before-bid-acceptance
+    enforcement: blocking
+    rationale: >
+      A satellite bid that proposes an observation window outside the satellite's
+      actual ephemeris coverage is physically impossible to fulfil. Accepting such a
+      bid and awarding the task would produce a AWARDED request that can never
+      transition to COMPLETED, silently degrading fleet throughput. The guardrail
+      intercepts each bid immediately after SatelliteBidder returns it and compares
+      the proposed windowStart/windowEnd against the satellite's recorded
+      EphemerisWindow. Infeasible bids are rejected before the AuctionCoordinator
+      scores them, so the scoring pool contains only bids the satellite can honour.
+    implementation: >
+      A before-bid-acceptance guardrail runs inside ObservationAuction.collectStep,
+      immediately after each SatelliteBidder AutonomousAgent returns a Bid. The
+      guardrail reads the corresponding SatelliteEntity's EphemerisWindow and verifies
+      that the bid's windowStart falls within the window and that elevationDegrees
+      exceeds the minimum threshold. On failure it calls
+      ObservationRequestEntity.rejectBid, emitting BidRejected, and removes the bid
+      from the pool before the AwardDecision step. The ObservationAuction workflow
+      never passes an infeasible bid to AuctionCoordinator.
+    regulation_anchors: []
+
+  - id: E1
+    name: Monitor awarded-task completion rate across the fleet
+    mechanism:
+      kind: eval-periodic
+      hook: scheduled-eval
+      flavor: scheduled-eval
+    enforcement: non-blocking
+    rationale: >
+      Awarded tasks that never transition to COMPLETED indicate satellites that
+      accepted bids they could not execute. Left unmonitored, a fleet with a low
+      completion rate appears healthy in the AWARDED count while actual observation
+      coverage degrades. A scheduled eval computes the completion rate periodically
+      and surfaces it on each observation row so operators can identify systemic
+      ephemeris-quality problems or satellite failures without interrupting task
+      allocation.
+    implementation: >
+      FleetEvalSampler (TimedAction, every 10 minutes) queries ObservationView for
+      all requests, counts those in COMPLETED status and those in AWARDED status,
+      and computes the ratio. It calls ObservationRequestEntity.recordFleetEval on
+      the most recently completed request, emitting FleetEvalScored with the ratio.
+      The App UI displays the current fleet completion rate beside each observation
+      row. Delivery is never blocked by the eval run.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Bid feasibility guardrail
+    mechanism: "guardrail · before-bid-acceptance"
+    short: Reject bids whose proposed window contradicts the satellite's ephemeris.
+  - id: E1
+    name: Fleet completion-rate eval
+    mechanism: "eval-periodic · scheduled-eval"
+    short: Periodic ratio of completed to awarded tasks across the fleet.

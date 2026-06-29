@@ -1,0 +1,123 @@
+# Risk Survey for the real-time-bid-arbitration Akka sample.
+#
+# Pre-filled answers reflect what the sample's surface implies. Deployer-specific answers
+# are TO_BE_COMPLETED_BY_DEPLOYER and must be filled in before this survey is used to
+# materialise a deployer Eval Matrix.
+
+archetype:
+  id: real-time-bid-arbitration-sample
+  display_name: Real-Time Bid Arbitration Agent (Akka Sample)
+  one_line_description: >
+    An agent evaluates auction impression requests and returns bid decisions; pricing
+    emerges from market signals, not a static configuration.
+  scenario: |
+    An auction request arrives carrying a floor price and impression context. A
+    BidArbitrationAgent evaluates the request against campaign goals and returns a
+    BidDecision (shouldBid, bidPrice, reasoning). BidWorkflow enforces a per-window
+    spend cap: if the cap is already breached, the slot is halted without calling the
+    agent. A burst detector escalates anomalous placements to an ops queue. A periodic
+    PerformanceSampler computes win-rate and ROAS for resolved slots in the current
+    window. There is no real external ad exchange in this sample — the auction exchange
+    is modelled in-process. The scenario is the canonical "market-making-auction" pattern
+    in the sales-marketing domain.
+
+  primary_regulations: []  # community sample, no jurisdiction-bound anchors
+
+  explicitly_not_applicable:
+    - clinical decision support
+    - judicial process
+    - employment decisions
+    - children data (unless deployer configures otherwise)
+    - predictive policing
+    - mass surveillance
+    - autonomous lethal targeting
+    - behavioral manipulation beyond pricing signals
+    - synthetic media
+    - frontier-scale training compute
+
+answers:
+  # ---- Pre-filled by sample author ----
+
+  sector.primary: ["programmatic advertising", "real-time bidding", "digital marketing automation"]
+  decisions.types: ["bid price selection", "bid / no-bid classification"]
+  decisions.automated: true
+  decisions.authority_level: automated-within-bounds
+  decisions.categories: ["advertising spend decisions"]
+  runtime.human_review_required: false
+
+  data.types:
+    - auction impression metadata (placement, audience segment, format)
+    - floor prices and bid prices
+    - campaign budget parameters
+    - win/loss signals from the exchange
+    - performance metrics (win-rate, ROAS)
+
+  data.pii: false
+
+  capability.direct_human_interaction: false
+  capability.synthetic_media: false
+  capability.content_generation: false
+  capability.emotion_recognition: false
+  capability.biometric_categorisation: false
+  capability.law_enforcement_authorization: false
+  capability.law_enforcement_context: false
+  capability.critical_infrastructure: false
+  capability.defense_context: false
+
+  model.gpai: true
+  model.foundation: true
+  model.systemic_risk: false
+
+  capabilities.synthetic_media_modalities: []
+  capabilities.predictive_policing: false
+  capabilities.mass_surveillance: false
+  capabilities.autonomous_lethal_targeting: false
+  capabilities.behavioral_manipulation: false
+  capabilities.clinical_decision_support: false
+  capabilities.judicial_process_use: false
+  capabilities.audio_generation: false
+  capabilities.video_generation: false
+  capabilities.biometric_identification: false
+  capabilities.conversational_output: false
+  capabilities.criminal_prediction: false
+  capabilities.employment_decisions: false
+  capabilities.gpai_model: true
+  capabilities.legal_reasoning: false
+  capabilities.modalities: ["text"]
+  capabilities.user_facing_interaction: false
+
+  decisions.employment_decision: false
+  decisions.consequential_domains: ["advertising spend"]
+  decisions.affects_natural_persons: false
+  decisions.affects_protected_class: false
+  regulations.sectoral_product_law: ["none"]
+
+  users.minors: false
+  subjects.children: false
+
+  # ---- Sample-author defaults ----
+  third_party.topology: built on Akka
+  third_party.vendor_attested: no
+
+  # ---- Deployer-specific (replace with deployer's answer) ----
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  voluntary_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  geography.jurisdictions: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.actor_roles: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.risk_tier: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.supervisors: TO_BE_COMPLETED_BY_DEPLOYER
+  subjects.affected_persons: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.annual_revenue: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.employee_count: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.regulator_designations: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.local_representatives: TO_BE_COMPLETED_BY_DEPLOYER
+  model.training_compute: TO_BE_COMPLETED_BY_DEPLOYER
+  incidents.regulator_routes: TO_BE_COMPLETED_BY_DEPLOYER
+  data.residency: TO_BE_COMPLETED_BY_DEPLOYER
+  data.retention_period_days: TO_BE_COMPLETED_BY_DEPLOYER
+  deployer.is_governmental_entity: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.sandbox_participation: TO_BE_COMPLETED_BY_DEPLOYER
+  attestations.eu_gpai_code_of_practice: TO_BE_COMPLETED_BY_DEPLOYER
+  attestations.safety_framework_published: TO_BE_COMPLETED_BY_DEPLOYER
+  workforce.ai_literacy_training_current: TO_BE_COMPLETED_BY_DEPLOYER
+  system.integrations: TO_BE_COMPLETED_BY_DEPLOYER

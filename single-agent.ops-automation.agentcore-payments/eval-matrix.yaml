@@ -1,0 +1,66 @@
+schema_version: 1
+
+controls:
+  - id: H-001
+    name: Hold above-threshold payments for human approval before execution
+    mechanism:
+      kind: hitl
+      hook: pre-payment
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Payments at or above the task's configured approval threshold are paused
+      before any settlement occurs. The agent cannot proceed with that payment
+      — or submit a replacement intent for the same purpose — until a human
+      reviewer explicitly approves or rejects it via the approvals endpoint.
+      This ensures that high-value autonomous payments always have a human
+      decision in the audit record, satisfying finance-team oversight requirements
+      without requiring manual review of every low-cost routine call.
+    implementation: >
+      Inside PaymentTaskEntity's command handler for PaymentIntentSubmitted,
+      the entity compares amountCents against approvalThresholdCents. When the
+      threshold is met or exceeded, the entity emits PaymentHeld and calls
+      PaymentApprovalWorkflow.start(paymentId). The agent session receives a
+      HELD status from its submitPaymentIntent tool call and suspends iteration
+      until the workflow resolves. PaymentApprovalWorkflow waits for a decision
+      via its input channel (wired to POST /tasks/{taskId}/approvals in
+      PaymentTaskEndpoint). On APPROVE, the workflow calls
+      PaymentTaskEntity.approvePayment; on REJECT or timeout, it calls
+      rejectPayment. The entity emits the corresponding event and the agent
+      resumes on its next poll.
+    regulation_anchors: []
+    simplified_view:
+      integration_tier: runs-out-of-the-box
+      effort: low
+      value: high
+
+  - id: H-002
+    name: Halt agent immediately when task budget is exhausted
+    mechanism:
+      kind: halt
+      hook: budget-cap
+      flavor: budget-cap
+    enforcement: blocking
+    rationale: >
+      Each payment task carries a fixed budget ceiling in cents. Once the
+      accumulated settled spend reaches that ceiling — or would breach it on
+      the next payment intent — the entity transitions to BUDGET_EXCEEDED and
+      the agent receives a halt signal on its next tool call. No further
+      payment intents are accepted. This cap is enforced at the entity layer,
+      independent of the agent's prompt or LLM output, so it cannot be
+      bypassed by prompt manipulation or runaway agent iteration.
+    implementation: >
+      PaymentTaskEntity evaluates accumulatedSpentCents + amountCents >=
+      budgetCents synchronously in the PaymentIntentSubmitted command handler,
+      before emitting any event. If the cap would be breached, the entity
+      emits BudgetCapReached and moves to BUDGET_EXCEEDED status. Any active
+      PaymentApprovalWorkflow for a pending payment is cancelled. The agent
+      session's submitPaymentIntent tool call returns a BUDGET_EXCEEDED result
+      code, and PaymentAgentSession terminates its iteration loop without
+      calling the LLM again. The PaymentLedgerView immediately reflects the
+      new status so downstream consumers see the halt in real time.
+    regulation_anchors: []
+    simplified_view:
+      integration_tier: runs-out-of-the-box
+      effort: low
+      value: high

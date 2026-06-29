@@ -1,0 +1,60 @@
+schema_version: 1
+
+controls:
+  - id: H-001
+    name: Require human sign-off before valuation report is released
+    mechanism:
+      kind: hitl
+      hook: workflow-pause
+      flavor: application
+    enforcement: hard
+    rationale: >
+      Valuation reports influence investment decisions, lending determinations, and regulatory
+      filings. An LLM-generated report, even one that passes all automated critique checks,
+      may contain unsupported assumptions or misapplied comparable adjustments that only a
+      qualified human reviewer can detect. The workflow pauses at the AWAITING_SIGNOFF state
+      and will not advance to SIGNED_OFF without a deliberate POST /sign-off call from an
+      authenticated reviewer. This control is independent of critique scores — a report
+      that passes every automated check still requires human sign-off.
+    implementation: >
+      ValuationReviewWorkflow transitions to AWAITING_SIGNOFF after the critique–revise loop
+      exits (either cleanly or at cap). The workflow is durably paused — it survives service
+      restarts in this state. ValuationEndpoint exposes POST /valuations/{id}/sign-off and
+      POST /valuations/{id}/reject. Only one of these transitions the workflow forward.
+      No timeout auto-approves; a 72-hour timeout auto-rejects, preserving the human-in-the-loop
+      guarantee.
+    regulation_anchors: []
+    simplified_view:
+      label: Human sign-off gate
+      icon: user-check
+      color: amber
+      summary: Workflow pauses; a reviewer must POST /sign-off before the report is released.
+      integration_tier: runs-out-of-the-box
+
+  - id: G-001
+    name: Cap revision iterations to bound LLM cost
+    mechanism:
+      kind: halt
+      hook: workflow-step
+      flavor: budget-cap
+    enforcement: hard
+    rationale: >
+      An uncapped critique–revise loop can exhaust token budgets and introduce unbounded
+      latency. The iteration cap is set at workflow creation time (iterationCap field of
+      CreateValuationCommand, max 10). When the count reaches the cap the workflow emits
+      IterationCapReached and transitions out of the revision loop, preventing further LLM
+      calls regardless of outstanding critique check failures.
+    implementation: >
+      ValuationReviewWorkflow maintains an iterationCount field in durable workflow state.
+      After each ReportRevised event the count is incremented and compared to iterationCap.
+      If count >= cap, the workflow skips the next critique step, emits IterationCapReached,
+      and transitions to AWAITING_SIGNOFF (escalating to the human reviewer rather than
+      silently halting). ValuationCriticAction and ValuationDrafterAction are never called
+      again after cap is reached.
+    regulation_anchors: []
+    simplified_view:
+      label: Iteration budget cap
+      icon: stop-circle
+      color: red
+      summary: Loop stops at configured cap; IterationCapReached event is emitted.
+      integration_tier: runs-out-of-the-box

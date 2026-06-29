@@ -1,0 +1,54 @@
+schema_version: 1
+
+sector: ops-automation
+
+decisions:
+  - id: D-001
+    description: Which external APIs to call and how much to pay for each call
+    authority: recommend-and-execute
+    blast_radius: single-task
+    reversibility: partially-reversible
+    note: >
+      Below-threshold payments are executed without human review. Above-threshold
+      payments are held until a human approves or rejects. Budget-cap breaches
+      halt the agent; no reversal mechanism is provided for already-settled payments.
+
+  - id: D-002
+    description: Whether to continue after a payment is rejected by a human reviewer
+    authority: autonomous
+    blast_radius: single-task
+    reversibility: fully-reversible
+    note: >
+      The agent decides independently whether to substitute a lower-cost alternative
+      or mark the task objective as unachievable after a rejection.
+
+data_classes:
+  - payment-intent
+  - spend-ledger
+  - task-description
+  - approval-decision
+
+capabilities:
+  - external-api-payment
+  - autonomous-iteration
+  - human-approval-routing
+  - spend-tracking
+
+model_family: language-model
+
+oversight:
+  human_in_loop: true
+  hitl_trigger: payment-amount-threshold
+  hitl_path: POST /tasks/{taskId}/approvals
+  budget_cap: true
+  budget_cap_enforcement: entity-layer-synchronous
+  audit_trail: event-sourced-immutable
+
+deployer_specific:
+  approval_threshold_cents: TO_BE_COMPLETED_BY_DEPLOYER
+  default_task_budget_cents: TO_BE_COMPLETED_BY_DEPLOYER
+  approval_timeout_hours: TO_BE_COMPLETED_BY_DEPLOYER
+  reviewer_notification_mechanism: TO_BE_COMPLETED_BY_DEPLOYER
+  external_api_credentials: TO_BE_COMPLETED_BY_DEPLOYER
+  authentication_provider: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_policy: TO_BE_COMPLETED_BY_DEPLOYER

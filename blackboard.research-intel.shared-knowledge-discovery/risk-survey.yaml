@@ -1,0 +1,115 @@
+archetype:
+  id: blackboard-knowledge-discovery-sample
+  display_name: Blackboard Knowledge Discovery on a Shared Structured Object (Akka Sample)
+  one_line_description: >
+    Specialist analyst agents read and write to a shared structured
+    knowledge object; a control shell picks the next specialist to invoke
+    based on current blackboard state.
+  scenario: |
+    User (or simulator) submits a research question. `InquiryRequestConsumer`
+    starts a `ControlShell` workflow per inquiry. The shell reads the
+    inquiry's `BlackboardEntity` state and selects the next specialist:
+    `SourceScout` to propose sources, `ClaimExtractor` to derive claims from
+    a source, `HypothesisSynthesizer` to propose a hypothesis from the
+    current claims, or `Critic` to challenge the weakest item. Each
+    specialist returns a `ProposedWrite`. Before the entity commits, a
+    schema guardrail validates the payload; malformed writes are recorded
+    as `WriteRejected` and never applied. Accepted writes are scored by
+    `ContributionScorer` against a contribution-utility metric. The shell
+    loops until a non-disputed hypothesis covers every open sub-question or
+    the iteration budget is exhausted. An operator can halt the whole shell
+    via `SystemControl`. No external retrieval, no web fetch — sources are
+    proposed by the specialist agent under the schema guardrail and
+    referenced by id in the blackboard.
+
+  primary_regulations: []
+
+  explicitly_not_applicable:
+    - real web retrieval or live source fetch from the host
+    - access to enterprise knowledge stores
+    - clinical decision support
+    - judicial process
+    - employment decisions
+    - children data (unless deployer configures)
+    - predictive policing
+    - mass surveillance
+    - autonomous lethal targeting
+    - behavioral manipulation
+    - biometric processing
+    - frontier-scale training compute
+
+answers:
+  sector.primary: ["research and analysis tooling", "knowledge synthesis"]
+  decisions.types: ["source selection", "claim extraction", "hypothesis proposal", "challenge raising"]
+  decisions.automated: true
+  decisions.categories: ["research synthesis", "evidence weighting"]
+  runtime.human_review_required: false
+  data.types:
+    - free-text research questions submitted by users
+    - structured claims and hypotheses produced by analyst agents
+    - source citations proposed by analyst agents
+    - inquiry and workflow metadata
+    - contribution-utility scores
+  capability.direct_human_interaction: false
+  capability.synthetic_media: true
+  capability.content_generation: true
+  capability.code_generation: false
+  capability.tool_use: false
+  capability.emotion_recognition: false
+  capability.biometric_categorisation: false
+  capability.law_enforcement_authorization: false
+  capability.law_enforcement_context: false
+  capability.critical_infrastructure: false
+  capability.defense_context: false
+  model.gpai: true
+  model.foundation: true
+  model.systemic_risk: false
+  capabilities.synthetic_media_modalities: ["text"]
+  capabilities.predictive_policing: false
+  capabilities.mass_surveillance: false
+  capabilities.autonomous_lethal_targeting: false
+  capabilities.behavioral_manipulation: false
+  capabilities.clinical_decision_support: false
+  capabilities.judicial_process_use: false
+  decisions.employment_decision: false
+  decisions.consequential_domains: []
+  regulations.sectoral_product_law: ["none"]
+  capabilities.audio_generation: false
+  capabilities.biometric_identification: false
+  capabilities.conversational_output: false
+  capabilities.criminal_prediction: false
+  capabilities.gpai_model: true
+  capabilities.legal_reasoning: false
+  capabilities.modalities: ["text"]
+  capabilities.user_facing_interaction: false
+  capabilities.video_generation: false
+  decisions.affects_natural_persons: false
+  decisions.affects_protected_class: false
+  users.minors: false
+  subjects.children: false
+
+  third_party.topology: built on Akka
+  third_party.vendor_attested: no
+
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  voluntary_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  geography.jurisdictions: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.actor_roles: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.risk_tier: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.supervisors: TO_BE_COMPLETED_BY_DEPLOYER
+  subjects.affected_persons: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.annual_revenue: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.employee_count: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.regulator_designations: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.local_representatives: TO_BE_COMPLETED_BY_DEPLOYER
+  model.training_compute: TO_BE_COMPLETED_BY_DEPLOYER
+  incidents.regulator_routes: TO_BE_COMPLETED_BY_DEPLOYER
+  data.residency: TO_BE_COMPLETED_BY_DEPLOYER
+  data.retention_period_days: TO_BE_COMPLETED_BY_DEPLOYER
+  system.code_integrations: TO_BE_COMPLETED_BY_DEPLOYER
+  deployer.is_governmental_entity: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.sandbox_participation: TO_BE_COMPLETED_BY_DEPLOYER
+  attestations.eu_gpai_code_of_practice: TO_BE_COMPLETED_BY_DEPLOYER
+  workforce.ai_literacy_training_current: TO_BE_COMPLETED_BY_DEPLOYER
+  data.retention: TO_BE_COMPLETED_BY_DEPLOYER
+  system.integrations: TO_BE_COMPLETED_BY_DEPLOYER

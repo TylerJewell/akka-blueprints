@@ -1,0 +1,48 @@
+schema_version: 1
+
+sector: finance-analysis
+deployment_environment: TO_BE_COMPLETED_BY_DEPLOYER
+geographic_scope: TO_BE_COMPLETED_BY_DEPLOYER
+
+decisions:
+  - id: D-001
+    question: Does the system make or materially influence decisions that affect individuals' legal rights, financial standing, employment, housing, or access to essential services?
+    answer: "yes"
+    rationale: >
+      Valuation reports directly influence lending decisions, investment transactions, and
+      regulatory filings. An inaccurate report can materially affect financial standing of
+      asset owners, buyers, or lenders.
+  - id: D-002
+    question: Does the system operate in a regulated industry (finance, healthcare, legal, critical infrastructure)?
+    answer: "yes"
+    rationale: >
+      Financial analysis and asset valuation are subject to regulatory oversight in most
+      jurisdictions, including appraisal standards bodies (e.g., USPAP, RICS, IVS) and
+      financial regulator guidance on model risk.
+  - id: D-003
+    question: Does the system interact directly with end users (as opposed to operating as a back-office or developer tool)?
+    answer: "yes"
+    rationale: Valuation analysts and senior reviewers interact directly with the system to submit assets and sign off on reports.
+
+data_classes:
+  - asset-financial-data
+  - comparable-transaction-data
+  - valuation-reports
+
+capabilities:
+  - text-generation
+  - iterative-refinement
+  - structured-critique-scoring
+
+model_family: large-language-model
+model_provider: TO_BE_COMPLETED_BY_DEPLOYER
+model_version: TO_BE_COMPLETED_BY_DEPLOYER
+
+oversight:
+  human_review: required
+  review_frequency: per-item
+  escalation_path: TO_BE_COMPLETED_BY_DEPLOYER
+
+data_retention: TO_BE_COMPLETED_BY_DEPLOYER
+logging_level: TO_BE_COMPLETED_BY_DEPLOYER
+audit_trail: TO_BE_COMPLETED_BY_DEPLOYER

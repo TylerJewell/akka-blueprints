@@ -1,0 +1,88 @@
+schema_version: 1
+
+controls:
+
+  - id: G-001
+    name: Validate winning bid against task spec before committing award
+    mechanism:
+      kind: guardrail
+      hook: before-bid-acceptance
+      flavor: before-bid-acceptance
+    enforcement: >
+      AuctionWorkflow executes a synchronous validation step after BidEvaluatorAgent returns
+      the ranked bid list and before the AwardTask command is sent to TaskAnnouncementEntity.
+      The step checks three conditions in order: (1) the winning contractor exists in
+      ContractorRegistryEntity and has throttled=false; (2) the bid's costEstimate does not
+      exceed TaskSpec.maxBudget; (3) the contractor's declared capabilities cover every tag in
+      TaskSpec.requiredCapabilities. If any check fails, the workflow promotes the next-ranked
+      bid and re-runs the validation. If no bid passes all checks, the task transitions to
+      RENEGOTIATING without an award being committed. The outcome of every validation attempt —
+      accepted or rejected, with the failing condition — is written as a BidValidated event to
+      the TaskAnnouncementEntity journal, producing a durable audit trace.
+    rationale: >
+      In a distributed auction system, bids arrive asynchronously from uncoordinated contractor
+      agents. Without a synchronous gate, the manager could award a task to a contractor that
+      was throttled after submitting its bid, that quoted above the approved budget, or that
+      lacks the capabilities the task requires. Any of these outcomes would produce a contract
+      the executor cannot honour. Placing the check inside a workflow step — rather than inside
+      the entity command handler — keeps the entity logic simple and makes the guardrail
+      independently testable and replaceable without touching entity code.
+    implementation: >
+      The guardrail runs as step 3 of AuctionWorkflow, after the BidEvaluatorAgent step
+      returns. It calls ContractorRegistryEntity.getStatus() for the winning contractor and
+      performs the budget and capability checks against the TaskSpec carried in the workflow
+      state. The result is passed as the acceptedBidId or rejectedReason field of the
+      AwardTask or SkipBid command sent to TaskAnnouncementEntity. TaskAnnouncementEntity
+      emits BidValidated(accepted=true/false) for every candidate tried, which ActiveAuctionsView
+      projects so the UI can display validation history without querying the entity directly.
+    regulation_anchors: []
+    simplified_view:
+      summary: Winning bid checked for budget cap, capability match, and contractor eligibility before award is committed.
+      integration_tier: runs-out-of-the-box
+      observable: true
+      audit_event: BidValidated
+      failure_mode: next-ranked bid promoted; task enters RENEGOTIATING if no bid passes
+
+  - id: E-001
+    name: Score contractor performance after every task completion or failure
+    mechanism:
+      kind: eval-event
+      hook: on-completion-eval
+      flavor: on-completion-eval
+    enforcement: >
+      AuctionWorkflow listens for TaskCompleted and TaskFailed events from
+      TaskAnnouncementEntity. On either event, the workflow invokes PerformanceScorerAgent
+      with the original TaskSpec and the contractor's completion report. The agent returns
+      a JSON object containing a score (0–100 integer) and a feedback string. The workflow
+      validates the response schema before proceeding; a malformed response triggers a retry
+      up to three times before the step records a sentinel score of -1 and proceeds. The
+      validated score is written to ContractorRegistryEntity via UpdateScore, which appends
+      a PerformanceScored event. ContractorRegistryEntity maintains a rolling window of the
+      last five scores; if the rolling average drops below 40, it automatically emits
+      ContractorThrottled and sets throttled=true. This flag is subsequently checked by the
+      G-001 guardrail, so low performers are excluded from future awards without any manual
+      intervention.
+    rationale: >
+      Contract-Net does not natively enforce quality over time; a contractor that wins
+      awards with low bids but delivers poor work can continue winning indefinitely. The
+      eval-event control closes this gap by attaching a measurable quality signal to every
+      task outcome. Because the score is persisted to ContractorRegistryEntity and projected
+      by ContractorLeaderboardView, it is visible to operators and feeds directly into the
+      guardrail, creating a closed feedback loop. Scoring on failure as well as completion
+      ensures that contractors who abandon tasks are penalized, not just those who complete
+      them badly.
+    implementation: >
+      PerformanceScorerAgent is called from a dedicated step in AuctionWorkflow, following
+      the TaskCompleted or TaskFailed event. The agent prompt includes the full TaskSpec.description
+      and the completion report submitted by the contractor. The returned score is written
+      via ContractorRegistryEntity.UpdateScore(contractorId, taskId, score, feedback), which
+      emits PerformanceScored. ContractorLeaderboardView subscribes to PerformanceScored and
+      updates the contractor's rank in its projection. The throttle logic lives entirely in
+      ContractorRegistryEntity's command handler so it cannot be bypassed by any code path.
+    regulation_anchors: []
+    simplified_view:
+      summary: LLM scores every task outcome; persistent rolling score throttles contractors who fall below quality threshold.
+      integration_tier: runs-out-of-the-box
+      observable: true
+      audit_event: PerformanceScored
+      failure_mode: sentinel score -1 recorded after retries exhausted; operator alert recommended

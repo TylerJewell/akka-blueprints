@@ -1,0 +1,44 @@
+schema_version: 1
+sample_id: tool-search-discovery
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Strip disallowed tools before the agent invokes them
+    mechanism:
+      kind: guardrail
+      hook: before-tool-invocation
+      flavor: allowlist-filter
+    enforcement: blocking
+    rationale: |
+      An agent that discovers tool schemas on demand and then invokes them without
+      a policy check creates an unbounded execution surface. Any tool id the agent
+      constructs — whether discovered from the legitimate catalog or hallucinated —
+      could be called unless something sits between schema loading and invocation.
+      The before-tool-invocation hook is the right cut: it intercepts every outbound
+      tool call, checks the candidate tool id against a deployer-maintained allowlist,
+      and either passes the call through or strips the tool and returns a structured
+      rejection. The agent loop receives the rejection, adjusts its plan, and the
+      blocked id is recorded in TaskResult.guardedTools for operator audit.
+    implementation: |
+      `ToolAllowlistGuardrail` is registered on `DiscoveryAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-invocation` hook.
+      At service startup it reads `allowlist.json` from classpath — a JSON array of
+      permitted toolId strings. On each candidate tool call the guardrail checks the
+      tool id against this set. If the id is absent it calls Guardrail.reject with a
+      structured payload: `{ "reason": "tool-not-in-allowlist", "toolId": "<id>" }`.
+      The agent loop receives the rejection as a structured error and cannot retry
+      the same blocked tool within the same task iteration. Permitted tool calls pass
+      through unchanged. After `executeStep` completes, `DiscoveryWorkflow` collects
+      all rejection payloads and sets `TaskResult.guardedTools` accordingly, so the
+      UI and audit log show exactly which tool ids were blocked on which task.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool allowlist guardrail
+    mechanism: Guardrail
+    implementation: before-tool-invocation
+    integration_tier: runs-out-of-the-box
+    source: —

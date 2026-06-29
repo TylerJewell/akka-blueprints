@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: marathon-planner
+coordination_pattern: planner-executor
+domain: planning-travel
+
+controls:
+  - id: G1
+    name: Verify every skill dispatch against the capability registry before the agent runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-invocation
+    enforcement: blocking
+    rationale: |
+      The TrainingPlannerAgent dynamically selects which executor skill handles
+      each phase build — ASSESS, BUILD_WORKOUTS, VALIDATE_PLAN, or
+      COMPOSE_SUMMARY. If the planner proposes a skill that has not been loaded
+      into the registry (for example, a deprecated or experimental skill removed
+      by an operator), dispatching blindly would produce an unrecoverable
+      workflow error. The capability guardrail intercepts the dispatch before
+      the target agent is called, records the block reason, and returns control
+      to the planner so it can revise using only registered skills.
+    implementation: |
+      `CapabilityGuardrail.vet(SkillDispatch, SkillRegistry)` is called by
+      `PlanWorkflow`'s `guardStep` between `decideStep` and `dispatchStep`. The
+      vetter checks that `SkillDispatch.skill` is present in the snapshot
+      returned by `SkillRegistryEntity.getRegistry("registry")`. It also rejects
+      BUILD_WORKOUTS dispatches that request more than 20 sessions per week, and
+      ASSESS dispatches issued after a baseline is already set on `RunnerEntity`.
+      On rejection, the workflow records a `WorkoutBlocked` entry on the
+      adjustment ledger via `RunnerEntity.recordBlock(task, reason)`, then loops
+      back to `decideStep` so the planner sees the blocker and tries a different
+      skill.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every plan adjustment against the runner's goal before committing it
+    mechanism:
+      kind: eval-event
+      hook: on-decision
+      flavor: on-decision-eval
+    enforcement: advisory-with-signal
+    rationale: |
+      A training plan that drifts from the runner's stated goal — wrong mileage
+      ramp, wrong workout type mix, unrealistic pace targets — may be technically
+      valid but practically harmful. Rather than blocking the build, the
+      adherence evaluator scores each `WorkoutResult` and writes the score to the
+      adjustment ledger before the planner takes its next decision. Scores below
+      the configured threshold emit a `LowAdherenceSignal`, giving the planner
+      explicit evidence that the current build needs revision before the plan
+      proceeds.
+    implementation: |
+      `AdherenceEvaluator.score(WorkoutResult, PlanLedger)` runs in
+      `PlanWorkflow`'s `evalStep` immediately after each `WorkoutResult` is
+      received from `WorkoutBuilderAgent`. It checks (a) whether the workout
+      type mix matches the phase's `keyWorkoutTypes`, (b) whether total weekly
+      mileage is within 10% of the phase's `targetWeeklyMiles`, and (c) whether
+      all sessions have valid `targetPaceSecondsPerMile` values. The result is
+      an `AdjustmentEntry { adherenceScore, verdict, notes }` appended to
+      `RunnerEntity` via `recordAdjustment`. When `adherenceScore` falls below
+      `adherence.threshold` (default 0.6), the workflow also emits a
+      `LowAdherenceSignal` to the entity so the planner's next `DECIDE_NEXT`
+      call contains the signal in its context.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Capability registry guardrail
+    mechanism: Guardrail
+    implementation: before-tool-invocation (SkillRegistryEntity snapshot check)
+    source: —
+  - id: E1
+    label: Adherence eval-event
+    mechanism: Eval-event
+    implementation: on-decision-eval (AdherenceEvaluator + LowAdherenceSignal)
+    source: —

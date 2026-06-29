@@ -1,0 +1,39 @@
+schema_version: 1
+sample_id: meeting-preparer
+coordination_pattern: single-agent
+domain: finance-analysis
+
+controls:
+  - id: S1
+    name: Redact PII from CRM data before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Meeting requests carry a CRM snapshot that routinely contains the counterparty
+      contact's name, direct email address, mobile phone number, and account-like
+      identifiers embedded in interaction notes. Sending those identifiers to an LLM
+      creates unnecessary personal-data exposure and may violate data-minimisation
+      obligations. Redaction runs in a Consumer between the raw submission and the agent
+      invocation; the raw CRM snapshot is preserved on the entity for audit but is never
+      the input the model sees.
+    implementation: |
+      `ContactSanitizer` Consumer subscribes to `MeetingRequested` events emitted by
+      `BriefingEntity`. It runs a regex pipeline over `crmSnapshot.contactName`,
+      `crmSnapshot.contactEmail`, `crmSnapshot.contactPhone`, and
+      `crmSnapshot.lastInteractionNote` — covering email addresses, E.164 phone numbers,
+      person-name heuristics, and account-id-like tokens. Outputs a `SanitizedCrmData`
+      record carrying redacted strings plus the list of PII categories found. Calls
+      `BriefingEntity.attachSanitizedData(sanitized)`. `BriefingWorkflow.briefStep` then
+      passes the redacted CRM data as the `BriefingAgent` task attachment named
+      `sanitized-crm.txt`; the raw CRM payload remains accessible only via
+      `request.crmSnapshot` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    integration_tier: runs-out-of-the-box
+    source: —

@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: a2a-interactions
+
+# ---- Purpose ----
+purpose:
+  primary_function: agent-coordination
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: fulfillment-response
+  user_type: agent-operator
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-agent-to-agent-interaction-payloads
+  data_classes:
+    pii: false
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  identity_verified_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-routing
+  decision_subject: agent-task
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: not-applicable-post-fulfill
+  routing_decisions_made_by_ai: true
+  fulfillment_decisions_made_by_ai: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-interaction
+  failure_modes:
+    - wrong-receiver-routing
+    - unverified-sender-accepted
+    - capability-mismatch
+    - fulfillment-fabrication
+    - routing-confidence-miscalibration
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: agent-platform-operator
+  reviewer_must_approve_every_outgoing: false
+  reviewer_must_unblock_guardrail_failures: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_interaction: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

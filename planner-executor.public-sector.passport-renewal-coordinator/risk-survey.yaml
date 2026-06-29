@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: passport-renewal-coordinator
+
+# ---- Purpose ----
+purpose:
+  primary_function: government-identity-document-processing
+  sector: public-sector
+  decisions_surface: human-gated-action
+  user_type: caseworker
+
+# ---- Data ----
+data:
+  inputs:
+    - passport-number
+    - national-identity-number
+    - date-of-birth
+    - nationality
+    - uploaded-document-fixtures
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-with-human-gate
+  decision_subject: passport-renewal-eligibility
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: irreversible-after-agency-submission
+
+# ---- Failure ----
+failure:
+  blast_radius: single-applicant-scope
+  failure_modes:
+    - missing-required-document
+    - pii-exposure-in-llm-prompt
+    - caseworker-approval-bypass
+    - stale-application-no-progress
+    - agency-endpoint-timeout
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: caseworker
+  audit_frequency: per-application
+  operator_pause_control: false
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - simulated-document-review
+    - simulated-agency-endpoint
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: gl-reconciler
+
+# ---- Purpose ----
+purpose:
+  primary_function: general-ledger-reconciliation-pipeline
+  sector: financial-services
+  decisions_surface: operational-write
+  user_type: finance-controller-or-accountant
+
+# ---- Data ----
+data:
+  inputs:
+    - account-set-identifier
+    - ledger-entries-from-books-of-record
+    - expected-account-balances
+    - chart-of-accounts
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    financial-account-data: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: operational-write
+  decision_subject: journal-entry-posting
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-with-correcting-entry
+  controller_reviews_material_variances_before_post: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-reconciliation-run
+  failure_modes:
+    - unbalanced-journal-entry
+    - invalid-account-code
+    - material-variance-posted-without-review
+    - missing-ledger-entries
+    - nav-calculation-error
+    - hitl-timeout-without-decision
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: true
+  reviewer_role: finance-controller
+  material_variance_threshold_percent: TO_BE_COMPLETED_BY_DEPLOYER
+  controller_must_approve_before_post_on_material_variance: true
+  audit_frequency: daily
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_run: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  ledger-data-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  accounting-standard: TO_BE_COMPLETED_BY_DEPLOYER

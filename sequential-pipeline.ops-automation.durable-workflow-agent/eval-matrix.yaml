@@ -1,0 +1,98 @@
+schema_version: 1
+sample_id: durable-workflow-backed-agent
+coordination_pattern: sequential-pipeline
+domain: ops-automation
+
+controls:
+  - id: H1
+    name: Halt tool calls when per-task budget cap is reached
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: budget-cap
+    enforcement: blocking
+    rationale: |
+      In an ops-automation pipeline, an agent diagnosing or remediating an
+      incident can issue an unbounded sequence of tool calls if it fails to
+      converge — querying the same metrics repeatedly, applying the same
+      corrective action in a loop, or thrashing between check and confirm.
+      Without a cap, a single incident can exhaust downstream rate limits or
+      hold a workflow step open past its timeout, causing cascading step
+      failures across the system. The before-tool-call budget-cap hook is
+      the correct cut: count each tool call against a per-phase budget
+      before the tool body runs, halt the agent when the cap is reached,
+      record the violation event for audit, and let the workflow's step
+      recovery decide whether to retry or fail over. The cap is per-phase
+      (DIAGNOSE: 8, REMEDIATE: 6, VERIFY: 6) because each phase has a
+      different information-gathering profile — diagnosis legitimately
+      needs more calls than verification.
+    implementation: |
+      `BudgetGuardrail` is registered on `OpsAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      It maintains a `ConcurrentHashMap` keyed by `(incidentId + ":" +
+      phase)`, initialised from the `incidentId` and `phase` carried in
+      each `TaskDef.metadata`. On every incoming tool call the guardrail
+      increments the counter for that key. If the counter BEFORE the
+      increment already equals the cap for that phase, the guardrail returns
+      `Guardrail.reject("budget-cap-exceeded: <tool> halted at
+      <callsUsed>/<cap> for phase <phase>")` and calls
+      `IncidentEntity.recordBudgetExhausted(phase, tool, callsUsed, cap)`
+      so the violation is visible in the App UI's budget-violation strip and
+      in the audit log. The agent cannot issue further tool calls in this
+      task; `RemediationWorkflow`'s default step recovery
+      (`maxRetries(2).failoverTo(RemediationWorkflow::error)`) then decides
+      whether to retry the step or transition `IncidentEntity` to `FAILED`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Evaluate workflow durability metrics on a scheduled window
+    mechanism:
+      kind: eval-periodic
+      flavor: scheduled-eval
+    enforcement: non-blocking
+    rationale: |
+      A workflow engine that retries steps and applies failover policies can
+      silently absorb reliability problems — budget violations spike, MTTR
+      creeps up, timeouts grow — without any individual incident appearing
+      to fail outright. The only way to detect these trends is to aggregate
+      across a rolling window of closed incidents and compute durability
+      metrics that no single incident's lifecycle surface. A scheduled
+      evaluator run once per hour is the right frequency for an
+      ops-automation pipeline: frequent enough to catch a deteriorating
+      model or a broken tool before an on-call escalation, infrequent enough
+      not to generate alert noise from normal variance.
+    implementation: |
+      `DurabilityTimerAction` registers an hourly timer with Akka's
+      `TimerService` infrastructure. On each fire it calls
+      `DurabilityEvaluator.evaluate(incidents)`, which receives the list of
+      `IncidentRow` entries from `IncidentView` whose `closedAt` falls in
+      the trailing 60-minute window. The evaluator computes four metrics:
+      (1) `completionRatePercent` — percentage of closed incidents that
+      reached `VERIFIED`; (2) `budgetViolationRatePercent` — percentage
+      of closed incidents that emitted at least one `BudgetExhausted`
+      event; (3) `mttrMinutes` — mean of `(closedAt - createdAt)` in
+      minutes for `VERIFIED` incidents; (4) `timeoutRatePercent` —
+      percentage of `FAILED` incidents whose failure reason contains
+      "step-timeout". The result is a `DurabilityReport` written to
+      `DurabilityReportEntity` as a `DurabilityReportRecorded` event. A
+      manual trigger endpoint (`POST /api/durability/trigger`) fires the
+      same logic immediately, making the evaluation testable without waiting
+      for the hourly window. The App UI Overview tab renders the latest
+      report as a four-metric tile row; trends toward lower completion rates
+      or higher budget-violation rates signal that the per-phase caps or
+      step timeouts need adjustment.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Per-task budget-cap guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    integration_tier: runs-out-of-the-box
+    source: —
+  - id: E1
+    label: Scheduled durability metrics eval
+    mechanism: Eval · periodic
+    implementation: scheduled-eval
+    integration_tier: runs-out-of-the-box
+    source: —

@@ -1,0 +1,81 @@
+schema_version: 1
+sample_id: cross-agency-case-handoff-mesh
+
+# ---- Purpose ----
+purpose:
+  primary_function: public-benefit-case-management
+  sector: public-sector
+  decisions_surface: agency-case-determination
+  user_type: agency-case-officer
+
+# ---- Data ----
+data:
+  inputs:
+    - constituent-benefit-applications
+    - eligibility-supporting-documents
+  data_classes:
+    pii: true
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_scoped_per_agency_before_llm: true
+  cross_boundary_field_drop_logged: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: human-approved-handoff
+  decision_subject: constituent
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-until-handoff-approved
+  routing_decisions_made_by_ai: true
+  segment_determinations_made_by_ai: true
+  handoff_release_requires_human_approval: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-constituent
+  failure_modes:
+    - wrong-jurisdiction-routing
+    - out-of-scope-agent-invocation
+    - pii-cross-boundary-leak
+    - incorrect-entitlement-determination
+    - handoff-without-approval
+    - jurisdiction-guardrail-bypass
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: true
+  reviewer_role: agency-case-officer
+  reviewer_must_approve_every_handoff: true
+  reviewer_must_approve_every_outgoing: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_case: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: TO_BE_COMPLETED_BY_DEPLOYER
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  constituent_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  agency_data_sharing_agreements_in_place: TO_BE_COMPLETED_BY_DEPLOYER

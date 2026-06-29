@@ -1,0 +1,88 @@
+schema_version: 1
+sample_id: pitch-builder
+coordination_pattern: sequential-pipeline
+domain: finance-analysis
+
+controls:
+  - id: S1
+    name: Sanitize counterparty PII from research outputs before the agent sees them
+    mechanism:
+      kind: sanitizer
+      hook: pre-task-context
+      flavor: pii
+    enforcement: blocking
+    integration_tier: runs-out-of-the-box
+    rationale: |
+      Pitchbooks are built from raw financial research — SEC filings, news data feeds, and
+      deal-intelligence sources — that routinely include contact details for named individuals
+      at target companies and their advisors. If those names, email addresses, and phone numbers
+      reach the agent's context, they may propagate into the draft pitchbook and be transmitted
+      to the client. Beyond privacy risk, including individual contact details in a client
+      document is a compliance liability under most banking and broker-dealer conduct rules.
+      A pre-task sanitizer that runs before the agent's instruction context is assembled is the
+      correct interception point: the raw research item is stored for audit, but the version the
+      agent reasons over never contains the personal detail. The redaction count and field-level
+      log are recorded as `PiiRedactionLogged` events on `PitchbookEntity` so any auditor can
+      reconstruct exactly what was stripped and verify it did not reach the draft.
+    implementation: |
+      `PiiSanitizer` is a stateless utility class called inside `PitchbookPipelineWorkflow.
+      researchStep`, immediately after `PitchAgent` returns the raw `ResearchPack` and before
+      the workflow calls `PitchbookEntity.recordResearch(redactedPack)`. The sanitizer iterates
+      each `RawResearchItem.metadata` field and applies three patterns from `PiiPatternRegistry`:
+      (1) personal-name pattern matching titles followed by "LASTNAME, Firstname" or
+      "Firstname LASTNAME"; (2) personal-email pattern matching `word@word.tld`; (3)
+      direct-phone pattern matching `+1 NNNN` or `(NNN) NNN-NNNN`. Each matched span is
+      replaced with `[REDACTED]` and the replacement increments `redactionCount`. For each
+      replacement, `PitchbookEntity.logPiiRedaction(field, patternId, offsetStart, offsetEnd)`
+      is called via `componentClient` so the audit event is durable. The redacted `ResearchPack`
+      — with `redactionCount` set — is what gets written onto the entity and forwarded to
+      `comparablesStep`. The agent's COMPARABLES and DRAFT tasks never see the unredacted text.
+    regulation_anchors: []
+
+  - id: H1
+    name: Validate financial citations and peer references before draft is returned to caller
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    integration_tier: runs-out-of-the-box
+    rationale: |
+      Pitchbooks are transmitted directly to clients and relied on for investment decisions.
+      A draft that cites a valuation multiple that does not appear in the recorded comparables
+      table, or names a peer company that was not in the screened peer set, exposes the bank to
+      reputational and regulatory risk — incorrect figures in client-facing documents are a
+      known source of FINRA and SEC enforcement actions. A before-agent-response guardrail that
+      fires every time the DRAFT task produces a `Pitchbook` ensures no unchecked draft reaches
+      the entity log or the caller. The guardrail runs deterministically against the recorded
+      `CompsTable` — there is no LLM call in the validation path — so the same draft always
+      produces the same verdict and the check is reproducible in testing and audit.
+    implementation: |
+      `CitationValidator` is registered on `PitchAgent` via the agent's guardrail-configuration
+      block, bound to the `before-agent-response` hook. It activates only when the in-flight
+      task is `DRAFT_PITCHBOOK`. After the agent returns a `Pitchbook`, the validator reads the
+      recorded `CompsTable` from `PitchbookEntity` (via `componentClient`) and applies three
+      checks: (1) every `PitchSection.citedTickers[i]` MUST match a `PeerCompany.ticker` in
+      `CompsTable.peers`; (2) every `PitchSection.citedFigures[j]` — a decimal string with a
+      multiple-type suffix — MUST fall within the corresponding range in `CompsTable.multiples`
+      (±0.1x tolerance); (3) no peer company name referenced in any `PitchSection.body` is
+      absent from `CompsTable.peers[].name`. On any failure the validator calls
+      `PitchbookEntity.logCitationRejection(sectionId, rule, detail)` for the audit trail and
+      returns `Guardrail.reject("citation-violation: " + detail)`. The agent retries within
+      its 4-iteration budget. `CitationValidator` is also invoked directly by
+      `PitchbookPipelineWorkflow.validationStep` for the final scoring pass (four checks, one
+      point each on a base of 1; score range 1–5), producing a `ValidationResult` written as
+      `ValidationScored` on the entity.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Counterparty PII sanitizer
+    mechanism: Sanitizer
+    implementation: pre-task-context (pii)
+    source: —
+  - id: H1
+    label: Citation and peer reference guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

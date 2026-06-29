@@ -1,0 +1,67 @@
+# Eval Matrix for the multi-agent-customer-router Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (cx-support domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: multi-agent-customer-router
+generated_at: 2026-06-29
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: cx-support
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Audit the routing decision before specialist handoff
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: before-agent-invocation
+    enforcement: blocking
+    rationale: >
+      The router's classification determines which specialist receives the ticket and the
+      resolution a customer sees. Auditing that decision before any specialist is called
+      catches low-confidence or contradictory classifications early, preventing a billing
+      query from reaching the technical team (or vice versa) and protecting the customer
+      from an irrelevant or harmful response.
+    implementation: >
+      A before-agent-invocation guardrail runs inside TicketWorkflow.guardrailStep,
+      immediately after RouterAgent returns a RoutingDecision. The step applies a
+      deterministic confidence-threshold check (threshold 0.5) followed by an LLM judge
+      that cross-checks the category against the ticket subject. On failure the workflow
+      calls TicketEntity.flagForReview, the ticket enters REVIEW_REQUIRED, and no
+      specialist agent is invoked. On success the workflow proceeds to delegateStep.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score the specialist resolution for ticket-close quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The routing decision is only as good as the outcome it produces. A post-resolution
+      eval that scores whether the chosen specialist actually answered the customer's
+      question creates a feedback loop: consistently low scores on a category signal that
+      the router's classification or the specialist's prompt needs adjustment.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries TicketView for the oldest
+      RESOLVED ticket lacking an evalScore, runs a 1-5 rubric judge that checks whether
+      the Resolution.answer addresses the original ticket subject, and calls
+      TicketEntity.recordEval(score, rationale), emitting ResolutionEvalScored. Delivery
+      is never blocked by the eval.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Routing decision guardrail
+    mechanism: "guardrail · before-agent-invocation"
+    short: Block low-confidence or contradictory routing before any specialist is called.
+  - id: E1
+    name: Resolution quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score whether the chosen specialist closed the ticket correctly.

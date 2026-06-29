@@ -1,0 +1,114 @@
+schema_version: 1
+sample_id: cross-agency-case-handoff-mesh
+coordination_pattern: handoff-routing
+domain: public-sector
+
+controls:
+  - id: S1
+    name: Scope case payload to receiving agency before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Constituent cases in public-sector workflows carry identifiers whose
+      disclosure is authorised only for specific agencies: Social Security
+      numbers, dates of birth, address histories, and program-specific
+      eligibility codes each have a distinct authorisation scope. A cross-
+      boundary handoff that forwards the full payload exposes fields the
+      receiving agency is not authorised to process. Scoping happens inside a
+      Consumer before the case enters the workflow, so no agency's agent ever
+      sees a field outside its declared scope. Dropped field categories are
+      logged for audit.
+    implementation: |
+      `PiiScopingFilter` Consumer subscribes to `CaseInbox` events. For each
+      `InboundCaseReceived` it applies a per-segment field-scoping policy:
+      drops `constituentId` (never passed cross-boundary), redacts
+      `fullPayload` via a regex pipeline (SSN patterns `\d{3}-\d{2}-\d{4}`,
+      date-of-birth heuristics, address-shaped lines, phone numbers, emails),
+      and records `droppedFieldCategories`. It then calls
+      `CaseEntity.registerInbound` and `attachScoped`, and starts a
+      `HandoffWorkflow` with `caseId` as the workflow id. The `ScopedCase`
+      carrying the redacted text and the `droppedFieldCategories` list is
+      the only payload that reaches `JurisdictionRouter`, `IntakeAssessor`,
+      `BenefitsReviewer`, and `JurisdictionGuardrail`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require case-owner approval before every inter-agency handoff
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Each agency in the mesh owns a discrete segment of the constituent's
+      case. Transferring ownership to the next agency is a consequential
+      decision: the receiving agency will act on the current segment's
+      determination, and any error or scope creep carries administrative and
+      legal weight. An explicit human approval step between segments ensures
+      that the case-owner at the current agency has reviewed the outgoing
+      determination before it propagates. A rejection terminates the workflow
+      in `HANDOFF_REJECTED`; no downstream agency agent is ever invoked
+      without a recorded human sign-off.
+    implementation: |
+      `HandoffWorkflow.approvalStep` emits `HandoffPending` on `CaseEntity`
+      and suspends. The workflow only resumes when an operator calls
+      `POST /api/cases/{id}/approve-handoff` (body `{ approvedBy, note }`) or
+      `POST /api/cases/{id}/reject-handoff` (body `{ rejectedBy, reason }`).
+      On approval, the workflow emits `HandoffEmitted` and either starts the
+      next segment's route → guard → agent cycle or emits `CaseClosed` if the
+      current segment is the last. On rejection, the workflow emits
+      `HandoffRejected` and terminates in `HANDOFF_REJECTED`. The `approvedBy`
+      field and `note` are persisted on `CaseEntity` as an audit record. The
+      `approvalStep` timeout is 60 s — this is the workflow step timeout, not
+      the operator deadline; the case sits in `HANDOFF_PENDING` indefinitely
+      until the operator acts.
+    regulation_anchors: []
+
+  - id: G1
+    name: Verify receiving agency jurisdiction before invoking any agent
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: jurisdiction
+    enforcement: blocking
+    rationale: |
+      Routing a constituent case to an agency that lacks jurisdiction over
+      the case's program type, geographic region, or eligibility tier is a
+      compliance failure independent of whatever the agent produces. The
+      before-agent-invocation guardrail checks the case's attributes against
+      the receiving agency's declared scope before the first token is
+      generated. A jurisdiction mismatch means the agent is never invoked —
+      the case transitions to `JURISDICTION_BLOCKED` with the violation list
+      recorded, and no further processing occurs until an operator intervenes.
+    implementation: |
+      `JurisdictionGuardrail` is a typed Agent. `HandoffWorkflow.guardStep`
+      invokes it with the `ScopedCase` and the `RoutingDecision` before
+      calling `IntakeAssessor` or `BenefitsReviewer`. The agent returns
+      `JurisdictionVerdict { allowed, violations, agencyCode, policyVersion }`.
+      On `allowed=false`, the workflow emits `JurisdictionBlocked` (terminal
+      `JURISDICTION_BLOCKED`) and the case stops. On `allowed=true`, the
+      workflow proceeds to `segmentStep` and invokes the agency agent. The
+      guardrail step has a 20 s timeout; on timeout the workflow retries up to
+      twice before terminating with a `JURISDICTION_BLOCKED` for safety.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Per-agency PII scoping
+    mechanism: Sanitizer
+    implementation: pii
+    integration_tier: runs-out-of-the-box
+    source: —
+  - id: H1
+    label: Case-owner handoff approval
+    mechanism: HITL
+    implementation: application
+    integration_tier: runs-out-of-the-box
+    source: —
+  - id: G1
+    label: Before-invocation jurisdiction check
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    integration_tier: runs-out-of-the-box
+    source: —

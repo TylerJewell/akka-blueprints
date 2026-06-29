@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: passport-renewal-coordinator
+coordination_pattern: planner-executor
+domain: public-sector
+
+controls:
+  - id: P1
+    name: Tokenize applicant PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      hook: before-agent-call
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Passport renewal requests carry the most sensitive category of identity
+      data: passport numbers, national identity numbers, and dates of birth.
+      Passing these raw values into LLM prompts creates unnecessary exposure —
+      the model does not need the literal values to plan or review; it needs
+      only stable tokens it can reference across iterations. Tokenizing before
+      any agent call ensures that raw PII never appears in event payloads,
+      view rows, SSE streams, logs, or downstream LLM context.
+    implementation: |
+      `PiiTokenizer.tokenize(RenewalRequest)` runs in `RenewalWorkflow`'s
+      `piiTokenizeStep`, between `proposeStep` and `documentReviewStep`. It
+      produces a `PiiContext` record containing an opaque token for each
+      sensitive field (passport number → `ppt-<12 hex>`, date of birth →
+      `dob-<12 hex>`, national ID → `nid-<12 hex>`). The tokens are HMAC-SHA256
+      values keyed by a per-service secret from `application.conf`. Only the
+      `PiiContext` is forwarded to `DocumentReviewAgent`; the raw fields are
+      never included in any agent call payload, progress ledger entry, or
+      `ApplicationView` row.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require caseworker approval before submitting to the issuing authority
+    mechanism:
+      kind: hitl
+      hook: before-submission
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Submitting a passport renewal to a government issuing authority is an
+      irreversible act with legal consequences — a wrongly approved application
+      cannot be silently retracted. A caseworker approval gate ensures that a
+      human reviews the verified document summary before the workflow calls the
+      agency endpoint. No configuration option, timeout, or automated signal
+      can bypass this gate; only an explicit caseworker decision resumes the
+      workflow.
+    implementation: |
+      After `ReviewCompleted` is emitted on `ApplicationEntity`, `RenewalWorkflow`
+      enters `caseworkerWaitStep`. This step has no step timeout — it polls
+      `CaseworkerControlEntity.get(applicationId)` every 5 s indefinitely. The
+      `ApplicationEndpoint` exposes `POST /api/applications/{id}/caseworker-approve`
+      and `POST /api/applications/{id}/caseworker-reject`, each requiring a
+      `decidedBy` field and a `reason`. The caseworker decision is stored as a
+      `CaseworkerDecisionRecorded` event on `CaseworkerControlEntity`. When the
+      workflow detects an `APPROVED` verdict it transitions to `agencySubmitStep`;
+      a `REJECTED` verdict transitions to `rejectStep` and the agency endpoint
+      is never called.
+    regulation_anchors: []
+
+simplified_view:
+  - id: P1
+    label: PII tokenizer
+    mechanism: Sanitizer
+    implementation: pii (HMAC-SHA256 token substitution before agent calls)
+    source: —
+  - id: H1
+    label: Caseworker approval gate
+    mechanism: HITL
+    implementation: application (indefinite workflow pause until explicit decision)
+    source: —

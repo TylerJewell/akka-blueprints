@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: flexibility-orchestrator
+
+# ---- Purpose ----
+purpose:
+  primary_function: grid-demand-flexibility-orchestration
+  sector: energy-utilities
+  decisions_surface: dispatch-with-operator-approval
+  user_type: grid-operator
+
+# ---- Data ----
+data:
+  inputs:
+    - grid-demand-signals
+    - program-budget-state
+    - historical-dispatch-records
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: TO_BE_COMPLETED_BY_DEPLOYER
+    grid-operational-data: true
+    customer-load-profiles: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: dispatch-with-approval
+  decision_subject: grid-asset-or-customer-load
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible-before-execution
+
+# ---- Failure ----
+failure:
+  blast_radius: program-window-scope
+  failure_modes:
+    - over-curtailment-exceeding-customer-tolerance
+    - under-curtailment-missing-grid-relief-target
+    - budget-exhaustion-before-peak
+    - false-urgency-triggering-unnecessary-dispatch
+    - missed-critical-signal-during-poller-downtime
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: grid-operator
+  reviewer_must_approve_high_impact: true
+  approval_threshold_mw: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    # GridSignalPoller connects to a simulated feed; replace with real SCADA/ISO integration.
+  rate_limit_per_signal: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  iso-ferc-compliance: TO_BE_COMPLETED_BY_DEPLOYER
+  demand-response-program-registration: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_curtailment: TO_BE_COMPLETED_BY_DEPLOYER

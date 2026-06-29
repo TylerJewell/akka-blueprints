@@ -1,0 +1,69 @@
+schema_version: 1
+sample_id: earnings-reviewer
+coordination_pattern: planner-executor
+domain: finance-analysis
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Vet every thesis flag before it lands on the review answer
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      The Earnings Reviewer's output is a list of thesis-relevant flags that
+      downstream investment workflows read directly. A flag with weak
+      evidence or an out-of-vocabulary category drives a bad trade. The
+      single largest blast-radius event in this system is a flag emitted
+      with high stated confidence and no real backing on the ledger. The
+      guardrail wired to the planner's response hook stops that flag before
+      it reaches the answer and forces the planner to revise.
+    implementation: |
+      `FlagGuardrail.vet(ThesisFlag, ReviewLedger)` is called by
+      `ReviewWorkflow`'s `guardrailStep` between `finalizeStep` and
+      `evalStep`. Three checks run in order: (a) `confidence >= 0.55`,
+      (b) `evidence.size() >= 2` and every cited evidence string matches
+      a substring of some passage on the ledger, (c) `category` is one of
+      the `FlagCategory` enum values. On reject the workflow emits
+      `FlagRejected` with the rejection reason; the planner is given one
+      opportunity to revise the candidate flag set.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every accepted flag against the evidence-quality rubric
+    mechanism:
+      kind: eval-event
+      hook: on-decision
+      flavor: on-decision-eval
+    enforcement: observational
+    rationale: |
+      The guardrail catches obvious bad flags. The eval-event is the
+      second line of defence: even a flag that clears the guardrail can be
+      thin on cross-source corroboration or stale relative to the review
+      period. The eval-event makes the quality of the supporting evidence
+      visible — both in the API response and in the UI — so downstream
+      consumers see whether a flag is robust or marginal.
+    implementation: |
+      `EvidenceQualityEvaluator.score(ThesisFlag, ReviewLedger)` runs in
+      `ReviewWorkflow`'s `evalStep` after every `FlagAccepted` event. The
+      deterministic rubric awards points for passage count (up to 0.30),
+      source diversity across `TRANSCRIPT` and `FILING` (up to 0.30),
+      recency relative to the review period (up to 0.20), and absence of
+      contradicting passages on the ledger (up to 0.20). The score lands
+      on `ThesisFlag.evidenceQualityScore` and is emitted as `FlagScored`.
+      Scores below `0.40` are highlighted in the UI but not auto-rejected.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Thesis-flag guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Evidence-quality eval-event
+    mechanism: Eval-event
+    implementation: on-decision-eval (deterministic rubric)
+    source: —

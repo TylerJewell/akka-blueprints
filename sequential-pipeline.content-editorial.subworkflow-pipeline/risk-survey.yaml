@@ -1,0 +1,80 @@
+schema_version: 1
+sample_id: sequential-pipeline-content-editorial-subworkflow-pipeline
+
+# ---- Purpose ----
+purpose:
+  primary_function: content-drafting-and-review-pipeline
+  sector: content-editorial
+  decisions_surface: editor-gated-publish
+  user_type: content-author-or-editor
+
+# ---- Data ----
+data:
+  inputs:
+    - user-supplied-topic
+    - in-process-source-corpus
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: editor-gated
+  decision_subject: article-draft-publish
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-before-publish
+  editor_approves_every_article_before_publish: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-article
+  failure_modes:
+    - tone-violation-in-published-copy
+    - factuality-violation-unverified-citation
+    - off-brand-phrasing
+    - editor-bypass-attempt
+    - incomplete-draft-section
+    - missing-source-attribution
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  editor_role: designated-approver
+  editor_must_approve_before_publish: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-subworkflow-tools
+  rate_limit_per_article: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+  subworkflow_count: 3
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  source-corpus-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  brand-voice-guidelines-configured: TO_BE_COMPLETED_BY_DEPLOYER

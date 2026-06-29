@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: self-critiquing-writer-loop
+coordination_pattern: evaluator-optimizer
+domain: content-editorial
+
+controls:
+  - id: E1
+    name: Record every cycle's critic verdict as an eval event
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The critic's accept-or-revise verdict is the highest-information signal
+      the loop produces. Recording it as a typed event per attempt gives
+      operators a continuous quality stream — pass rate per iteration number,
+      drift in average score, distribution of critique categories — without
+      instrumenting the workflow itself. Over time, this data reveals whether
+      the writer's revision behaviour is improving, degrading, or oscillating,
+      which informs tuning of the quality threshold and iteration budget.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `ArticlesView.getAllArticles`, finds attempts that have been critiqued
+      but do not yet have a matching `EvalRecorded` event, and calls
+      `ArticleEntity.recordEval(attemptNumber, verdict, score, iterationsUsed)`.
+      The call is idempotent on `(articleId, attemptNumber)`. The
+      `RefinementWorkflow` also emits one `EvalRecorded` event on the terminal
+      transition (ArticleAccepted or BudgetExhausted) carrying the whole loop's
+      outcome.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the refinement loop when the iteration budget is exhausted
+    mechanism:
+      kind: halt
+      hook: budget-cap
+      flavor: budget-cap
+    enforcement: system-level
+    rationale: |
+      Iterative refinement loops can run indefinitely or fail silently. Neither
+      is acceptable when the system must surface results to a UI and retain
+      evidence for audit. The budget-cap halt ends the loop at a configured
+      iteration ceiling, emits a structured `BudgetExhausted` event visible in
+      the SSE stream and in the article's event history, preserves every draft
+      and every critique, and surfaces the best-scoring attempt as the
+      recommended output. Operators can raise or lower the ceiling without
+      changing application code.
+    implementation: |
+      `RefinementWorkflow` reads
+      `self-critiquing-writer-loop.refinement.max-iterations` (default 4) at
+      start. Before scheduling the next `draftStep`, it checks
+      `iterationCount < maxIterations`. If the ceiling is hit, the workflow
+      transitions to `budgetExhaustedStep`, which emits
+      `BudgetExhausted{iterationsUsed, bestAttemptNumber, bestText}` followed
+      by a terminal `EvalRecorded` event. The article ends in
+      `BUDGET_EXHAUSTED`. `defaultStepRecovery(maxRetries(2).failoverTo(
+      budgetExhaustedStep))` ensures any unrecoverable agent failure lands in
+      the same terminal state rather than hanging.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-attempt eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: HT1
+    label: Halt at iteration budget
+    mechanism: Halt
+    implementation: budget-cap
+    source: —

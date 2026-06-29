@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: self-correcting-extraction
+coordination_pattern: evaluator-optimizer
+domain: ops-automation
+
+controls:
+  - id: E1
+    name: Record every cycle's scorer verdict as an eval event
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The scorer's pass-or-correct verdict is the highest-information signal
+      the extraction loop produces. Recording it as a typed event per attempt
+      — carrying the attempt number, the decision, the confidence score, and
+      whether the scorer consulted a memory hit — gives operators a continuous
+      quality stream. Trends in confidence across attempts reveal whether the
+      Extraction Agent is converging, drifting, or stuck on a structurally
+      ambiguous document class. None of this signal is available from the
+      entity state alone; it requires a time-series view that only event
+      recording provides.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. It queries
+      `JobsView.getAllJobs`, finds `ExtractionAttempt` entries that have a
+      `ScorerVerdict` but no matching `EvalRecorded` event on the job, and
+      calls `ExtractionJobEntity.recordEval(attemptNumber, decision,
+      confidence, memoryHit)`. The call is idempotent on `(jobId,
+      attemptNumber)`. The `ExtractionWorkflow` itself also emits one
+      `EvalRecorded` event on the terminal transition (`JobVerified` or
+      `JobBudgetExhausted`), carrying the loop-level outcome. Both sources
+      surface in the App UI's per-attempt timeline and in
+      `GET /api/jobs/{id}`.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the extraction loop at the configured budget cap
+    mechanism:
+      kind: halt
+      hook: budget-cap
+      flavor: budget-cap
+    enforcement: system-level
+    rationale: |
+      Self-correcting loops over LLM agents can consume unbounded tokens and
+      wall-clock time if not explicitly bounded. For document extraction in
+      operational workflows this is unacceptable: a job that never terminates
+      blocks downstream processing and conceals its own failure. The
+      budget-cap halt ends the loop at a configurable ceiling, preserves
+      every attempt and every correction note on the entity for audit, and
+      surfaces the highest-confidence extraction as the best-available
+      output. The system never discards extraction work; it promotes the
+      best attempt rather than returning an empty result.
+    implementation: |
+      `ExtractionWorkflow` reads `self-correcting-extraction.extraction.budget-cap`
+      (default 4) at workflow start. Before scheduling the next `extractStep`,
+      it checks `attemptCount < budgetCap`. When the ceiling is hit, the
+      workflow transitions to `exhaustStep`, which scans `attempts` for the
+      entry with the highest `FieldMap.confidence`, emits `JobBudgetExhausted`
+      with that entry's `FieldMap` as `bestFieldMap` and a structured
+      `exhaustionReason` ("budget cap reached" plus the count), and ends.
+      `defaultStepRecovery(maxRetries(2).failoverTo(exhaustStep))` ensures any
+      unrecoverable agent failure also lands in the same terminal state rather
+      than hanging the workflow.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-attempt eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: HT1
+    label: Halt at budget cap
+    mechanism: Halt
+    implementation: budget-cap
+    source: —

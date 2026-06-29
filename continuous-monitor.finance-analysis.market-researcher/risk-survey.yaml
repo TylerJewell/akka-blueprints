@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: market-researcher
+
+# ---- Purpose ----
+purpose:
+  primary_function: financial-research-synthesis
+  sector: finance-analysis
+  decisions_surface: flag-only
+  user_type: credit-analyst
+
+# ---- Data ----
+data:
+  inputs:
+    - news-headlines
+    - sec-filing-abstracts
+    - broker-research-notes
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    material-non-public-information: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: false  # No PII in market research inputs
+
+# ---- Decisions ----
+decisions:
+  authority_level: flag-only
+  decision_subject: sector-or-issuer
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: analyst-can-dismiss-flag
+
+# ---- Failure ----
+failure:
+  blast_radius: desk-workflow-disruption
+  failure_modes:
+    - false-positive-flag-distracting-analyst
+    - false-negative-missed-credit-event
+    - low-confidence-high-risk-brief-published-without-review
+    - signal-extraction-missing-material-filing
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: credit-analyst
+  reviewer_must_approve_every_outgoing: false  # Only HIGH-risk + low-confidence requires confirmation
+  pending_review_queue_monitored: true
+  audit_frequency: daily
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    # ResearchPoller is a simulator; replace with a real data-vendor integration when deploying.
+  rate_limit_per_message: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+    investment-recommendation: false  # System produces flags only, not buy/sell/hold advice
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  mifid-ii-research-rules-in-scope: TO_BE_COMPLETED_BY_DEPLOYER
+  reg-fd-compliance-review: TO_BE_COMPLETED_BY_DEPLOYER

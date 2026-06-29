@@ -1,0 +1,75 @@
+# Eval Matrix for the agent-to-agent-settlement Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (general domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: agent-to-agent-settlement
+generated_at: 2026-06-29
+
+matrix_cell:
+  coordination_pattern: market-making-auction
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Verify settlement preconditions before authorising payment
+    mechanism:
+      kind: guardrail
+      hook: before-settlement
+      flavor: before-settlement
+    enforcement: blocking
+    rationale: >
+      An agent-to-agent transaction transfers value between autonomous parties. Without a
+      precondition check, a buyer agent with insufficient balance or an unverified seller
+      could initiate a settlement that cannot complete or that transfers funds to an
+      illegitimate counterparty. The guardrail runs synchronously inside the workflow before
+      any settlement command is issued, so a failed check produces a clean CANCELLED state
+      rather than a partially-settled transaction that requires rollback.
+    implementation: >
+      A before-settlement guardrail on SettlementAgent runs inside AuctionWorkflow.preconditionStep.
+      SettlementAgent checks three conditions: counterparty credential validity, buyer balance
+      sufficiency for the agreed price, and listing integrity (the listing has not been
+      cancelled or already claimed). It returns a PreconditionReport{passed, checkedConditions,
+      failureReason}. If passed is false, the workflow transitions to cancelStep, which calls
+      OrderEntity.cancelOrder(failureReason) and the order reaches CANCELLED. No payment command
+      is ever issued when the report fails.
+    regulation_anchors: []
+
+  - id: H1
+    name: Escalate disputed orders to a human operator for resolution
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: non-blocking
+    rationale: >
+      Autonomous settlement removes the human from the payment loop, which is appropriate
+      for routine transactions. Disputes are different: a buyer asserting that a delivered
+      service was not as described requires judgement that neither the BuyerAgent nor the
+      SettlementAgent is equipped to resolve. Routing disputed orders to a human operator
+      preserves the speed advantage of automated settlement for the common case while
+      ensuring contested transactions get a fair review.
+    implementation: >
+      DisputeMonitor (TimedAction, every 5 minutes) queries MarketplaceView.getAllOrders,
+      filters for DISPUTED orders, and cross-checks MarketplaceView.getOpenTasks to skip
+      orders already queued. For each new dispute it calls OperatorTaskEntity.createTask,
+      writing a TaskCreated event. The operator sees open tasks via GET /api/operator/tasks
+      in the App UI and resolves them via POST /api/orders/{id}/resolve, which calls
+      OrderEntity.resolveDispute and OperatorTaskEntity.resolveTask. The order gains an
+      operatorNote and returns to SETTLED. Delivery of the original settlement was never
+      blocked by this path.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Settlement precondition guardrail
+    mechanism: "guardrail · before-settlement"
+    short: Block settlement when credentials, balance, or listing integrity checks fail.
+  - id: H1
+    name: Operator dispute escalation
+    mechanism: "hitl · application"
+    short: Route disputed orders to a human operator queue for resolution.

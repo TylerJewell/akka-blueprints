@@ -1,0 +1,106 @@
+---
+# Risk Survey — Contract-Net Task Auctioneer
+# Pre-filled fields reflect domain: ops-automation / pattern: contract-net
+# Fields marked TO_BE_COMPLETED_BY_DEPLOYER must be filled before production use.
+
+survey_version: "1.0"
+completed_by: TO_BE_COMPLETED_BY_DEPLOYER
+completed_date: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---------------------------------------------------------------------------
+# Section 1: Sector & Deployment Context
+# ---------------------------------------------------------------------------
+sector: ops-automation
+deployment_environment: TO_BE_COMPLETED_BY_DEPLOYER   # e.g. cloud-hosted, on-prem, hybrid
+geographic_regions: TO_BE_COMPLETED_BY_DEPLOYER        # e.g. EU, US, APAC
+regulated_industry: TO_BE_COMPLETED_BY_DEPLOYER        # e.g. none, financial-services, healthcare
+
+# ---------------------------------------------------------------------------
+# Section 2: Decision Types
+# ---------------------------------------------------------------------------
+decisions:
+  - id: D-01
+    description: Select winning contractor bid for a task announcement
+    reversible: true          # award can be cancelled before task starts
+    human_in_loop: false      # automated by AuctionWorkflow + guardrail
+    impact_scope: internal    # affects contractor pool and task requestors only
+    frequency: high           # multiple auctions may run concurrently
+
+  - id: D-02
+    description: Throttle a contractor after poor performance scoring
+    reversible: true          # manual UnthrottleContractor command available
+    human_in_loop: false      # automated by ContractorRegistryEntity rolling score
+    impact_scope: internal
+    frequency: low
+
+  - id: D-03
+    description: Reopen bidding via renegotiation after task failure
+    reversible: false         # TaskFailed event is permanent
+    human_in_loop: TO_BE_COMPLETED_BY_DEPLOYER
+    impact_scope: internal
+    frequency: low
+
+# ---------------------------------------------------------------------------
+# Section 3: Data Classes
+# ---------------------------------------------------------------------------
+data_classes:
+  - task_specifications          # requirements text, capability tags, budget
+  - contractor_profiles          # name, capabilities, performance history
+  - bid_records                  # cost estimates, submission timestamps
+  - performance_scores           # LLM-generated numeric scores and feedback
+  - personally_identifiable_information: TO_BE_COMPLETED_BY_DEPLOYER   # depends on whether contractors are natural persons
+
+sensitive_data_handling: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---------------------------------------------------------------------------
+# Section 4: Capabilities
+# ---------------------------------------------------------------------------
+capabilities:
+  natural_language_generation: true       # BidEvaluatorAgent and PerformanceScorerAgent produce text
+  decision_support: true                  # BidEvaluatorAgent ranks bids
+  automated_action: true                  # AuctionWorkflow awards tasks without human approval
+  retrieval_augmented_generation: false
+  computer_use: false
+  code_execution: false
+  multi_agent_coordination: true          # manager + contractor pool + two LLM agents
+
+# ---------------------------------------------------------------------------
+# Section 5: Model Family
+# ---------------------------------------------------------------------------
+model_family: TO_BE_COMPLETED_BY_DEPLOYER   # e.g. anthropic/claude-3-5-sonnet, openai/gpt-4o
+model_access: TO_BE_COMPLETED_BY_DEPLOYER   # api-key, managed-endpoint, on-prem
+model_version_pinned: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---------------------------------------------------------------------------
+# Section 6: Oversight & Accountability
+# ---------------------------------------------------------------------------
+oversight:
+  human_review_of_awards: false             # guardrail is automated; no human approval step
+  human_review_of_throttling: false         # auto-throttle; manual unthrottle available
+  audit_log_retained: true                  # all entity events are durable in Akka journal
+  audit_log_retention_period: TO_BE_COMPLETED_BY_DEPLOYER
+  incident_response_contact: TO_BE_COMPLETED_BY_DEPLOYER
+  operator_alerts_configured: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---------------------------------------------------------------------------
+# Section 7: Risk Acceptance
+# ---------------------------------------------------------------------------
+residual_risks:
+  - risk: LLM evaluator misjudges bid fit and awards a task to a suboptimal contractor
+    likelihood: medium
+    mitigation: Guardrail re-checks objective criteria (budget, capabilities, throttle) even when LLM ranking is used; renegotiation provides a recovery path.
+
+  - risk: PerformanceScorerAgent returns inconsistent scores for similar outcomes
+    likelihood: medium
+    mitigation: Rolling five-task window smooths individual score variance; throttle threshold is configurable by deployer.
+
+  - risk: Contractor pool collusion — coordinated low bids to win, then poor execution
+    likelihood: low
+    mitigation: Performance scoring and throttle feedback loop degrades colluders over time; deployer can add minimum-bid guardrail extension.
+
+  - risk: Bidding window exhausted with no valid bids
+    likelihood: low
+    mitigation: Task enters RENEGOTIATING; deployer should configure operator alert for tasks that exhaust renegotiation attempts.
+
+accepted_by: TO_BE_COMPLETED_BY_DEPLOYER
+acceptance_date: TO_BE_COMPLETED_BY_DEPLOYER

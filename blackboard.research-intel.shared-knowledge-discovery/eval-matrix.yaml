@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: blackboard-research-intel-shared-knowledge-discovery
+generated_at: 2026-06-29
+
+matrix_cell:
+  coordination_pattern: blackboard
+  domain: research-intel
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Schema-validate every write before it hits the blackboard
+    mechanism:
+      kind: guardrail
+      hook: before-state-write
+      flavor: before-state-write
+    enforcement: blocking
+    rationale: |
+      Specialist agents propose writes against a single shared structured
+      object that other specialists read on their next turn. A malformed
+      write — wrong field, missing reference, dangling source id, claim
+      pointing at a non-existent sub-question — poisons the read path for
+      every specialist that follows and the convergence check. The schema
+      guardrail fires before the entity commits, so the bad payload never
+      enters state and the inquiry stays coherent.
+    implementation: |
+      `SchemaValidator` is invoked from `ControlShell.invokeSpecialistStep`
+      before the entity command runs. It checks the `ProposedWrite` against
+      a structural schema for its `writeKind`: every `Source` has a non-blank
+      citation and a URL; every `Claim.derivedFrom` resolves to an existing
+      source id; every `Hypothesis.backedByClaims` resolves to existing claim
+      ids; every `Challenge.targetId` resolves to an existing claim or
+      hypothesis. Pass → `BlackboardEntity` commits the corresponding
+      `*Added` / `*Proposed` event. Fail → entity emits `WriteRejected` with
+      the failure list and the state is unchanged. The UI shows rejected
+      writes in a dedicated strip so the operator can see which specialists
+      keep getting rejected.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every accepted contribution against a utility metric
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: advisory
+    rationale: |
+      Specialists writing to a shared object can drift into low-value
+      contributions — restating known claims, proposing duplicate sources,
+      raising challenges that never resolve. Without a feedback signal the
+      control shell keeps invoking them. A per-write score against a
+      contribution-utility metric lets the shell stop calling on a
+      specialist whose recent contributions did not move the inquiry
+      forward.
+    implementation: |
+      `ContributionScorer` is a `Consumer` subscribed to `BlackboardEntity`
+      events. For each accepted `*Added` / `*Proposed` event it computes a
+      contribution-utility score: did the write resolve an open
+      sub-question, did it cite a new source, did it back a hypothesis with
+      fresh claims, did the critic's challenge target a dangling item.
+      Score and rationale are written back as a `ContributionScore` event
+      on the same blackboard. `ControlShell.selectStep` consults each
+      specialist's last 3 scores; a specialist whose mean falls below
+      threshold is benched until the inquiry advances (a new sub-question
+      opens, the critic flags something).
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Schema guardrail before write
+    mechanism: Guardrail
+    implementation: before-state-write
+    source: —
+  - id: E1
+    label: Contribution-utility scoring
+    mechanism: Eval event
+    implementation: on-decision-eval
+    source: —

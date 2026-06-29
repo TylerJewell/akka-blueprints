@@ -1,0 +1,92 @@
+schema_version: 1
+sample_id: sequential-pipeline-content-editorial-subworkflow-pipeline
+coordination_pattern: sequential-pipeline
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Reject agent responses that contain off-brand language or unverified factual claims
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Published copy reaches public-facing surfaces where brand tone and factual
+      accuracy directly affect reader trust. If the agent's REVIEW task response
+      contains a phrase from the configured blocklist or cites a URL that does not
+      appear in the recorded ResearchFindings, allowing that response to land in
+      the workflow means a non-compliant draft advances to the editor-approval
+      gate. The before-agent-response hook is the right cut: intercept the typed
+      response before it exits the agent boundary, surface a structured rejection,
+      and let the agent correct the draft within its iteration budget. The check
+      is deterministic — same draft, same result — so the guardrail is auditable
+      and reproducible.
+    implementation: |
+      `ToneGuardrail` is registered on `ContentPipelineAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      It fires on every REVIEW task response. Two checks are applied:
+      (1) Tone check — the `Draft.leadParagraph` and each `DraftSection.body` are
+      scanned against the phrase blocklist loaded from
+      `src/main/resources/config/blocked-phrases.txt`. Any match produces a
+      structured rejection with message `tone-violation: phrase '<X>' found in
+      section '<heading>'`.
+      (2) Factuality check — every URL in `DraftSection.citedUrls` is verified
+      against `ResearchFindings.sources[].url`. A URL absent from the recorded
+      sources produces `factuality-violation: url '<U>' not in ResearchFindings`.
+      On rejection, `ToneGuardrail` also calls
+      `ArticleEntity.recordGuardrailRejection(phase, reason)` so the event is
+      visible in the UI's rejection-log strip and in the audit log. On accept,
+      the response passes to the workflow unchanged. After the agent task
+      completes, `ContentPipelineWorkflow.guardStep` also calls
+      `ToneGuardrail.check(draft, findings)` as an explicit post-review audit
+      gate and writes the `GuardChecked` event onto `ArticleEntity`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require explicit editor approval before any article is published
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Content published to public surfaces carries organisational accountability.
+      An automated pipeline — even one with a tone and factuality guardrail —
+      can produce copy that is technically compliant but editorially wrong:
+      missing context, unsuitable timing, or incorrect emphasis that no phrase
+      blocklist would catch. The human-in-the-loop approval step places a
+      designated editor in the decision path before the publish event lands.
+      The gate is hard: the workflow pauses at `AWAITING_APPROVAL` and can
+      only advance through an explicit editor decision. No timeout, no retry,
+      no automatic promotion can bypass it.
+    implementation: |
+      `ContentPipelineWorkflow.awaitApprovalStep` runs after `guardStep`
+      completes. It emits `ApprovalRequested` onto `ArticleEntity`, which
+      transitions the article to `AWAITING_APPROVAL`, and then suspends the
+      workflow with no timeout. `ContentEndpoint` exposes
+      `POST /api/articles/{id}/decision` accepting `{ approved: boolean,
+      note: Optional<String> }`. The endpoint calls
+      `ContentPipelineWorkflow.resume(EditorDecision)` to unblock the step.
+      If `approved = true`, the workflow emits `EditorApproved` and then
+      `ArticlePublished`, transitioning to `PUBLISHED`. If `approved = false`,
+      the workflow emits `EditorRejected`, transitioning to `REJECTED`.
+      The `ArticlePublished` event can only be emitted from `publishStep`,
+      which is only reachable from `awaitApprovalStep` with an approved
+      `EditorDecision` — the dependency chain in `ArticleEntity`'s event
+      applier enforces this at the state level as well.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tone and factuality guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    integration_tier: runs-out-of-the-box
+    source: —
+  - id: H1
+    label: Editor approval gate
+    mechanism: HITL
+    implementation: application
+    integration_tier: runs-out-of-the-box
+    source: —
