@@ -1,0 +1,68 @@
+schema_version: 1
+sample_id: incident-classifier
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: E1
+    name: Score every classification against the closed taxonomy on landing
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      An incident classification that lands with an unrecognised category code, a subcategory
+      that does not belong under the stated category, or a CI name that does not appear in the
+      registry will silently route the ticket to the wrong team — a cost that is invisible until
+      the next SLA review. Evaluating every result the moment it is recorded surfaces out-of-
+      vocabulary assignments before the downstream routing workflow acts, giving an operations
+      staff member time to override. The evaluation is deterministic and uses no LLM call,
+      so the same classification always scores the same against the same taxonomy version.
+    implementation: |
+      `AccuracyEvaluator` runs inside `ClassificationWorkflow.evalStep`, fired immediately
+      after `ClassificationRecorded` lands. It consults the in-process `TaxonomyTable`
+      singleton (loaded from `src/main/resources/taxonomy/taxonomy.json` at startup) and
+      applies a three-part rubric: +2 if `category` is a recognised taxonomy code, +2 if
+      `subcategory` is listed under that category, +1 if `affectedCi` appears in the CI
+      registry — yielding a score from 0 to 5. Emits `AccuracyScored{categoryInTaxonomy,
+      subcategoryUnderCategory, ciInRegistry, score, rationale}`. The result is stored on
+      `IncidentEntity` and surfaced as an eval-score chip on the App UI tab; any score ≤ 2
+      highlights the card border red so an operator knows to inspect the routing before it
+      propagates.
+    regulation_anchors: []
+
+  - id: E2
+    name: Track rolling classification accuracy over a 7-day window
+    mechanism:
+      kind: eval-periodic
+      flavor: continuous-accuracy
+    enforcement: non-blocking
+    rationale: |
+      A single bad classification is an anomaly; a pattern of misclassified incidents over
+      days signals model drift or a taxonomy change that the agent was not notified about.
+      Rolling accuracy gives operations managers a leading indicator they can act on before
+      SLA impact is visible. The 7-day window is short enough to catch a taxonomy update
+      whose effect accumulates over hours, and long enough not to be destabilised by a
+      single unusual incident description.
+    implementation: |
+      Every `AccuracyScored` event contributes one data point to the rolling accuracy
+      window maintained by `ClassificationView`. The view stores `eval.score`,
+      `eval.categoryInTaxonomy`, `eval.subcategoryUnderCategory`, and `eval.ciInRegistry`
+      per row. `ClassificationEndpoint` aggregates the 50 most recent contributions (via the
+      `getAccuracyWindow` query) into a "fully-correct rate" (fraction of rows where all
+      three boolean fields are true) and returns it alongside a per-day count array that
+      the Eval Matrix tab renders as a sparkline. No additional background process or cron
+      job is required — the window is computed on demand from the view rows.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: On-decision taxonomy validation
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: E2
+    label: Rolling 7-day accuracy window
+    mechanism: Eval · periodic
+    implementation: continuous-accuracy
+    source: —

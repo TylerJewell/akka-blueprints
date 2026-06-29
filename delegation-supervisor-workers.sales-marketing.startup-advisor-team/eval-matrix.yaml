@@ -1,0 +1,67 @@
+# Eval Matrix for the startup-advisor-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (sales-marketing domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: startup-advisor-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: sales-marketing
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Vet the advisory report before it reaches the startup founder
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The synthesised advisory report is the user-facing artifact and makes
+      commercial recommendations that a founder may act on. An output guardrail
+      catches fabricated competitor claims, unsupported market-size figures, and
+      manipulative pricing language before the report is delivered, so no
+      misleading advice reaches the reader.
+    implementation: >
+      A before-agent-response guardrail on AdvisorSupervisor runs a deterministic
+      vetter plus an LLM judge over the AdvisoryReport in
+      AdvisoryWorkflow.guardrailStep. The vetter checks for competitor names with
+      no supporting evidence and superlative market-size claims. On failure the
+      workflow calls AdvisorySessionEntity.block and the session enters BLOCKED.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the supervisor synthesis decision for advisory quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The AdvisorSupervisor's synthesis decision integrates four independent
+      specialist outputs into one report that a founder uses to set direction.
+      Sampling that decision with a rubric judge surfaces a quality score in
+      the UI without delaying delivery — founders see how confident the system
+      is in its own output.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries AdvisoryView for the
+      oldest SYNTHESISED session lacking an evalScore, runs a 1-5 rubric judge
+      over the AdvisoryReport content (checking internal consistency,
+      evidence-backing, and actionability), and calls
+      AdvisorySessionEntity.recordEval(score, rationale), emitting EvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Advisory report output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a report that contains fabricated competitor data or unsupported claims.
+  - id: E1
+    name: Synthesis quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the supervisor's synthesis decision for consistency and actionability.

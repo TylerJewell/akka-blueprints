@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: planner-executor-general-planner-executor
+coordination_pattern: planner-executor
+domain: general
+
+controls:
+  - id: G1
+    name: Vet every step proposal before the Executor receives it
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      In a two-agent planner-executor loop the Planner's step proposals are the
+      single control point between the goal and real execution. A step that names
+      a destructive shell command, a write outside the approved workspace, or an
+      outbound call to a non-allow-listed host would reach the Executor
+      unchecked if no guardrail is wired here. The guardrail is placed on the
+      dispatch edge — between proposeStep and executeStep — so every step
+      decision is policy-checked before any execution occurs, regardless of how
+      many replan cycles have already happened.
+    implementation: |
+      `StepGuardrail.vet(StepDecision)` is called by `PlanWorkflow`'s
+      `guardrailStep` between `proposeStep` and `executeStep`. The vetter checks
+      (a) a destructive-command pattern list (rm, sudo, mkfs, dd, broad chmod),
+      (b) file-write path scope (`/workspace/` only), (c) a host allow-list for
+      any network reference (akka.io, doc.akka.io, github.com), and (d) a
+      step-text length cap of 500 characters. On rejection the workflow records
+      a `StepBlocked` entry on `PlanEntity`, then loops back to `proposeStep`
+      so `PlannerAgent` sees the block reason and revises.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt automatically when an unsafe result is observed or the replan budget is exhausted
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      The guardrail catches bad proposals before execution. The automatic halt
+      addresses what happens after: an Executor response that shows evidence of
+      a destructive action attempt (e.g., the simulated environment reported a
+      permissions change the step was not supposed to make), or an explicit
+      prompt-injection marker in returned content. It also caps unbounded replan
+      cycles — if the Planner emits three consecutive Replan signals without a
+      Continue in between, the workflow treats this as unrecoverable and halts
+      automatically rather than running forever.
+    implementation: |
+      `StepSafetyEvaluator.evaluate(StepEntry)` runs in `PlanWorkflow`'s
+      `autoHaltEvalStep` after every recorded step. It flags UNSAFE on
+      destructive-shell evidence in the step result, sensitive-path writes
+      (patterns `/etc`, `/root`, `~/.ssh/`), and prompt-injection markers
+      ("ignore previous instructions", "<system>"). On UNSAFE the workflow
+      transitions to `haltedStep`, which emits `PlanHaltedAutomatic` and ends
+      the workflow with the plan in `HALTED`. Separately, `PlanWorkflow`'s
+      `decideStep` tracks consecutive `Replan` signals; on the third it
+      bypasses the planner entirely and transitions directly to `failStep`,
+      emitting `PlanFailed`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Step-proposal guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: HT1
+    label: Automatic safety halt + replan-budget cap
+    mechanism: Halt
+    implementation: automatic-safety-halt (post-execution evaluator + replan counter)
+    source: —

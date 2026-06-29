@@ -1,0 +1,40 @@
+schema_version: 1
+sample_id: document-forge-agent
+coordination_pattern: single-agent
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Validate file path and content before every write-document tool call
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-validator
+    enforcement: blocking
+    rationale: |
+      A document-generation agent that writes its own output to a named file is one
+      bad filename away from a path-traversal write, and one unchecked content payload
+      away from persisting oversized or disallowed material. The before-tool-call hook
+      is the right interception point: it runs before the tool's side-effect commits,
+      can name the exact check that failed, and forces the agent to retry with a
+      corrected tool call — all without touching the rest of the workflow. Sitting at
+      the tool boundary rather than post-hoc is what makes the control genuinely blocking.
+    implementation: |
+      `WriteDocumentGuardrail` is registered on `DocumentForgeAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook and scoped
+      to the `write_document` tool. On each intercepted tool call it (1) asserts the
+      `filename` argument contains no `../` sequences and does not begin with `/`,
+      (2) asserts the `filename` extension is in `{.md, .txt, .html}`, (3) asserts
+      `content` is non-empty and at most 131 072 bytes, and (4) asserts `formatHint`
+      is one of `{markdown, plain-text, html}`. On any failure it returns a structured
+      rejection naming the failed check; the agent loop consumes one of its 3 iterations
+      and retries with a corrected tool call. Passing tool calls flow through to the
+      in-memory file registry inside `ForgeWorkflow.forgeStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: File-write path + content guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

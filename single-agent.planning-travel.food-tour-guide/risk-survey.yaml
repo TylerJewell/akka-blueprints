@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: gemma-food-tour-guide
+
+# ---- Purpose ----
+purpose:
+  primary_function: culinary-tour-planning
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-only
+  user_type: traveler-or-travel-planner
+
+# ---- Data ----
+data:
+  inputs:
+    - traveler-preference-form
+    - city-food-profile-corpus
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  personal_health_notes_normalized_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: culinary-itinerary
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  traveler_reads_itinerary_before_acting: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-trip-plan
+  failure_modes:
+    - hallucinated-venue
+    - missing-dietary-coverage
+    - day-index-out-of-range
+    - description-too-terse
+    - budget-tier-mismatch
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: traveler-or-travel-planner
+  traveler_must_review_itinerary_before_booking: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_tour_request: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  city-profile-data-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,115 @@
+# Eval Matrix for the camel-roleplay Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain sample with no industry- or jurisdiction-bound
+# anchors, so regulation_anchors is intentionally an empty list across all controls. Treat
+# the requirement as relaxed for non-anchored samples.
+#
+# G1 and E1 are the pattern-specific controls drawn from the corpus entry
+# (google-adk.camel). A1 and HT1 are the standard operational controls every
+# deployable governed service carries.
+
+schema_version: 1
+sample_id: camel-roleplay
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: moderation-turn-taking
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Reject any turn that breaks role or fabricates a solution
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-bounds-check
+    enforcement: blocking
+    rationale: >
+      In a role-playing collaboration, an agent that departs from its assigned role or
+      claims a task is solved without a derivable answer corrupts the purpose of the
+      structured dialogue. A before-agent-response guardrail on each agent catches role
+      breaks and unsupported solution claims before they enter the turn history, because
+      a fabricated solution reaching the operator is more harmful than a failed round.
+    implementation: >
+      A before-agent-response guardrail on AssistantAgent and UserAgent rejects any
+      DialogueTurn whose message violates the agent's assigned role description (for
+      example, a UserAgent message that attempts to answer the task itself). On
+      CoordinatorAgent, the guardrail rejects any CoordinatorDecision of SOLVED whose
+      solutionSummary or finalAnswer is empty or null, because a SOLVED verdict without
+      a derivable answer is a fabrication. A rejected response fails the workflow step,
+      which fails over to the error step and concludes the collaboration as IMPASSE.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score the outcome on the solve or impasse decision
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The Coordinator's solved or impasse decision is the consequential moment of the
+      collaboration. An automated evaluator on that decision surfaces how many rounds
+      the task required, whether a solution was produced, and a quality proxy based on
+      solution completeness — giving an operator a signal on collaboration effectiveness
+      without blocking the result.
+    implementation: >
+      SolutionEvaluator (a Consumer) subscribes to CollaborationEntity events and, on
+      CollaborationConcluded, computes an outcome score from the solved flag, the rounds
+      used against the twelve-round cap, and the presence and non-emptiness of
+      solutionSummary and finalAnswer, then calls CollaborationEntity.recordEvaluation.
+      The score and notes render beside the concluded collaboration in the App UI tab.
+    regulation_anchors: []
+
+  - id: A1
+    name: Test-gate the turn-taking loop before deployment
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: >
+      The round-order enforcement and the twelve-round cap determine every outcome. A
+      regression in turn sequencing could allow an agent to take two consecutive turns
+      or exceed the cap without concluding, so tests must pass before any deploy.
+    implementation: >
+      The Maven test phase plus an integration test driving a solvable task scenario
+      (well-posed task reaches SOLVED with a non-empty finalAnswer within twelve rounds)
+      and an unsolvable task scenario (conflicting constraints reach IMPASSE no later
+      than round twelve) against the in-memory testkit.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Operator halt of new collaborations
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: >
+      An operator must be able to stop the system from starting new collaborations if a
+      misbehaving agent or an unexpected task category is detected, without interrupting
+      collaborations already in flight.
+    implementation: >
+      SystemControl (a KeyValueEntity) holds a halted boolean. CollaborationEndpoint
+      exposes POST /api/system/halt and /api/system/resume; TaskRequestConsumer reads
+      SystemControl.isHalted before starting a workflow and skips the start while halted.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Role and solution integrity
+    mechanism: "guardrail · before-agent-response"
+    short: Reject role breaks and unsupported solution claims before they enter the turn history.
+  - id: E1
+    name: Outcome eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Score every concluded collaboration on solution presence, quality, and rounds used.
+  - id: A1
+    name: Test gate
+    mechanism: "ci-gate · test-gate"
+    short: Solvable and unsolvable task tests must pass before deploy.
+  - id: HT1
+    name: Operator halt
+    mechanism: "halt · operator-regulator-stop"
+    short: Operator can stop new collaborations from starting.

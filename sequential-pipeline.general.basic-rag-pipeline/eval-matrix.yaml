@@ -1,0 +1,47 @@
+schema_version: 1
+sample_id: basic-rag-pipeline
+coordination_pattern: sequential-pipeline
+domain: general
+
+controls:
+  - id: G1
+    name: Block agent responses whose citations are not grounded in the indexed corpus
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      A RAG pipeline's core promise is that every answer traces to a retrieved
+      chunk. If the agent can return citations referencing URLs that never
+      appeared in the indexed corpus, that promise is silently broken — the
+      user reads a citation that cannot be verified. The before-agent-response
+      hook is the right cut: it fires after the agent has composed its full
+      answer but before that answer is committed to the caller, giving the
+      agent one opportunity to produce a grounded revision inside its iteration
+      budget. Blocking at this boundary guarantees that any answer that reaches
+      the caller has passed citation integrity; a budget-exhausted session is
+      surfaced as BLOCKED rather than as a fabricated success.
+    implementation: |
+      `AnswerGuardrail` is registered on `RagAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      It fires on every completion of the `ANSWER_QUERY` task. The guardrail
+      reads each `RagAnswer.citations[].sourceUrl` and checks it against the
+      `IndexedCorpus.chunks[].sourceUrl` list recorded on `RagSessionEntity`
+      (looked up by `sessionId` from the in-flight `TaskDef.metadata`). If all
+      citation URLs appear in the indexed corpus, the guardrail calls
+      `Guardrail.accept()` and records `GuardrailApplied{verdict: "PASSED"}`.
+      If any citation URL is absent, the guardrail calls
+      `Guardrail.reject("citation-not-grounded: <url> not in indexed corpus")`
+      and records `GuardrailApplied{verdict: "BLOCKED", reason}`. The agent
+      loop retries within its 4-iteration budget. If all iterations fail,
+      `RagPipelineWorkflow` records `AnswerBlocked` and the session status
+      transitions to `BLOCKED`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Citation-grounding output guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

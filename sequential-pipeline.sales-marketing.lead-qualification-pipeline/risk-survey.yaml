@@ -1,0 +1,81 @@
+schema_version: 1
+sample_id: inbound-lead-qualification
+
+# ---- Purpose ----
+purpose:
+  primary_function: inbound-lead-qualification-pipeline
+  sector: sales-marketing
+  decisions_surface: recommend-only
+  user_type: sales-rep-or-sales-ops
+
+# ---- Data ----
+data:
+  inputs:
+    - lead-form-submission
+    - firmographic-enrichment-data
+    - qualification-rubric
+  data_classes:
+    pii: true                   # name, email, company contact in lead form
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: lead-qualification-tier-and-rep-assignment
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  sales_rep_reviews_score_before_acting: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-lead
+  failure_modes:
+    - unqualified-lead-notified
+    - pii-leak-to-enrichment-tool
+    - score-tier-mismatch
+    - slack-write-before-qualification
+    - rep-assignment-missing-slack-id
+    - enrichment-data-stale-or-absent
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reader_role: sales-rep
+  sales_rep_reviews_every_score_before_outreach: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - slack-api-write
+    - in-process-firmographic-lookup
+  rate_limit_per_lead: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  lead-form-pii-processing-lawful-basis: TO_BE_COMPLETED_BY_DEPLOYER
+  slack-integration-approved-for-pii-adjacent-data: TO_BE_COMPLETED_BY_DEPLOYER

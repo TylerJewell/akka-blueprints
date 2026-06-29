@@ -1,0 +1,70 @@
+# Eval Matrix for the sub-question-supervisor Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (research-intel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: sub-question-supervisor
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: research-intel
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Inspect each sub-question before dispatching the index call
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: >
+      The supervisor decomposes an open-ended question into multiple sub-questions, each of
+      which becomes an index tool call. A before-tool-call guardrail is the earliest interception
+      point: it catches malformed, off-topic, or policy-violating sub-questions before any
+      external index query is issued. Because the supervisor has no visibility into the content
+      of individual sub-questions at decomposition time, only the worker-level hook can
+      evaluate each sub-question in isolation. Blocking at this point prevents wasteful index
+      calls and stops unsafe query strings from reaching downstream systems.
+    implementation: >
+      The guardrail runs inside IndexWorker's before-tool-call hook, before the seeded index
+      tool executes. On failure, IndexWorker throws a GuardrailException, which
+      QueryOrchestrationWorkflow catches per sub-question: it records an IndexCallRejected event
+      on QuerySessionEntity, skips that sub-question, and continues with the remainder.
+      If every sub-question is rejected, the workflow calls QuerySessionEntity.block and the
+      session enters BLOCKED.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the supervisor synthesis decision for quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The supervisor's synthesis step merges answers from multiple independent index workers
+      into one combined response. Because individual index results may vary in quality,
+      completeness, or relevance, the synthesis decision carries meaningful risk of producing
+      a misleading or incoherent answer. Periodically scoring that decision with a rubric judge
+      surfaces a quality signal beside the answer in the UI without delaying delivery to the
+      user.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries QuerySessionView for the oldest
+      SYNTHESISED session lacking an evalScore, runs a 1-5 rubric judge over the
+      combinedAnswer summary, and calls QuerySessionEntity.recordEval(score, rationale),
+      emitting SynthesisEvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Sub-question index-call guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Block a malformed or off-topic sub-question before the index is queried.
+  - id: E1
+    name: Synthesis quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the supervisor's combined-answer synthesis decision.

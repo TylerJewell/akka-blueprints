@@ -1,0 +1,60 @@
+# Eval Matrix for the meeting-prep-briefer Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community research-intel sample with no industry- or jurisdiction-bound
+# anchors, so regulation_anchors is intentionally an empty list. Treat the requirement as
+# relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: meeting-prep-briefer
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: research-intel
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Gate research lookups against the active request
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Profile lookups and scraping of participants risk privacy violations. The worker
+      agents must only research people and topics named in the meeting request, never
+      arbitrary subjects the model invents.
+    implementation: >
+      A before-tool-call guardrail on ParticipantResearcher and TopicResearcher checks the
+      requested name or topic against the active Briefing's participant list and meetingTopic
+      before allowing the ResearchSource tool call; an out-of-scope subject is blocked and
+      the agent returns an empty profile.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact participant PII before storage
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Personal information about meeting participants is the core payload. Emails, phone
+      numbers, and home addresses returned by research must not be persisted on the entity.
+    implementation: >
+      A PII sanitizer runs on each ParticipantProfile in BriefingWorkflow.researchStep before
+      BriefingEntity.addProfile emits ProfileAdded, stripping email, phone, and street-address
+      tokens from redactedBackground so stored profiles carry only role-relevant context.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Gate research lookups
+    mechanism: "guardrail · before-tool-call"
+    short: Workers may only research subjects named in the request.
+  - id: S1
+    name: Redact participant PII
+    mechanism: "sanitizer · pii"
+    short: Strip email/phone/address before storing profiles.

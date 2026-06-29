@@ -1,0 +1,65 @@
+schema_version: 1
+sample_id: recruitment-high-risk
+
+purpose:
+  primary_function: Source, screen, and score job candidates against a requisition
+  sector: recruitment and employment selection
+  decisions_surface: advisory-only   # produces a match score and rationale; a human decides
+  user_type: recruiter or hiring operator
+
+data:
+  inputs:
+    - job requisition (role title, requirements, candidate count)
+    - sourced candidate profile text
+    - redacted candidate profile text
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    special-category: true            # protected attributes present in raw profiles, redacted before scoring
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+decisions:
+  authority_level: recommend-only
+  decision_subject: job candidates
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible           # scores are advisory; a human makes the hiring decision
+
+failure:
+  blast_radius: single-customer
+  failure_modes:
+    - protected attribute leaks into scoring
+    - sourcing from a forbidden domain
+    - biased match score
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+oversight:
+  human_in_loop: false
+  human_on_loop: true                 # DeployerMonitor surfaces metrics for review
+  reviewer_role: hiring operator / compliance officer
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - source-candidates (allowlist-guarded)
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+    employment-candidate-evaluation: true
+  high_risk_annex_iii: true           # recruitment and selection is EU AI Act Annex III
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

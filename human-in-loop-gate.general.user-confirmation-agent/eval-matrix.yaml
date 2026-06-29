@@ -1,0 +1,67 @@
+# Eval Matrix for the user-confirmation-agent Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (general domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an
+# empty list across all controls.
+
+schema_version: 1
+sample_id: user-confirmation-agent
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human confirmation gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      An agent-proposed action group can have real-world consequences for the
+      requesting user. The confirmation gate between planning and execution is the
+      defining characteristic of this pattern: no action runs until a person
+      explicitly approves the plan. The gate is non-bypassable because the workflow
+      polls entity status and will not advance to executeStep unless status is
+      CONFIRMED.
+    implementation: >
+      ConfirmationWorkflow pauses in awaitConfirmationStep, polling RequestEntity
+      status every 5 seconds. POST /api/requests/{id}/confirm and POST
+      /api/requests/{id}/cancel transition the entity; the workflow resumes on the
+      next poll and either proceeds to executeStep or ends.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the execution tool unless the request is confirmed
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Even if the workflow state machine advances correctly, a secondary check at the
+      tool boundary prevents execution in any scenario where the entity status has not
+      reached CONFIRMED — for example, a replayed workflow step or a mis-routed task.
+      This makes the execution gate defense-in-depth rather than a single control
+      point.
+    implementation: >
+      A before-tool-call guardrail on ExecutorAgent re-reads RequestEntity.status
+      immediately before the simulated action-execution tool runs. If status is not
+      CONFIRMED, the tool call is blocked and the workflow does not record an
+      execution result.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human confirmation gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human confirm/cancel.
+  - id: G1
+    name: Guard execution tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block execution unless status is CONFIRMED.

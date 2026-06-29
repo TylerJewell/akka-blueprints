@@ -1,0 +1,67 @@
+# Eval Matrix for the tool-call-approval Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (general domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an
+# empty list across all controls.
+
+schema_version: 1
+sample_id: tool-call-approval
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human approval gate before tool execution
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      An agent selecting and parameterizing a tool call cannot be assumed safe
+      to auto-execute. The operator must review the planned tool name and
+      parameters — and may edit them — before the call is allowed to run.
+      Blocking the pipeline at this point is the defining characteristic of
+      the human-in-loop-gate pattern applied to agentic tool use.
+    implementation: >
+      ApprovalWorkflow pauses in awaitApprovalStep, polling ToolRequestEntity
+      status every 5 seconds. POST /api/tool-requests/{id}/approve (with optional
+      editedParameters) and POST /api/tool-requests/{id}/reject transition the
+      entity; the workflow resumes on the next poll and either proceeds to
+      executeStep or ends in REJECTED.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the execute tool unless the request is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      The execute step is the point at which side effects — file writes, API
+      calls, database mutations — would occur in a production deployment. A
+      before-tool-call guardrail ensures the simulated execution tool cannot
+      fire unless ToolRequestEntity records APPROVED status, closing the race
+      window between the workflow poll and the actual tool invocation.
+    implementation: >
+      before-tool-call guardrail on ExecutorAgent re-reads ToolRequestEntity.status
+      immediately before the simulated execute tool runs. If status is not APPROVED
+      the guardrail blocks the call; the workflow surfaces the refusal and the
+      request remains in its current status without a side effect.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/edit/reject before tool execution.
+  - id: G1
+    name: Guard execute tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block tool execution unless status is APPROVED.

@@ -1,0 +1,48 @@
+schema_version: 1
+sample_id: product-seo-enricher
+coordination_pattern: sequential-pipeline
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Reject tool calls whose phase precondition is not yet satisfied
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      In a product SEO enrichment pipeline, the browser-tool access policy is the
+      key safety property: only the FETCH phase should ever touch raw search-result
+      page content. If ANALYZE- or ENRICH-phase tools can be called before the FETCH
+      phase has recorded its SerpResult, a misordered agent loop could cause
+      downstream reasoning to operate on fabricated page data or, in a real-key
+      deployment, issue unintended search-engine requests. The before-tool-call hook
+      enforces this boundary at the agent–tool interface — a misordered call is caught
+      before the tool body executes, surface as a structured rejection, and the agent
+      is given the opportunity to self-correct within its iteration budget. Without this
+      gate, the sequential dependency between phases degrades into an unconstrained
+      single-loop agent and the browser-tool isolation guarantee disappears.
+    implementation: |
+      `BrowserGuardrail` is registered on `SeoAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      Each function-tool class (`FetchTools`, `AnalyzeTools`, `EnrichTools`)
+      carries a `Phase` constant on its methods. On every tool call the guardrail
+      reads the candidate's `Phase` and the current `EnrichmentEntity.status`
+      (looked up via the `enrichmentId` carried in the in-flight `TaskDef.metadata`)
+      and applies the matrix: `FETCH` tools require `status ∈ {CREATED, FETCHING}`;
+      `ANALYZE` tools require `status ∈ {FETCHED, ANALYZING}` AND
+      `serpResult.isPresent()`; `ENRICH` tools require
+      `status ∈ {ANALYZED, ENRICHING}` AND `serpAnalysis.isPresent()`. On
+      reject, the guardrail returns a structured `phase-violation` error to the
+      agent loop and calls `EnrichmentEntity.recordGuardrailRejection` so the
+      rejection is visible in the UI's rejection-log strip and in the audit log.
+      On accept, the call proceeds to the tool body.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Browser-tool phase-gate guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

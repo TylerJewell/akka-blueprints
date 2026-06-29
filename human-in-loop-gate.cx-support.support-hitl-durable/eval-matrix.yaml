@@ -1,0 +1,93 @@
+# Eval Matrix for the support-hitl-durable Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (cx-support domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: support-hitl-durable
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: cx-support
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at an operator decision gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      A triage summary prepared by an agent must not automatically trigger a
+      customer-facing response without an operator deciding to proceed. Support
+      tickets can involve account changes, refunds, or sensitive disclosures
+      where unreviewed automated replies create business and legal exposure. The
+      operator decision gate between triage and resolution is the defining
+      characteristic of the human-in-loop-gate pattern in this domain.
+    implementation: >
+      SupportWorkflow pauses in awaitDecisionStep, polling TicketEntity status.
+      POST /api/tickets/{id}/approve and POST /api/tickets/{id}/escalate
+      transition the entity; the workflow resumes on the next poll cycle.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip PII from the triage summary before operator review
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Customer support tickets routinely contain email addresses, phone numbers,
+      order identifiers, and account numbers that should not be stored verbatim
+      in the triage summary. Persisting raw PII in a summary field broadens the
+      data footprint unnecessarily and may conflict with retention policies a
+      deployer needs to satisfy. Sanitizing at the agent output boundary, before
+      the summary reaches TicketEntity, ensures the persisted record contains
+      only the operationally relevant description.
+    implementation: >
+      A PII sanitizer runs on TriageAgent's output before recordTriage writes to
+      TicketEntity. The sanitizer applies regex and token-classification passes
+      that redact phone numbers, email addresses, and account identifiers from
+      the summary field. The raw ticket body is not persisted; only the sanitized
+      summary is stored.
+    regulation_anchors: []
+
+  - id: G1
+    name: Moderate the customer-facing response before it is stored
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: content-policy
+    enforcement: blocking
+    rationale: >
+      ResolutionAgent produces text that will be shown directly to the customer.
+      An unchecked response could contain inappropriate tone, unintended
+      commitments, or content that violates the operator's support policies.
+      Checking the output before it is persisted as the ticket resolution keeps
+      off-policy text from reaching the customer record.
+    implementation: >
+      before-agent-response guardrail on ResolutionAgent inspects the
+      TicketResolution.response field for tone and content-policy adherence before
+      recordResolution writes to TicketEntity. Responses that fail the check are
+      rejected and the workflow surfaces an error rather than persisting the
+      non-compliant text.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Operator decision gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for operator approve/escalate.
+  - id: S1
+    name: PII sanitizer on triage summary
+    mechanism: "sanitizer · pii"
+    short: Strip PII before the summary is persisted for review.
+  - id: G1
+    name: Customer response content check
+    mechanism: "guardrail · before-agent-response"
+    short: Block off-policy responses before they are stored on the ticket.

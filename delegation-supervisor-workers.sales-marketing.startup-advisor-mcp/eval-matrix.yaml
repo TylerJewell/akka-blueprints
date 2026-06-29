@@ -1,0 +1,68 @@
+# Eval Matrix for the startup-advisor-mcp Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (sales-marketing domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: startup-advisor-mcp
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: sales-marketing
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Allow-list every MCP tool call before it executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-allow-list
+    enforcement: blocking
+    rationale: >
+      MarketResearcher and GrowthAnalyst both invoke tools via an MCP-exposed surface that
+      could reach external data providers or internal systems. Without a pre-execution check,
+      a mis-prompted agent could call a tool outside its intended scope — exfiltrating data,
+      incurring cost, or triggering side-effects in unrelated systems. The allow-list guardrail
+      runs synchronously before each tool invocation and rejects calls not explicitly permitted,
+      so no unintended tool access occurs regardless of what the model generates.
+    implementation: >
+      A before-tool-call guardrail is registered on both MarketResearcher and GrowthAnalyst.
+      On every tool invocation the guardrail reads the configured allow-list (defined in
+      application.conf or overridden per session), checks the tool name against the list, and
+      either permits execution or rejects the call with a structured error. A rejection is
+      surfaced as a failureReason on AdvisorySessionEntity via the SessionDegraded event path
+      in AdvisoryWorkflow.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the coordinator synthesis decision for guidance quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The AdvisorCoordinator merges market research and channel strategy from two independent
+      workers into a single GTM guidance artifact. The quality of that merge — how well the
+      summary integrates both inputs and whether recommendations are internally consistent —
+      is not visible from status codes alone. Periodic rubric scoring surfaces a quality signal
+      the product team can act on without blocking guidance delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries AdvisoryView for the oldest ADVISED
+      session lacking an evalScore, runs a 1-5 rubric judge over the GtmGuidance content, and
+      calls AdvisorySessionEntity.recordEval(score, rationale), emitting GuidanceEvalScored.
+      The score and rationale are stored on the session and surfaced in the App UI row.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: MCP tool allow-list guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Block any tool call not on the explicit allow-list before it executes.
+  - id: E1
+    name: Guidance quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's GTM synthesis decision.

@@ -1,0 +1,107 @@
+# Risk Survey for the hitl-pdf-extract Akka sample.
+#
+# Pre-filled answers reflect what the sample's surface implies. Deployer-specific
+# answers are TO_BE_COMPLETED_BY_DEPLOYER and should be filled in before this
+# survey is used to materialize a deployer Eval Matrix.
+
+archetype:
+  id: hitl-pdf-extract-sample
+  display_name: HITL PDF Data Extraction (Akka Sample)
+  one_line_description: >
+    A document processing pipeline where an LLM extracts structured fields from
+    PDFs, PII is redacted before review, and a human gates approval of
+    low-confidence results before data is posted downstream.
+  scenario: |
+    A user submits a PDF document URL. ExtractionAgent extracts structured field
+    values and an overall confidence score. RedactionAgent then replaces PII tokens
+    with [REDACTED] markers in a separate field map before any values are displayed.
+    ExtractionWorkflow checks confidence: if >= 0.85, the document is auto-approved
+    and posted; if < 0.85, it enters PENDING_REVIEW and the workflow pauses.
+    A human reviewer reads the redacted fields in the UI and either approves or
+    rejects via REST. On approval, the validated data is written to a simulated
+    downstream target and the document transitions to POSTED. There is no real
+    external posting target; the post step is in-process.
+
+  primary_regulations: []  # community sample, no jurisdiction-bound anchors
+
+  explicitly_not_applicable:
+    - clinical decision support
+    - judicial process
+    - employment decisions
+    - autonomous lethal targeting
+    - predictive policing
+    - mass surveillance
+    - behavioral manipulation
+    - children data (unless deployer configures otherwise)
+
+answers:
+  # ---- Pre-filled by sample author ----
+  sector.primary: ["operations automation", "document processing", "back-office workflow automation"]
+  decisions.types: ["data extraction decisions", "downstream data posting decisions"]
+  decisions.automated: true
+  decisions.categories: ["document data routing"]
+  runtime.human_review_required: true
+  data.types:
+    - PDF document URLs submitted by operators
+    - raw extracted field values produced by the LLM
+    - redacted field values (PII-scrubbed) shown to reviewers
+    - confidence scores from the extraction model
+    - metadata about the extraction and review workflow
+  capability.direct_human_interaction: false
+  capability.synthetic_media: false
+  capability.content_generation: false
+  capability.emotion_recognition: false
+  capability.biometric_categorisation: false
+  capability.law_enforcement_authorization: false
+  capability.law_enforcement_context: false
+  capability.critical_infrastructure: false
+  capability.defense_context: false
+  model.gpai: true
+  model.foundation: true
+  model.systemic_risk: false
+  capabilities.synthetic_media_modalities: []
+  capabilities.predictive_policing: false
+  capabilities.mass_surveillance: false
+  capabilities.autonomous_lethal_targeting: false
+  capabilities.behavioral_manipulation: false
+  capabilities.clinical_decision_support: false
+  capabilities.judicial_process_use: false
+  decisions.employment_decision: false
+  decisions.consequential_domains: ["back-office data routing"]
+  regulations.sectoral_product_law: ["none"]
+  capabilities.audio_generation: false
+  capabilities.biometric_identification: false
+  capabilities.conversational_output: false
+  capabilities.gpai_model: true
+  capabilities.modalities: ["text", "structured data"]
+  capabilities.user_facing_interaction: false
+  capabilities.video_generation: false
+  decisions.affects_natural_persons: false
+  decisions.affects_protected_class: false
+  users.minors: false
+  subjects.children: false
+
+  # ---- Sample-author defaults ----
+  third_party.topology: built on Akka
+  third_party.vendor_attested: no
+
+  # ---- Deployer-specific (replace with deployer's answer) ----
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  voluntary_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  geography.jurisdictions: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.actor_roles: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.risk_tier: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.supervisors: TO_BE_COMPLETED_BY_DEPLOYER
+  subjects.affected_persons: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.annual_revenue: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.employee_count: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.regulator_designations: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.local_representatives: TO_BE_COMPLETED_BY_DEPLOYER
+  model.training_compute: TO_BE_COMPLETED_BY_DEPLOYER
+  incidents.regulator_routes: TO_BE_COMPLETED_BY_DEPLOYER
+  data.residency: TO_BE_COMPLETED_BY_DEPLOYER
+  data.retention_period_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data.pii_categories_present: TO_BE_COMPLETED_BY_DEPLOYER
+  workforce.ai_literacy_training_current: TO_BE_COMPLETED_BY_DEPLOYER
+  system.integrations: TO_BE_COMPLETED_BY_DEPLOYER
+  system.downstream_targets: TO_BE_COMPLETED_BY_DEPLOYER

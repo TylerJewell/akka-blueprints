@@ -1,0 +1,70 @@
+schema_version: 1
+sample_id: akka-research-bot
+coordination_pattern: planner-executor
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Vet every search query before the searcher runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The SearcherAgent receives queries produced by a language model and executes
+      them against external-style fixture sources. A query that references a restricted
+      topic (weapons, exploits, surveillance bypass) or that names a disallowed host
+      would allow the research pipeline to produce and publish harmful material under
+      the appearance of legitimate research. A deterministic guardrail wired to the
+      before-tool-call hook stops the query before the SearcherAgent ever sees it,
+      forces the plan revision path, and keeps a full audit record of what was blocked.
+    implementation: |
+      `QueryGuardrail.vet(SearchQuery)` is called by `ResearchWorkflow`'s
+      `queryGuardrailStep` between checking the halt flag and calling the SearcherAgent.
+      The vetter checks (a) that the `SearchKind` is within the allowed set
+      {WEB, ACADEMIC, NEWS, PATENT}, (b) that the query text does not match any
+      restricted topic pattern, (c) that WEB queries name only allow-listed hosts.
+      On rejection, the workflow records a `QueryBlocked` entry on the result ledger
+      via `ResearchJobEntity.recordBlock(query, reason)`, then calls the PlannerAgent
+      in ASSESS mode to revise the plan before retrying.
+    regulation_anchors: []
+
+  - id: G2
+    name: Inspect the synthesized report before it is published
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      The WriterAgent synthesizes a multi-section report that becomes a permanent
+      record visible to all UI users and available via the API. A report that
+      contains fabricated citations not traceable to collected search results,
+      residual secret-shaped strings that the sanitizer missed, or content-policy
+      violations (injected instructions, disallowed markup) would mislead readers
+      and potentially expose sensitive material. Inspecting the report before it
+      is published is the last deterministic checkpoint before the workflow commits
+      the result to `ResearchJobEntity`.
+    implementation: |
+      `ReportGuardrail.inspect(ResearchReport)` is called by `ResearchWorkflow`'s
+      `reportGuardrailStep` after `writeStep` completes and before `publishStep`.
+      The inspector (a) verifies that every bibliography entry is traceable to a
+      `ResultEntry` in the result ledger, (b) re-applies `SecretScrubber.scan` to
+      detect any secret-shaped strings that survived the per-result sanitize step,
+      (c) checks each `ReportSection.body` for content-policy markers. On rejection,
+      the workflow records `ReportBlocked` and calls the WriterAgent with
+      `REVISE_REPORT` up to two times before transitioning to `failStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Search query guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call (QueryGuardrail)
+    source: —
+  - id: G2
+    label: Report publication guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response (ReportGuardrail)
+    source: —

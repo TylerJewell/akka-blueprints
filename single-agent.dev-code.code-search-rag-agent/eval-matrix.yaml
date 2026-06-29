@@ -1,0 +1,46 @@
+schema_version: 1
+sample_id: code-search-rag-agent
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: S1
+    name: Redact secrets from code chunks before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: secret
+    enforcement: blocking
+    rationale: |
+      Source code routinely embeds credentials that developers later rotate but never
+      scrub from history: API keys in configuration files, bearer tokens in test
+      fixtures, private-key PEM blocks in scripts, and connection strings with
+      embedded passwords. A RAG agent that indexes a real repository and passes
+      retrieved chunks directly to an LLM creates a direct path from the repository's
+      secret surface to the model's context window and, potentially, to the model's
+      training feedback loop or logged outputs. Redaction runs in a Consumer between
+      chunk retrieval and the agent invocation; the raw chunk content is preserved on
+      the entity for audit but is never the input seen by the model.
+    implementation: |
+      `ChunkSanitizer` Consumer subscribes to `QuerySubmitted` events emitted by
+      `QueryEntity`. It iterates every `CodeChunk` in the request's `retrievedChunks`
+      list and runs a pipeline of regex stages against each chunk's `content` field:
+      a high-entropy token stage (generic bearer-token-like strings), an API-key-prefix
+      stage (sk-live-*, AKIA*, xoxb-*, gh_* patterns), a PEM-header stage (-----BEGIN
+      PRIVATE KEY-----), a connection-string stage (jdbc:...:password=...,
+      mongodb+srv://user:pass@), and a certificate-fingerprint stage
+      (SHA-256 hex digests). Each matched span is replaced with a category-specific
+      token: [REDACTED-API-KEY], [REDACTED-TOKEN], [REDACTED-PEM-KEY],
+      [REDACTED-CONN-STRING], [REDACTED-CERT-FP]. Outputs a `SanitizedChunks` record
+      carrying the redacted chunk list and the union of categories found. Calls
+      `QueryEntity.attachSanitizedChunks(sanitized)`. `QueryWorkflow.answerStep` then
+      attaches each `sanitized.redactedChunks[i].content` as a separate task
+      attachment; the raw `content` value remains accessible only via the entity's
+      `request.retrievedChunks` record, never on the wire to the model.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Secret redaction before LLM
+    mechanism: Sanitizer
+    implementation: secret
+    source: —

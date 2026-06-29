@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: self-discover-modules
+coordination_pattern: planner-executor
+domain: general
+
+controls:
+  - id: E1
+    name: Score the composed reasoning structure before the solver runs
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The Structurer's output — a list of adapted module steps — directly
+      determines the quality of every downstream observation the Solver
+      produces. A structure missing a decomposition step leaves the Solver
+      without a clear problem breakdown; one missing a synthesis step never
+      integrates its findings into a usable answer. Because the eval fires
+      before the Solver starts, catching a weak structure here costs one
+      revision loop rather than a full execution that produces an unhelpful
+      answer. The deterministic scorer makes the quality bar explicit and
+      auditable rather than implicitly encoded in the LLM's judgment.
+    implementation: |
+      `StructureEvaluator.evaluate(ReasoningStructure)` runs in
+      `TaskWorkflow`'s `evalStep` immediately after `composeStep` or
+      `reviseStep`. The scorer deducts from a 1.0 baseline for missing
+      DECOMPOSE or SYNTHESIZE roles, out-of-range step counts (< 2 or > 8),
+      and duplicate module-role pairs. Score threshold is 0.7. On a score
+      below threshold, `TaskEntity.rejectStructure(reason, score)` emits
+      `StructureRejected` and the workflow loops back to `reviseStep`. The
+      Structurer's context for REVISE_STRUCTURE includes the `rejectionReason`
+      so it can target the specific deficiency. After two rejections, the
+      workflow transitions directly to `failStep` without a third Structurer
+      call.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Let the operator pause new step dispatches without killing the active step
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: blocking
+    rationale: |
+      When a Self-Discover task is running in a sensitive context, the
+      deployer's operator needs a way to pause the system for inspection
+      without discarding observations already recorded. Aborting mid-step
+      would corrupt the accumulated observations the Solver relies on for the
+      final answer. Draining gracefully — finishing the current step, then
+      stopping — preserves audit integrity while giving the operator control.
+    implementation: |
+      `SystemControlEntity` (single instance keyed by literal `"global"`)
+      holds the halt flag. The App UI tab's operator pane shows Halt / Resume
+      buttons backed by `POST /api/control/halt` and
+      `POST /api/control/resume`. Every `TaskWorkflow` reads the flag in its
+      `checkHaltStep` at the top of each solver iteration. On `halted=true`,
+      the workflow finishes the in-flight `executeStepN`, records the
+      `StepExecution`, then emits `TaskHaltedOperator` and ends the task in
+      `HALTED`. The SSE channel emits a `control-update` event so the
+      operator pane reflects the state change in real time.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Structure quality eval
+    mechanism: Eval-event
+    implementation: on-decision-eval (StructureEvaluator, score threshold 0.7)
+    source: —
+  - id: HO1
+    label: Operator runtime monitoring
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring (SystemControlEntity + dashboard)
+    source: —

@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: pokemon-advisor
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Reject malformed recommendations before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A toy advisor whose output is structurally invalid is not merely annoying —
+      it corrupts the entity log and confuses the scoring step that follows. The
+      before-agent-response hook catches bad parses and out-of-enum role values
+      before they leave the agent loop, forcing a retry inside the same task.
+      Because the slot count must also match the format's expected team size, the
+      guardrail also prevents partial recommendations from reaching the workflow.
+      In an educational sample, demonstrating this retry mechanic is as important
+      as the team advice itself.
+    implementation: |
+      `RecommendationGuardrail` is registered on `TeamAdvisorAgent` via the
+      agent's guardrail-configuration block, bound to the `before-agent-response`
+      hook. On each candidate response it (1) parses the response into
+      `TeamRecommendation`, (2) asserts every `slots[].species` is a non-empty
+      string, (3) asserts every `slots[].role` is in `{PHYSICAL_SWEEPER,
+      SPECIAL_SWEEPER, WALL, SUPPORT, LEAD, UTILITY}`, (4) asserts every
+      `gaps[].severity` is in `{MINOR, MODERATE, SIGNIFICANT}`, and (5) asserts
+      `slots.size()` matches the format's expected team size. On any failure
+      returns a structured rejection naming the failed check; the agent loop
+      consumes one of its 3 iterations and retries. Passing responses flow
+      through to `adviseStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every recommendation for type-coverage completeness
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A well-formed team recommendation can still leave glaring coverage holes
+      — a six-slot roster with no Water coverage, or a four-slot team where
+      every role is WALL. A coverage score surfaces these patterns without
+      blocking the recommendation, giving the trainer a fast signal about
+      whether to trust the advice or submit a revised roster. In a pattern-
+      focused educational sample, showing that output quality scoring is
+      independent of structural validation is a key teaching point.
+    implementation: |
+      `CoverageScorer` runs inside `AdvisoryWorkflow.scoreStep`, fired
+      immediately after `RecommendationRecorded` lands. The scorer is
+      deterministic and rule-based (no LLM call — keeping the single-agent
+      invariant honest): checks that the team's collective `suggestedMoves`
+      cover at least four of the six primary damage types (Fire, Water, Grass,
+      Electric, Fighting, Psychic), that every slot has at least one
+      `suggestedMoves` entry, that every `CoverageGap.suggestion` is non-empty,
+      and that gap severities are not uniformly SIGNIFICANT (all-max is suspect).
+      Emits `CoverageScored` with a 1–5 score and a one-line rationale. The
+      score is surfaced on the App UI tab; advisories with score ≤ 2 are
+      flagged for the trainer's attention.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Recommendation-form guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision coverage eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

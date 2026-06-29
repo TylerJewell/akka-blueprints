@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: docreview
+
+# ---- Purpose ----
+purpose:
+  primary_function: legal-document-review
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-only
+  user_type: legal-or-compliance-reviewer
+
+# ---- Data ----
+data:
+  inputs:
+    - submitted-documents
+    - submitted-review-instructions
+  data_classes:
+    pii: true
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: contract-or-policy-document
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_verdict_before_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-document
+  failure_modes:
+    - hallucinated-finding
+    - missed-instruction
+    - severity-miscalibration
+    - pii-leakage-via-llm
+    - evidence-thin-verdict
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: legal-or-compliance-reviewer
+  reviewer_must_read_verdict_before_action: true
+  audit_frequency: weekly
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_review: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  document-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

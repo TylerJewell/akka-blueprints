@@ -1,0 +1,45 @@
+# Eval Matrix for the marketing-agency-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (sales-marketing domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: marketing-agency-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: sales-marketing
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Vet the synthesised marketing plan before it reaches the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      Marketing copy that goes out under a brand carries reputational and regulatory risk.
+      Off-brand language, misleading performance claims, or non-compliant messaging can
+      appear in a synthesised plan even when each worker's individual output was sound —
+      the synthesis step combines two independent documents that may not be mutually
+      consistent in tone or claim. A blocking brand-safety guardrail on the CampaignDirector
+      catches these issues before the plan is surfaced, so no non-compliant copy ever
+      reaches the downstream team or approval workflow.
+    implementation: >
+      A before-agent-response guardrail on CampaignDirector runs a deterministic tone-and-claim
+      vetter plus an LLM judge over the SynthesisedPlan in CampaignWorkflow.guardrailStep.
+      The vetter checks for prohibited words and unsubstantiated superlatives; the LLM judge
+      scores brand-voice alignment on a pass/fail basis. On failure the workflow calls
+      CampaignPlanEntity.block and the plan enters BLOCKED with a failureReason.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Brand-safety plan guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a plan with off-brand copy, misleading claims, or non-compliant messaging.

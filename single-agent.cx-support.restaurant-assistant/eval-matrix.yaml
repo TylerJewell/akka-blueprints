@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: restaurant-assistant
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Reject inaccurate customer-facing replies before delivery
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: content-accuracy-validator
+    enforcement: blocking
+    rationale: |
+      In a restaurant customer-service context, an agent that cites a menu item
+      by the wrong name, quotes an outdated price, or references a dish that was
+      removed from the catalog can cause real-world friction — a customer arriving
+      expecting a £12 pasta and being charged £17, or asking for a dish that no
+      longer exists. Because the response reaches the customer directly and
+      immediately, the before-agent-response hook is the right cut point: catch
+      the inaccuracy inside the agent loop before the text leaves the system,
+      force a retry with a structured error explaining what failed, and only
+      deliver a verified reply.
+    implementation: |
+      `ResponseGuardrail` is registered on `RestaurantAssistantAgent` via the
+      agent's guardrail-configuration block, bound to the `before-agent-response`
+      hook. On each candidate `AssistantResponse` it (1) tokenises the `replyText`
+      and looks up every apparent menu-item name against `MenuCatalog.findByName()`,
+      (2) if a price appears in the text, extracts it and compares it to the catalog
+      price within a £0.01 tolerance, and (3) scans for prohibited phrases (free-item
+      offers, competitor names). Any failure returns a structured `Guardrail.reject()`
+      naming the specific item or phrase that failed; the agent loop consumes one
+      of its 3 iterations and retries with the error context in its next prompt.
+    regulation_anchors: []
+
+  - id: G2
+    name: Validate reservation and order writes before committing
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: business-rule-validator
+    enforcement: blocking
+    rationale: |
+      Reservation and order writes have direct operational consequences: a table
+      booked for 25 people in a 20-seat venue, an order placed for a dish with
+      an itemId that does not exist in the POS system, or a reservation made
+      for a time slot in the past. Unlike response inaccuracies, write errors
+      cannot be corrected by retrying the agent — they land in the entity log
+      and could trigger downstream fulfilment actions. The before-tool-call hook
+      intercepts the tool arguments before the workflow receives them, giving the
+      agent a chance to self-correct rather than letting the invalid write propagate.
+    implementation: |
+      `ToolCallGuardrail` is registered on `RestaurantAssistantAgent` via the
+      agent's guardrail-configuration block, bound to the `before-tool-call` hook.
+      It dispatches on `toolName`. For `makeReservation`: asserts the parsed date
+      is at least 1 hour in the future, `partySize` is in [1, 20], and `time` is
+      a valid HH:mm string within 12:00–22:00. For `submitOrder`: iterates every
+      `OrderLineItem`, calls `MenuCatalog.findById(itemId)`, and asserts quantity
+      ≥ 1. On any failure returns a structured `Guardrail.reject()` naming the
+      failed field and the constraint that was violated; the agent loop retries
+      with the rejection reason in its next prompt.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Response accuracy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: G2
+    label: Write-validation guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

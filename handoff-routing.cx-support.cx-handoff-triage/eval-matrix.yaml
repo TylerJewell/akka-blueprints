@@ -1,0 +1,98 @@
+schema_version: 1
+sample_id: cx-handoff-triage
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block specialist drafts that violate the customer-response policy rubric
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-rubric
+    enforcement: blocking
+    rationale: |
+      A specialist that owns the `RESOLVE` task end-to-end can return a structurally
+      valid `SpecialistResponse` whose content still violates policy — promising
+      next-day delivery outside the published fulfillment SLA, naming a discount
+      amount above the specialist's authority ceiling, or echoing a `[REDACTED]`
+      token into the customer-facing text. Because responses stream directly to the
+      customer once published, the only safe gate is one that checks the full draft
+      before publication. A violation puts the conversation in `BLOCKED`; the customer
+      sees nothing until an operator reviews and either unblocks or discards.
+    implementation: |
+      `ResponseGuardrail` is a typed Agent. `ConversationWorkflow.guardrailStep`
+      invokes it with the `SanitizedMessage` and the specialist's `SpecialistResponse`
+      draft. The agent returns `GuardrailVerdict { allowed, violations, rubricVersion }`.
+      On `allowed=false` the workflow emits `ResponseBlocked` (terminal `BLOCKED`) and
+      the operator can either unblock via `POST /api/conversations/{id}/unblock` or
+      leave the conversation blocked.
+    regulation_anchors: []
+
+  - id: G2
+    name: Intercept refund and order-fulfillment tool calls before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-policy
+    enforcement: blocking
+    rationale: |
+      Sales and issues-and-repairs specialists may invoke side-effecting tools —
+      `processRefund`, `placeOrder`, `scheduleReplacement` — to complete a customer
+      request. A tool call with an out-of-range refund amount or an invalid fulfillment
+      state would cause an irreversible financial or operational side effect. The
+      before-tool-call guardrail intercepts every such invocation synchronously before
+      the tool executes, validates it against tool-policy rules (refund ceiling, valid
+      order state, required parameters), and cancels calls that do not pass. The
+      specialist receives a policy-rejection signal within the same task-loop iteration
+      and may choose an alternative action within its iteration budget.
+    implementation: |
+      `ToolCallGuardrail` is a typed Agent. It is invoked inline before each tool
+      execution inside the specialist's autonomous task loop. Input is
+      `ToolCallRequest { toolName, conversationId, parameters }`. Output is
+      `ToolCallVerdict { allowed, reason }`. On `allowed=false` the tool call is
+      cancelled, `ToolCallBlocked` is emitted on `ConversationEntity`, and the
+      rejection `reason` is passed back to the specialist. The specialist may use its
+      remaining `maxIterationsPerTask` budget to pivot to an allowed action.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact customer PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound customer messages routinely carry email addresses, phone numbers, names
+      in greeting positions, and order ids. Neither the triage classifier nor the
+      specialists need raw identifiers to classify or respond — they need only the
+      content of the customer's request. Redaction in a Consumer before the message
+      enters the workflow means no LLM call ever sees raw personal data, which
+      eliminates the primary leakage path for PII into model-generated outputs and
+      into any log or trace that captures LLM inputs.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `ConversationQueue` events. For each
+      `InboundMessageReceived` it runs a regex stage (email pattern, E.164 phone
+      pattern, `ORD-\d+` order id pattern) and a heuristic stage (names in greeting
+      positions such as "Hi [Name]"), produces a `SanitizedMessage` carrying the
+      redacted text plus the list of PII categories found, and calls
+      `ConversationEntity.registerIncoming` then `attachSanitized`. The categories
+      list is kept for audit; only the redacted text is passed to the agents.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-response policy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: G2
+    label: Before-tool-call policy guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

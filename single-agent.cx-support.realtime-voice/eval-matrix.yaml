@@ -1,0 +1,41 @@
+schema_version: 1
+sample_id: realtime-conversational-agent
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block policy-violating replies before they reach the customer
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: content-policy-enforcer
+    enforcement: blocking
+    rationale: |
+      Customer-facing conversational systems carry direct brand risk on every turn. A reply
+      containing profanity, a competitor brand name, or unsolicited regulated advice (medical,
+      legal, financial) can reach thousands of customers before an operator notices if the
+      only safeguard is post-hoc log review. Running a synchronous policy check before each
+      candidate reply leaves the agent loop catches violations at the last responsible moment
+      — after the model decides but before the customer sees anything — and forces a retry
+      within the same task so the conversation continues without the operator's intervention.
+    implementation: |
+      `ResponseGuardrail` is registered on `ConversationalAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate `AgentTurn` it (1) runs a keyword-and-category classifier over `replyText`
+      checking for prohibited terms in the operator's blocked-category list, (2) checks that
+      `replyText` does not reference competitor brands by name (drawn from a configurable
+      blocklist in `src/main/resources/policy/blocked-brands.txt`), and (3) verifies that
+      `replyText.length()` is within `MAX_REPLY_TOKENS` characters. On any failure the
+      guardrail returns `Guardrail.reject(policyViolation)` naming the violated category
+      and the offending fragment. The agent loop consumes one of its 3 iterations and
+      retries with the violation description added to its context. Passing replies flow
+      through to `SessionWorkflow.converseTurnStep` and are recorded on `SessionEntity`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Customer-reply content guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

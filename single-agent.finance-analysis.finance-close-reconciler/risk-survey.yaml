@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: finance-close-reconciler
+
+# ---- Purpose ----
+purpose:
+  primary_function: period-end-financial-reconciliation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-only
+  user_type: accountant-or-finance-controller
+
+# ---- Data ----
+data:
+  inputs:
+    - submitted-trial-balances
+    - submitted-reconciliation-rules
+  data_classes:
+    financial-records: true
+    pii: false
+    phi: false
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    confidential-margin-data: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  confidential_fields_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: period-end-trial-balance
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_report_before_attestation: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-period
+  failure_modes:
+    - variance-missed
+    - invalid-gl-write
+    - confidential-data-leakage
+    - incomplete-event-chain
+    - sign-off-timeout
+    - severity-miscalibration
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: accountant-or-finance-controller
+  reviewer_must_approve_before_attestation: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_period: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  sox_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  ifrs_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  gaap_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  financial-data-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

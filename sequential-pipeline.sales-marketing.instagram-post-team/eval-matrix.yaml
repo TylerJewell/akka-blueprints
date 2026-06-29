@@ -1,0 +1,63 @@
+# Eval Matrix for the instagram-post-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on
+# each control. This is a community-content sample (sales-marketing domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is an empty list
+# across all controls.
+#
+# G1 maps directly to the single governance cell of the corpus entry
+# (before-agent-response guardrail). A1 is an operational control the pipeline wires
+# for the pre-deploy test gate.
+
+schema_version: 1
+sample_id: instagram-post-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: sequential-pipeline
+  domain: sales-marketing
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Check brand voice and platform policy before content is marked ready
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      A caption, hashtag set, or image prompt that breaks brand voice or platform
+      policy must not be marked ready for a public social post. The check runs
+      before each agent result is persisted.
+    implementation: >
+      before-agent-response guardrail in PostWorkflow evaluates the CaptionDraft
+      and the ImagePrompt for brand-voice fit, banned terms, and platform policy;
+      a failing post transitions to BLOCKED with the check notes as the block reason.
+    regulation_anchors: []
+
+  - id: A1
+    name: Test-gate before deployment
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: >
+      The pipeline generates public-facing brand content; tests must pass before
+      any deploy.
+    implementation: >
+      Maven test phase plus an integration test driving the full
+      brief -> caption -> image prompt -> ready flow against the in-memory testkit,
+      including a blocked-content path.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Brand + platform check
+    mechanism: "guardrail · before-agent-response"
+    short: Block off-brand or off-policy content before it is marked ready.
+  - id: A1
+    name: Test gate
+    mechanism: "ci-gate · test-gate"
+    short: Tests must pass before deploy.

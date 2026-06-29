@@ -1,0 +1,66 @@
+# Eval Matrix for the sales-offer-generator Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (sales-marketing domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: sales-offer-generator
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: sequential-pipeline
+  domain: sales-marketing
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Check the composed offer for pricing accuracy and unauthorized discounts
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      Customer-facing pricing and offer text reaches a prospect directly. A
+      mismatched total or a discount beyond the policy ceiling would commit the
+      business to terms it never authorized. The guardrail fires before the
+      composed offer is returned and blocks any offer that fails the pricing
+      policy.
+    implementation: >
+      A before-agent-response guardrail on OfferComposer runs PricingPolicy.check
+      over the OfferDocument result: quotedTotal must equal subtotal*(1-discountPct)
+      within a cent, and discountPct must not exceed the policy ceiling. A blocked
+      result carries the policy reason; OfferWorkflow.reviewStep re-runs the same
+      check and transitions OfferEntity to REJECTED on failure or APPROVED on pass.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact customer PII from prompts and logs
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: system-level
+    rationale: >
+      Customer briefs carry contact details (email, phone, full name) that flow
+      through every agent in the pipeline. Raw identifiers in prompts or log lines
+      widen the surface for accidental disclosure. The sanitizer redacts them at
+      the system boundary so no downstream prompt or log carries raw PII.
+    implementation: >
+      PiiSanitizer runs in RequestConsumer over the inbound brief before an
+      OfferWorkflow starts, replacing email, phone, and full-name patterns with
+      redaction tokens. The sanitized brief is what enters every agent prompt and
+      every persisted OfferEntity event; raw identifiers never reach the agents.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Pricing-policy guard
+    mechanism: "guardrail · before-agent-response"
+    short: Block offers with mismatched totals or over-ceiling discounts.
+  - id: S1
+    name: PII sanitizer
+    mechanism: "sanitizer · pii"
+    short: Redact email/phone/name from prompts and logs at the boundary.

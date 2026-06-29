@@ -1,0 +1,81 @@
+schema_version: 1
+sample_id: airline-cs
+
+# ---- Purpose ----
+purpose:
+  primary_function: customer-service-request-handling
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: automated-with-confirmation
+  user_type: airline-passenger
+
+# ---- Data ----
+data:
+  inputs:
+    - customer-message
+    - booking-reference
+    - itinerary-data
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: automated-with-confirmation
+  decision_subject: airline-booking-modification
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+  reviewer_reads_every_verdict_before_action: false
+  customer_confirms_destructive_writes: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-booking
+  failure_modes:
+    - unauthorized-modification-without-confirmation
+    - pii-leakage-via-llm
+    - tool-call-loop-without-resolution
+    - confirmation-token-replay
+    - stale-hitl-timeout
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: customer
+  customer_confirmation_required_for_writes: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - booking-system-read
+    - booking-system-write
+  rate_limit_per_request: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  passenger-rights-regulation-in-scope: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,98 @@
+# Eval Matrix for the devops-multi-agent Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (ops-automation domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: devops-multi-agent
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: ops-automation
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Intercept destructive tool calls before any agent executes them
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: policy-blocklist
+    enforcement: blocking
+    rationale: >
+      DevOps agents have access to infrastructure mutation tools whose effects are
+      difficult or impossible to reverse — deleting namespaces, force-removing pods,
+      disabling alert rules. A before-tool-call guardrail evaluates every proposed tool
+      call against a named blocklist before execution. A single match stops the workflow
+      and transitions the change request to BLOCKED, preventing irreversible harm before
+      it occurs rather than reacting afterward.
+    implementation: >
+      A before-tool-call hook is registered on InfraAgent, DeployAgent, and
+      ObservabilityAgent in OpsWorkflow. At guardStep the hook receives the proposed
+      tool name and arguments; it checks the name against a configurable blocklist
+      (e.g., deleteNamespace, forceDeletePod, disableAlert). On a match, the hook
+      returns a rejection result, the workflow calls ChangeRequestEntity.block, and
+      the change enters BLOCKED. No tool call reaches the underlying modelled tool.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require operator approval before executing production changes
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Production infrastructure changes carry a risk surface — service outages,
+      data loss, cascading failures — that automated assessment alone cannot fully
+      bound. Parking every production change at AWAITING_APPROVAL forces a human
+      operator to review the consolidated readiness report and make an explicit
+      approve-or-reject decision. No production change proceeds without that sign-off,
+      regardless of the assessed risk level.
+    implementation: >
+      OpsWorkflow detects a production target environment at approvalGateStep. On
+      detection it calls ChangeRequestEntity.requestApproval, transitioning the change
+      to AWAITING_APPROVAL, and pauses waiting for an external resume signal. The
+      OpsEndpoint exposes POST /api/ops/changes/{id}/approve and /reject; each handler
+      resumes the workflow with the operator's decision and calls ChangeRequestEntity.approve
+      or .reject accordingly. Non-production targets bypass this step.
+    regulation_anchors: []
+
+  - id: S1
+    name: Stop all in-flight workflows immediately on an operator halt signal
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: >
+      A cascading deployment failure — multiple agents triggering changes across
+      infrastructure simultaneously — can amplify damage faster than any single
+      guardrail can respond. An operator halt provides an out-of-band kill switch:
+      one API call stops every active workflow regardless of which step it is at,
+      preventing further tool-call proposals or approvals until the signal is cleared.
+      This is a last-resort control, not a substitute for the guardrail or approval gate.
+    implementation: >
+      POST /api/ops/halt writes a HaltIssued event to HaltSignalEntity via OpsEndpoint.
+      HaltMonitor (TimedAction, every 30 s) queries HaltSignalEntity for active signals;
+      for each active signal it sends halt commands to all OpsWorkflow instances in
+      IN_PROGRESS or AWAITING_APPROVAL state. Each workflow checks for halt at step
+      boundaries and calls ChangeRequestEntity.halt, transitioning the change to HALTED
+      and stopping all pending step execution. The halt signal remains active until an
+      operator calls the clearHalt command.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Destructive tool-call guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Block any agent tool call that matches the destructive-action blocklist.
+  - id: H1
+    name: Production change approval gate
+    mechanism: "hitl · application"
+    short: Park production changes at AWAITING_APPROVAL until an operator approves.
+  - id: S1
+    name: Operator halt
+    mechanism: "halt · operator-regulator-stop"
+    short: Stop all in-flight workflows immediately via a single API call.

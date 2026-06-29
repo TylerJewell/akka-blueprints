@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: guardrails-demo
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Block disallowed topics before the LLM call
+    mechanism:
+      kind: guardrail
+      hook: before-llm-call
+      flavor: before-llm-call
+    enforcement: blocking
+    rationale: |
+      A general-purpose conversational agent accepts free-text input, which makes
+      it the most natural entry point for misuse — users probing for financial,
+      medical, or legal advice the deployer has not cleared. Intercepting those
+      messages at the before-llm-call hook means the model is never invoked and
+      no token cost is incurred. The block reason is recorded on the entity for
+      audit so the deployer can monitor and refine their topic list without
+      reviewing raw LLM logs.
+    implementation: |
+      `TopicPolicyGuardrail` is registered on `ConversationAgent` at the
+      `before-llm-call` hook. It reads the blocked-topic keyword list from
+      `src/main/resources/content-policy/blocked-topics.txt` at startup and
+      checks each incoming user message with a case-insensitive keyword scan.
+      On a match it returns `Guardrail.reject({topic, reason})`, which
+      `SessionWorkflow.exchangeStep` catches and converts to a `TurnBlocked`
+      event on `SessionEntity`. No model call is made; the session log retains
+      the blocked message text for audit alongside the matched topic name.
+    regulation_anchors: []
+
+  - id: G2
+    name: Validate agent replies against output content policy before delivery
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Even within permitted topics, a conversational agent can produce replies
+      that violate a deployer's content standards — using disallowed phrases,
+      claiming capabilities beyond its declared scope, or opening with a
+      refusal and then providing the content anyway (the refusal-then-compliance
+      anti-pattern). Catching these at the before-agent-response hook keeps the
+      violation inside the agent loop, forces a retry, and ensures no
+      non-compliant text reaches the session entity or the user's UI.
+    implementation: |
+      `ContentPolicyGuardrail` is registered on `ConversationAgent` at the
+      `before-agent-response` hook. It reads the disallowed-phrase list from
+      `src/main/resources/content-policy/disallowed-phrases.txt`. On each
+      candidate reply it runs three checks: (1) disallowed-phrase scan
+      (case-insensitive substring match), (2) scope-contradiction detection
+      (the system prompt declares excluded capabilities; if the reply claims one,
+      the check fails), (3) refusal-then-compliance detection (reply text begins
+      with a refusal keyword but the body after the first sentence provides the
+      requested content). On any failure it returns
+      `Guardrail.reject({violatedCheck, excerpt})` to the agent loop. The loop
+      retries within the `maxIterationsPerTask(3)` budget; on exhaustion
+      `SessionWorkflow.exchangeStep` fails over to `error` and records
+      `TurnFailed` on the entity.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Topic block before LLM call
+    mechanism: Guardrail
+    implementation: before-llm-call
+    source: —
+  - id: G2
+    label: Content policy before agent response
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

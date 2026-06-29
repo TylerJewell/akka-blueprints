@@ -1,0 +1,80 @@
+schema_version: 1
+sample_id: code-assistant
+
+# ---- Purpose ----
+purpose:
+  primary_function: developer-code-assistance
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: propose-only
+  user_type: software-developer
+
+# ---- Data ----
+data:
+  inputs:
+    - repository-file-snapshots
+    - coding-task-descriptions
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    source-code: true
+    proprietary-business-logic: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  source_code_sent_to_model: true
+  source_code_is_proprietary: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: propose-only
+  decision_subject: source-code-change
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  developer_reviews_plan_before_applying: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-task
+  failure_modes:
+    - incorrect-change
+    - broken-test-suite
+    - disallowed-tool-call
+    - scope-creep
+    - confidence-miscalibration
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: software-developer
+  developer_must_review_plan_before_applying: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_task: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  source-code-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,88 @@
+schema_version: 1
+sample_id: podcast-summarizer
+coordination_pattern: sequential-pipeline
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Reject tool calls whose phase precondition is not yet satisfied
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: |
+      A podcast summarization pipeline moves quotes through three editorial
+      phases — EXTRACT, SEGMENT, SUMMARIZE — and the integrity of the output
+      depends on this order holding. If a SUMMARIZE-phase tool (e.g.
+      `draftSection`) is callable before a `Segmentation` exists, the agent
+      could produce section headings with no coherent topic cluster beneath
+      them, or reference quote ids that were never assigned to any cluster.
+      The before-tool-call hook is the right enforcement point: it catches the
+      misordered call before the tool body runs, surfaces a structured rejection
+      to the agent loop, and records the event for editorial audit — all without
+      the caller needing to know anything about phase sequencing.
+    implementation: |
+      `PhaseGuardrail` is registered on `TranscriptAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      Each function-tool class (`ExtractTools`, `SegmentTools`,
+      `SummarizeTools`) carries a `Phase` constant on its methods. On every
+      tool call the guardrail reads the candidate's `Phase` and the current
+      `EpisodeEntity.status` (looked up via the `episodeId` carried in the
+      in-flight `TaskDef.metadata`) and applies the matrix:
+      `EXTRACT` tools require `status ∈ {CREATED, EXTRACTING}`;
+      `SEGMENT` tools require `status ∈ {EXTRACTED, SEGMENTING}` AND
+      `quotes.isPresent()`; `SUMMARIZE` tools require
+      `status ∈ {SEGMENTED, SUMMARIZING}` AND `segmentation.isPresent()`.
+      On reject, the guardrail returns a structured `phase-violation` error to
+      the agent loop and calls `EpisodeEntity.recordGuardrailRejection` so the
+      rejection is visible in the UI's rejection-log strip and in the audit log.
+      On accept, the call proceeds.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every emitted summary for cluster coverage and quote fidelity
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Editorial AI systems that operate on real speaker content carry a
+      heightened risk of misattribution: a summary section might reference a
+      quote id that was never in the source transcript, or a topic cluster might
+      drop out of the final summary without explanation. A rule-based
+      on-decision evaluator catches both patterns without blocking the summary
+      itself — it gives editors a fast triage signal about which summaries
+      warrant a manual read-through before publication. Unlike a post-hoc
+      quality flag, this evaluator fires immediately inside the workflow so the
+      score is available on the same card that shows the summary text.
+    implementation: |
+      `FidelityScorer` runs inside `SummaryPipelineWorkflow.evalStep`,
+      fired immediately after `SummaryWritten` lands. The scorer is
+      deterministic and rule-based (no LLM call — keeping the
+      single-agent sequential-pipeline invariant honest). Four checks,
+      one point per check satisfied, on a base of 1:
+      (1) cluster coverage — every `Segmentation.clusters[i]` has a matching
+      `EpisodeSummary.sections[j]` (`cluster.clusterId == section.clusterId`).
+      (2) quote attribution — every `EpisodeSummary.sections[j].supportingQuoteIds`
+      list is non-empty.
+      (3) quote provenance — every cited `quoteId` appears in the recorded
+      `QuoteSet.quotes[].quoteId` list (no fabricated quotes).
+      (4) section parity — `sections.size() == clusters.size()` (no silent
+      expansion or collapse).
+      Emits `EvaluationScored{score: 1-5, rationale: String}` with a rationale
+      sentence naming the largest gap. The score is surfaced on the App UI tab;
+      summaries with score ≤ 2 are flagged for editor inspection.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Phase-gate tool guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Summary fidelity eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: sleeptime-memory-consolidation-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: memory-management
+  sector: general
+  decisions_surface: autonomous-with-oversight
+  user_type: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Data ----
+data:
+  inputs:
+    - agent-interaction-transcripts
+    - memory-block-content
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  memory_content_classification: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-with-oversight
+  decision_subject: shared-agent-context
+  consolidations_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: versioned-rollback-available
+
+# ---- Failure ----
+failure:
+  blast_radius: all-sessions-sharing-block
+  failure_modes:
+    - context-drift-undetected
+    - unauthorized-memory-mutation
+    - consolidation-timeout-leaves-block-stale
+    - high-drift-block-used-by-primary-agent-before-review
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  reviewer_must_approve_every_outgoing: false
+  audit_frequency: continuous
+  high_drift_threshold: 70
+  high_drift_action: flag-for-human-review
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    # writeMemoryBlock is in-process only; guarded by before-tool-call mechanism.
+  consolidation_interval_steps: 5
+  rate_limit_per_consolidation: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER

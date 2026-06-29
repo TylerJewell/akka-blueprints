@@ -1,0 +1,88 @@
+# Eval Matrix for the turn-taking-game-agents Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain sample with no industry- or jurisdiction-bound
+# anchors, so regulation_anchors is intentionally an empty list across all controls. Treat
+# the requirement as relaxed for non-anchored samples.
+#
+# G1 is the pattern-specific control drawn from the corpus entry
+# (autogen.samples.agentchat-chess-game). A1 and HT1 are the standard operational controls
+# every deployable governed service carries.
+
+schema_version: 1
+sample_id: turn-taking-game-agents
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: moderation-turn-taking
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Validate every proposed move is legal before it is applied to the board
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: move-legality-check
+    enforcement: blocking
+    rationale: >
+      The apply-move tool mutates the durable board state. A move that is illegal for the
+      side to move — an off-board square, a piece that cannot reach the target, a move that
+      leaves the player's own king in check — would corrupt the position and break the game.
+      A before-tool-call guardrail checks the proposed move against the current board so no
+      illegal move, whoever proposed it, can ever reach the board.
+    implementation: >
+      GameWorkflow's validateAndApplyStep calls MoveValidator.validate(fen, from, to,
+      promotion) before invoking GameEntity.recordMove. MoveValidator holds the chess rules
+      in-process and returns legality, the resulting FEN, and a terminal flag. An illegal AI
+      or random move triggers GameEntity.rejectMove and a re-proposal (up to the step retry
+      cap, then a forfeit conclusion); an illegal human move triggers rejectMove and returns
+      a reason for the user to correct, leaving the board unchanged.
+    regulation_anchors: []
+
+  - id: A1
+    name: Test-gate the turn-taking loop and the legality rules before deployment
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: >
+      The legality rules and the terminal-position detection decide every move and every
+      result. A regression could apply an illegal move or fail to detect checkmate, so tests
+      must pass before any deploy.
+    implementation: >
+      The Maven test phase plus an integration test that drives a full AI-versus-random game
+      to a terminal position against the in-memory testkit and asserts every applied move was
+      legal and the recorded result matches the terminal flag.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Operator halt of new games
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: >
+      An operator must be able to stop the system from starting new games if a misbehaving
+      agent or a runaway simulator is detected, without interrupting games already in flight.
+    implementation: >
+      SystemControl (a KeyValueEntity) holds a halted boolean. ChessEndpoint exposes
+      POST /api/system/halt and /api/system/resume; GameRequestConsumer reads
+      SystemControl.isHalted before starting a workflow and skips the start while halted.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Moves stay legal
+    mechanism: "guardrail · before-tool-call"
+    short: Reject any proposed move that is illegal for the current board before applying it.
+  - id: A1
+    name: Test gate
+    mechanism: "ci-gate · test-gate"
+    short: Legality and turn-taking tests must pass before deploy.
+  - id: HT1
+    name: Operator halt
+    mechanism: "halt · operator-regulator-stop"
+    short: Operator can stop new games from starting.

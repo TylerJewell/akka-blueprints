@@ -1,0 +1,74 @@
+# Eval Matrix for the real-estate-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (finance-analysis domain) with no
+# jurisdiction-bound anchors assigned at the sample level — deployers add their own.
+# regulation_anchors is therefore an empty list across all controls.
+
+schema_version: 1
+sample_id: real-estate-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: S1
+    name: Screen property submissions against regulated exclusion list before agents run
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: blocking
+    rationale: >
+      Real estate investment activity is subject to sector-specific regulations that
+      prohibit AI-assisted evaluation of certain property categories (e.g., unlicensed
+      short-term rentals, cannabis facilities). Screening submissions at the workflow
+      boundary — before any agent task is dispatched — ensures no LLM token is
+      consumed on a deal the platform is not permitted to evaluate, and produces a
+      clean audit trail showing rejection was mechanical, not discretionary.
+    implementation: >
+      EvaluationWorkflow.sanitizerStep performs a pure Java lookup of
+      DealSubmission.propertyType against a hardcoded exclusion set
+      (cannabis_facility, unlicensed_short_term_rental, gambling_establishment).
+      On a match, the workflow calls DealEntity.rejectDeal without invoking any
+      AutonomousAgent, and DealRecord transitions to REJECTED. The MarketSpecialist
+      and FinanceSpecialist are never scheduled.
+    regulation_anchors: []
+
+  - id: G1
+    name: Gate the investment recommendation with an output guardrail before surfacing it
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: >
+      The synthesised investment recommendation is the primary user-facing artifact.
+      Because real estate investment decisions carry financial and legal weight,
+      a recommendation that contains fabricated financial metrics (e.g., invented
+      cap rates, hallucinated comparable sales), non-compliant language, or advice
+      that exceeds the system's recommend-only authority must never reach the user.
+      A blocking output guardrail on DealCoordinator's SYNTHESISE task catches these
+      conditions and routes the deal to BLOCKED before the recommendation is persisted
+      or displayed.
+    implementation: >
+      EvaluationWorkflow.guardrailStep runs after synthesiseStep completes. It applies
+      a deterministic vetter that checks InvestmentRecommendation.recommendationVerdict
+      and guardrailVerdict fields, then runs an LLM judge over the summary text to
+      detect fabricated financial figures or authority overreach. On failure, the
+      workflow calls DealEntity.block, transitioning DealRecord to BLOCKED with a
+      failureReason. The recommendation is never written to DealView in this state.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: Sector property sanitizer
+    mechanism: "sanitizer · sector"
+    short: Reject excluded property types before any agent task runs.
+  - id: G1
+    name: Recommendation output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block recommendations with fabricated metrics or non-compliant language.

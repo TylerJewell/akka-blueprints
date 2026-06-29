@@ -1,0 +1,101 @@
+schema_version: 1
+sample_id: scored-loop-tailor
+coordination_pattern: evaluator-optimizer
+domain: hr-recruiting
+
+controls:
+  - id: G1
+    name: Enforce mandatory CV sections before the reviewer runs
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      A CV missing the Summary, Experience, or Skills section is structurally
+      incomplete and cannot be scored reliably against a hiring rubric. Sending
+      an incomplete draft to the reviewer wastes a cycle and produces a score
+      that reflects structure defects rather than content quality. A deterministic
+      section-presence check before the reviewer runs catches the defect early,
+      returns structured feedback to the Tailor, and keeps the reviewer focused
+      on content merit rather than document completeness.
+    implementation: |
+      Wired as the `guardrailStep` of `TailoringWorkflow`, immediately after
+      `tailorStep`. A pure-function check on `draft.sectionsPresent()` for
+      the strings "Summary", "Experience", and "Skills". On failure, emits
+      `SectionGuardrailVerdictRecorded` with `verdict.passed = false` and
+      `reasonCode = "MISSING_SECTIONS"`, then transitions back to `tailorStep`
+      with a fixed `ReviewNotes("CV is missing required sections; include
+      Summary, Experience, and Skills before resubmitting.")`. The Tailor's
+      next call sees the structured feedback as the prior review. The cycle
+      still counts toward `maxAttempts`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every cycle's review verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The reviewer's approve-or-revise verdict, combined with the rubric score,
+      is the primary quality signal the loop produces. Recording it per attempt
+      as a typed event gives HR operators a continuous quality stream — approval
+      rate by attempt number, drift in average score across job categories,
+      frequency of missing-section drafts — without requiring instrumentation
+      inside the workflow itself. This data also feeds any downstream hiring
+      compliance or bias monitoring the deployer operates.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `ApplicationsView.getAllApplications`, finds attempts that have been
+      reviewed but do not yet have a matching `ReviewEvalRecorded` event, and
+      calls `ApplicationEntity.recordEval(attemptNumber, verdict, score,
+      missingSections)`. The call is idempotent on `(applicationId,
+      attemptNumber)`. The workflow itself also emits one `ReviewEvalRecorded`
+      event on the terminal transition (ApplicationApproved or
+      ApplicationRejectedFinal) carrying the whole loop's outcome.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the tailoring loop gracefully at the retry ceiling
+    mechanism:
+      kind: halt
+      flavor: graceful-degradation
+    enforcement: system-level
+    rationale: |
+      Iterative CV refinement loops can hang indefinitely if a rubric is set
+      too high or a reviewer agent fails repeatedly. In a recruiting context,
+      an indeterminate application state is worse than a clean rejection: it
+      blocks the downstream hiring pipeline and leaves the candidate record in
+      an unresolvable state. The halt mechanism ends the loop at a configured
+      ceiling, preserves every draft and every review on the entity for audit,
+      and surfaces a structured rejection reason so a recruiter can intervene
+      with context rather than a bare error.
+    implementation: |
+      `TailoringWorkflow` reads `scored-loop-tailor.tailoring.max-attempts`
+      (default 4) at start. Before scheduling the next `tailorStep`, it
+      checks `attemptCount < maxAttempts`. If the ceiling is hit, the
+      workflow transitions to `rejectStep`, which emits
+      `ApplicationRejectedFinal` with the highest-scoring draft's text as
+      best-of and a structured `rejectionReason` ("max attempts reached"
+      plus the count). `defaultStepRecovery(maxRetries(2).failoverTo(
+      rejectStep))` ensures any unrecoverable agent failure also lands in
+      the same terminal state rather than hanging.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · mandatory CV sections
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Per-attempt review eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: HT1
+    label: Halt at retry ceiling
+    mechanism: Halt
+    implementation: graceful-degradation
+    source: —

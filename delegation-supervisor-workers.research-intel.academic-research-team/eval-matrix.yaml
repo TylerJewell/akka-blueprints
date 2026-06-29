@@ -1,0 +1,64 @@
+# Eval Matrix for the academic-research-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (research-intel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: academic-research-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: research-intel
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Vet synthesised digest citations before surfacing to the researcher
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      Academic researchers depend on accurate publication references to build on prior work.
+      A citation guardrail intercepts the synthesised digest before it reaches the user and
+      rejects any output containing fabricated DOIs or unverifiable publication details,
+      preventing downstream citations of non-existent sources.
+    implementation: >
+      A before-agent-response guardrail on LiteratureCoordinator executes inside
+      ResearchWorkflow.guardrailStep. It runs a deterministic DOI-format vetter followed
+      by an LLM judge that checks each cited publication against the PaperScout's returned
+      PublicationBundle. On failure the workflow calls ResearchDigestEntity.block and the
+      digest enters BLOCKED with a failureReason describing which citation failed validation.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the coordinator synthesis decision for research quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The coordinator's synthesis decision merges independently gathered publications and
+      trend analysis into one digest. A periodic quality score gives operators a signal on
+      whether the synthesis is grounded in the provided evidence and whether the summary
+      accurately represents both worker outputs — without blocking digest delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries DigestView for the oldest
+      SYNTHESISED digest lacking an evalScore, runs a 1-5 rubric judge over the synthesised
+      content against the source PublicationBundle and TrendReport, and calls
+      ResearchDigestEntity.recordEval(score, rationale), emitting DigestEvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Citation guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a digest containing fabricated DOIs or unverifiable publication references.
+  - id: E1
+    name: Synthesis quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's synthesis decision against the source publications.

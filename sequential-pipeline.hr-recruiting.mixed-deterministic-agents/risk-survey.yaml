@@ -1,0 +1,85 @@
+schema_version: 1
+sample_id: score-aggregator
+
+# ---- Purpose ----
+purpose:
+  primary_function: candidate-screening-and-scoring-pipeline
+  sector: hr-recruiting
+  decisions_surface: recommend-only
+  user_type: recruiter-or-hiring-manager
+
+# ---- Data ----
+data:
+  inputs:
+    - candidate-name
+    - resume-text
+    - target-role
+    - in-process-role-requirements-corpus
+  data_classes:
+    pii: true          # candidateName and resumeText are personal data
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: candidate-hiring-recommendation
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  human_reviews_recommendation_before_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-candidate-application
+  failure_modes:
+    - score-out-of-range
+    - missing-dimension
+    - hallucinated-recommendation
+    - resume-bias
+    - gate-failure
+    - recommendation-decision-mismatch
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: recruiter-or-hiring-manager
+  reviewer_must_approve_before_advancing_candidate: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_application: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+  deterministic_components:
+    - ScoreAggregator
+    - StatusNotifier
+    - QualityGate
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  candidate_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  equal-employment-opportunity-review-required: TO_BE_COMPLETED_BY_DEPLOYER
+  resume-corpus-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,56 @@
+schema_version: 1
+sample_id: json-query-engine
+coordination_pattern: sequential-pipeline
+domain: general
+
+controls:
+  - id: G1
+    name: Validate generated path expressions before document traversal
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      A sequential pipeline that generates JSON path expressions carries a
+      specific failure mode absent from fixed-query systems: the LLM may
+      produce a syntactically invalid path, reference a root key that does not
+      exist in the target document, or construct a deeply nested access that
+      would scan an unbounded subtree. If these expressions reach the traversal
+      layer without validation, the result is either a runtime exception (which
+      the workflow must handle as an unexpected failure) or a silent empty
+      result that makes the subsequent RESPOND task answer from nothing. The
+      before-tool-call hook is the right cut: the generated path is known at
+      call time, the document schema is static, and structural validation is
+      deterministic — no LLM call, no external service. Catching a bad path at
+      the agent–tool boundary surfaces it as a structured rejection the agent
+      can correct within its iteration budget, rather than letting the error
+      propagate to the user as a cryptic empty answer.
+    implementation: |
+      `PathGuardrail` is registered on `QueryAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      For path-expression tools (`resolvePathExpression`, `extractValueAt` on
+      `TraverseTools`), the guardrail applies three structural checks: (1) the
+      expression begins with `$` and uses only valid JSON-path operators
+      (`.`, `[]`, `*`, `..`); (2) the first key segment after `$` appears in
+      the target document's `DocumentSchema.rootKeys`, loaded from
+      `src/main/resources/sample-data/schemas/<docId>.json`; (3) the path
+      nesting depth (count of `.` and `[]` delimiters) does not exceed the
+      schema's `maxTraversalDepth`. For all tools, the guardrail additionally
+      enforces the phase-status matrix: PARSE tools require
+      `status ∈ {CREATED, PARSING}`; TRAVERSE tools require
+      `status ∈ {PARSED, TRAVERSING}` AND `parsed.isPresent()`; RESPOND
+      tools require `status ∈ {TRAVERSED, RESPONDING}` AND
+      `traversal.isPresent()`. On any reject, `PathGuardrail` calls
+      `QueryEntity.recordGuardrailRejection(phase, tool, pathExpr, reason)` so
+      the rejection is visible in the UI's path-rejection log strip and in the
+      audit log, then returns `Guardrail.reject("path-violation: <reason>")` to
+      the agent loop. On accept, the call proceeds unchanged.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Path-expression validation guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

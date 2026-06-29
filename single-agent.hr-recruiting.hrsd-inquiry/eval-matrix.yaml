@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: hrsd-inquiry
+coordination_pattern: single-agent
+domain: hr-recruiting
+
+controls:
+  - id: S1
+    name: Redact special-category data before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: blocking
+    rationale: |
+      Employees frequently include protected personal details when describing HR situations:
+      health conditions referenced to justify a leave request, disability disclosures when
+      asking about accommodations, religious observance when requesting schedule changes,
+      union membership when asking about grievance procedures, or pregnancy status when
+      inquiring about parental leave. Under GDPR Article 9, CCPA, and equivalent frameworks,
+      this data class requires explicit consent to process. Because the agent's role is to
+      answer policy questions — not to act on health or religious details — those attributes
+      must never reach the model. The screener runs in a Consumer between the raw submission
+      and the agent invocation; the raw message is preserved on the entity for HR audit
+      records but is never the input seen by the model.
+    implementation: |
+      `SpecialCategoryScreener` Consumer subscribes to `InquirySubmitted` events emitted by
+      `InquiryEntity`. It runs a pipeline of regex stages (health-condition phrases such as
+      "I have [condition]", "diagnosed with", "my disability"), heuristic stages (religious
+      references, pregnancy and parental-status phrases, union-membership language), and a
+      government-identifier stage. Outputs a `ScreenedMessage` carrying the redacted text
+      plus the list of categories found. Calls `InquiryEntity.attachScreened(screened)`.
+      `InquiryWorkflow.answerStep` then passes `screened.redactedMessage` as the instruction
+      text to `HrInquiryAgent`; the raw message remains accessible only via
+      `request.rawMessage` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject uncited or malformed answers before the agent responds
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      An HR inquiry agent that answers without citing the underlying policy creates a
+      compliance risk: employees may act on advice that does not reflect the organization's
+      current policy text, and auditors cannot trace the recommendation back to a
+      policy document. The before-agent-response hook catches this before the response
+      leaves the agent's loop — a response with an empty `citedPolicies` list, an unrecognized
+      `requestType`, or a malformed `InquiryResponse` structure is rejected and the agent
+      retries with guidance on what is missing. Only policy-grounded, well-structured
+      answers reach the workflow and the employee.
+    implementation: |
+      `ResponseGuardrail` is registered on `HrInquiryAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate response it (1) parses the response into `InquiryResponse`, (2) asserts
+      `citedPolicies` is non-empty — every answer must cite at least one policy id from
+      the loaded catalog, (3) if `serviceRequest` is non-null, asserts
+      `serviceRequest.requestType` is one of the allowed values (LEAVE_REQUEST,
+      BENEFITS_UPDATE, PAYROLL_CORRECTION, ONBOARDING_TASK, GENERAL_REQUEST), and
+      (4) asserts the `answer` field is non-empty. On any failure returns a structured
+      rejection naming the failed check; the agent loop consumes one of its 3 iterations
+      and retries. Passing responses flow through to `answerStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Special-category data screened before LLM
+    mechanism: Sanitizer
+    implementation: special-category
+    source: —
+  - id: G1
+    label: Policy-citation guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

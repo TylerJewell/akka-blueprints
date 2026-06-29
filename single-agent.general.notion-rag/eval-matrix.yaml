@@ -1,0 +1,44 @@
+schema_version: 1
+sample_id: notion-rag
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Reject ungrounded answers before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: grounding-validator
+    enforcement: blocking
+    rationale: |
+      A chatbot bound to a Notion database must only report facts that appear in
+      the rows it actually retrieved. Without a grounding check, the model can
+      produce plausible-sounding answers that reference row IDs, property values,
+      or product details that were never returned by the query — a form of
+      hallucination that is especially damaging in a Q&A context where users
+      treat answers as accurate database lookups. The before-agent-response hook
+      is the correct cut point: it catches an ungrounded answer before it reaches
+      the caller, forces a retry inside the same task, and ensures that only
+      row-anchored answers ever land in the entity log.
+    implementation: |
+      `GroundingGuardrail` is registered on `NotionQueryAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate `QueryAnswer` it (1) extracts the set of rowIds from the
+      `RetrievedRows` attachment that was passed to the task, (2) asserts every
+      `citations[].rowId` appears in that set, and (3) asserts that if the
+      retrieved set is non-empty, the citations list is also non-empty. A
+      zero-row exemption allows a `NO_DATA` answer with empty citations to pass
+      when the Notion query returned no rows. On any other failure,
+      `GroundingGuardrail` returns `Guardrail.reject(<structured-error>)` naming
+      the failed check; the agent loop retries within `NotionQueryAgent`'s
+      3-iteration budget. Passing answers flow through to `QueryWorkflow`'s
+      `answerStep`, which writes `AnswerRecorded` to `SessionEntity`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Grounding check before response
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

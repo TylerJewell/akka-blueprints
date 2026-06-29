@@ -1,0 +1,86 @@
+schema_version: 1
+sample_id: antom-payment
+
+# ---- Purpose ----
+purpose:
+  primary_function: payment-action-execution
+  sector: finance
+  decisions_surface: autonomous-with-gate
+  user_type: payment-operator
+
+# ---- Data ----
+data:
+  inputs:
+    - payment-instructions
+    - recipient-identifiers
+    - transaction-references
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: true
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  payment_data_encrypted_in_transit: true
+  recipient_ids_checked_against_blocked_registry: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-with-gate
+  decision_subject: payment-instruction
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible      # refunds are possible post-settlement; halted payments are not
+  high_value_threshold_minor_units: 1000000
+  high_value_requires_operator_approval: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-payment
+  failure_modes:
+    - unauthorized-payment
+    - blocked-recipient-reached
+    - amount-threshold-bypass
+    - fraud-signal-ignored
+    - currency-mismatch
+    - agent-iteration-exhaustion
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true                      # for high-value payments (HITL gate)
+  human_on_loop: true                      # operator reviews settled payment audit log
+  reviewer_role: payment-operations-manager
+  high_value_approval_required_before_execution: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - antom-initiate-payment
+    - antom-query-payment-status
+    - antom-initiate-refund
+    - llm-completion
+  rate_limit_per_payment: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  pci-dss-applicable: TO_BE_COMPLETED_BY_DEPLOYER
+  aml-kyc-checks-external: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_payment_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  antom-merchant-agreement-in-place: TO_BE_COMPLETED_BY_DEPLOYER

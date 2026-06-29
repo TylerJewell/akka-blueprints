@@ -1,0 +1,80 @@
+schema_version: 1
+sample_id: airline-triage-router
+
+# ---- Purpose ----
+purpose:
+  primary_function: customer-support
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: passenger-reply
+  user_type: airline-passenger
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-passenger-support-requests
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    booking-reference: true
+    passport-id: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-with-guardrail
+  decision_subject: passenger
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+  routing_decisions_made_by_ai: true
+  resolution_decisions_made_by_ai: true
+  destructive_tool_calls_gate_by_guardrail: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-passenger
+  failure_modes:
+    - wrong-intent-routing
+    - pnr-leakage-via-llm
+    - non-refundable-fare-cancellation
+    - compensation-fabrication
+    - out-of-scope-legal-advice
+    - change-applied-outside-permitted-window
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: airline-operations-agent
+  reviewer_must_approve_every_outgoing: false
+  reviewer_must_unblock_guardrail_failures: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_request: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  passenger_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

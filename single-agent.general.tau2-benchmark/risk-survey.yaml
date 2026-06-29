@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: tau2-benchmark-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: agent-benchmark-evaluation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: automated
+  user_type: ai-researcher-or-engineer
+
+# ---- Data ----
+data:
+  inputs:
+    - benchmark-task-definitions
+    - agent-step-outputs
+    - reference-answers
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: false
+
+# ---- Decisions ----
+decisions:
+  authority_level: automated
+  decision_subject: benchmark-task-execution
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_verdict_before_action: false
+
+# ---- Failure ----
+failure:
+  blast_radius: single-run
+  failure_modes:
+    - partial-execution
+    - wrong-final-answer
+    - step-skip
+    - latency-timeout
+    - evidence-thin-result
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: ai-researcher-or-engineer
+  reviewer_must_read_verdict_before_action: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_run: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  benchmark-data-licensed-for-ai-evaluation: TO_BE_COMPLETED_BY_DEPLOYER

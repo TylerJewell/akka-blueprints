@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: plan-execute-replan
+coordination_pattern: planner-executor
+domain: general
+
+controls:
+  - id: G1
+    name: Vet every tool assignment before the executor runs the step
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The Planner assigns one of four tools (SEARCH, READ, CALCULATE,
+      SUMMARISE) to each plan step; the Replanner can revise those assignments
+      after any observation. Either agent can produce a tool argument that
+      exceeds the declared scope — an out-of-allow-list host for SEARCH, a path
+      outside sample-data/ for READ, or an expression containing an eval-like
+      pattern for CALCULATE. The guardrail intercepts the ToolAssignment before
+      the Executor ever sees it, preventing the out-of-scope call entirely.
+      Blocking: the step does not execute until a compliant assignment is
+      produced; the Replanner sees the StepBlocked observation and is expected
+      to revise.
+    implementation: |
+      `ToolGuardrail.vet(ToolAssignment)` is called by `ExecutionWorkflow`'s
+      `guardStep` between `checkPauseStep` and `executeStep`. The vetter checks
+      (a) the ToolKind is one of SEARCH, READ, CALCULATE, SUMMARISE; (b) SEARCH
+      arguments reference only allow-listed hosts (akka.io, doc.akka.io,
+      github.com); (c) READ arguments resolve inside `sample-data/`; (d)
+      CALCULATE arguments do not contain eval-shaped keywords. On reject, the
+      workflow calls `GoalEntity.recordBlock(stepIndex, reason)` — appending a
+      STEP_BLOCKED Observation — and loops back to `replanStep` so the Replanner
+      sees the block context before producing its next decision.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every replanning decision for goal alignment and early-conclusion risk
+    mechanism:
+      kind: eval-event
+      hook: null
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The Replanner is the most consequential agent in the loop: a Revise
+      decision replaces the entire plan, and a premature Conclude decision
+      short-circuits remaining steps with an incomplete evidence base. Neither
+      failure mode triggers an immediate block, but both leave silent quality
+      degradation that is hard to audit after the fact. Scoring each
+      ReplanDecision immediately after it is produced gives operators a
+      per-iteration quality signal in the observation ledger, making quality
+      regressions visible without slowing the workflow.
+    implementation: |
+      `ReplanQualityEvaluator.score(ReplanDecision, ObservationLedger)` runs
+      in `ExecutionWorkflow`'s `evalStep` immediately after `replanStep`.
+      The evaluator checks three dimensions: repeated-failure re-use (deducts
+      30 points if a revised step repeats a step that already has a STEP_FAILED
+      observation), premature conclusion (deducts 20 points if Conclude is
+      issued before half the original plan steps have observations), and
+      unjustified tool-kind change (deducts 15 points per step whose ToolKind
+      was changed without a corresponding STEP_BLOCKED entry). The resulting
+      `EvalRecord { dimension, score, rationale }` is appended to the
+      `ObservationLedger` via `GoalEntity.recordEval(evalRecord)`. The score
+      is visible on the App UI's expanded observation row; the workflow does
+      not block on a low score.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool assignment guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Replanner quality evaluator
+    mechanism: Eval-event
+    implementation: on-decision-eval (score + rationale per ReplanDecision)
+    source: —

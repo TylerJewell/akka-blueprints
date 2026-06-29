@@ -1,0 +1,80 @@
+# Eval Matrix for the meeting-to-tasks Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (ops-automation domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an
+# empty list across all controls.
+
+schema_version: 1
+sample_id: meeting-to-tasks
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: sequential-pipeline
+  domain: ops-automation
+
+integration_tier: real-service-via-env-var
+
+controls:
+  - id: G1
+    name: Validate every Trello and Slack payload before the external write
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: payload-validation
+    enforcement: blocking
+    rationale: >
+      Trello and Slack are external write surfaces. A malformed or un-redacted
+      payload reaching them is hard to recall, so each call is checked before it
+      fires.
+    implementation: >
+      A before-tool-call guardrail inside MeetingPipelineWorkflow.pushToBoardStep and
+      notifyStep verifies required fields are present, the board/channel ids are
+      well-formed, and no un-redacted email or name remains in the payload. A failing
+      check blocks the TrelloClient / SlackClient call and fails the step.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact attendee names and emails before any third-party write
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Meeting notes routinely carry attendee names, emails, and internal details.
+      These are stripped before extraction and before any payload leaves the service
+      for a third-party SaaS.
+    implementation: >
+      PiiSanitizer.redact runs in MeetingPipelineWorkflow.sanitizeStep over the raw
+      notes and again over each task payload; the redaction count is recorded on
+      MeetingEntity via recordSanitized and surfaced in the UI.
+    regulation_anchors: []
+
+  - id: H1
+    name: Hold the extracted task list for one human approval
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Tasks pushed into a shared team board are broadcast to everyone watching it.
+      A human approves the extracted list before that broadcast happens.
+    implementation: >
+      MeetingPipelineWorkflow pauses in awaitApprovalStep at status AWAITING_APPROVAL,
+      polling MeetingEntity every 5s; POST /api/meetings/{id}/approve and
+      /reject transition the run. External writes only run after approval.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Payload guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Validate every Trello/Slack payload before it is sent.
+  - id: S1
+    name: PII redaction
+    mechanism: "sanitizer · pii"
+    short: Strip names and emails before any third-party write.
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Hold the task list until a person approves it.

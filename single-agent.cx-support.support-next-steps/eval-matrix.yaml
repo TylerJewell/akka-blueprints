@@ -1,0 +1,70 @@
+schema_version: 1
+sample_id: support-next-steps
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Support ticket bodies routinely contain the submitting customer's email address,
+      phone number, postal address, account or order identifier, and occasionally a
+      full name used to describe themselves or a colleague. Those identifiers must not
+      appear in the LLM call that produces resolution recommendations — they are not
+      needed for the reasoning, and their presence raises unnecessary data-handling
+      risk. Redaction runs inside a Consumer between the raw submission and the agent
+      invocation; the raw ticket body is preserved on the entity for audit but is
+      never the input seen by the model.
+    implementation: |
+      `TicketSanitizer` Consumer subscribes to `TicketSubmitted` events emitted by
+      `TicketEntity`. It runs a pipeline of regex stages (email, phone, payment-card-like
+      tokens), a customer-id heuristic stage, a postal-address stage, and a person-name
+      heuristic. Outputs a `SanitizedTicket` carrying the redacted body plus the list of
+      PII categories found. Calls `TicketEntity.attachSanitized(sanitized)`.
+      `TicketWorkflow.adviseStep` then passes `sanitized.redactedBody` as the
+      `ResolutionAdvisorAgent` task attachment named "ticket.txt"; the raw payload
+      remains accessible only via `request.ticketBody` on the entity, never on the
+      wire to the model.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every recommendation set for grounding quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A support agent who receives a recommendation set with no resolution citations
+      cannot distinguish genuine pattern-match advice from free-form generation. The
+      on-decision evaluator surfaces exactly this gap: it checks whether each
+      recommended step points to a past resolution case. A score of 1 signals that
+      the recommendation is entirely ungrounded and deserves human scrutiny before
+      the support agent acts on it. This check does not block the recommendation —
+      it annotates it so the reader knows how much weight to give it.
+    implementation: |
+      `RecommendationScorer` runs inside `TicketWorkflow.evalStep`, fired immediately
+      after `RecommendationRecorded` lands. The scorer is deterministic and rule-based
+      (no LLM call — keeping the single-agent invariant honest): checks that each
+      `RecommendedStep.resolutionRef` is non-empty (each covered step earns a point,
+      capped at 2), that descriptions begin with an actionable verb (+1), that
+      confidence levels are not uniformly identical across all steps (+1), and that
+      at least two steps are present (+1). Emits `EvaluationScored` with a 1–5 score
+      and a one-line rationale. The score is surfaced on the App UI tab; tickets with
+      score ≤ 2 are flagged for human inspection with a red card border.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: E1
+    label: On-decision recommendation eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

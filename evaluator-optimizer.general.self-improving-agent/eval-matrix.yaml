@@ -1,0 +1,99 @@
+schema_version: 1
+sample_id: self-improving-agent
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: E1
+    name: Record every revision cycle's attestation verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A self-modifying agent's primary risk is silent degradation: a revision that
+      passes an internal gate but quietly worsens real-world performance. Recording
+      every cycle's attestation verdict — the score delta, whether the gate passed,
+      and which revision attempt it represents — gives operators a continuous quality
+      stream they can monitor independently of the workflow. Without this stream,
+      an operator would have to reconstruct the improvement trajectory by replaying
+      entity events, which is an after-the-fact audit, not a runtime signal.
+    implementation: |
+      `AttestationSampler` (TimedAction) fires every 30 s. It queries
+      `ConfigView.getAllConfigs`, finds revision cycles that have been attested but
+      do not yet have a matching `EvalRecorded` event, and calls
+      `AgentConfigEntity.recordEval(cycleNumber, attestationResult, scoreDelta,
+      applied)`. The call is idempotent on `(configId, cycleNumber)`. The
+      `ImprovementWorkflow` itself also emits one `EvalRecorded` event on the
+      terminal transition (`RevisionApplied` or `RevisionRejected`) capturing the
+      whole improvement loop's outcome.
+    regulation_anchors: []
+
+  - id: G1
+    name: Gate every proposed revision with a regression attestation before applying
+    mechanism:
+      kind: ci-gate
+      flavor: attestation-gate
+    enforcement: build-gate
+    rationale: |
+      Self-modification without a regression check is an open loop: an optimizer
+      agent that proposes a change which degrades performance on common cases while
+      appearing to improve on the training batch would be applied without recourse.
+      The attestation gate re-runs the executor agent under the proposed config
+      against a held-out reference task set and requires a positive quality score
+      delta before emitting `AttestationPassed`. This gives the improvement loop a
+      closed-loop property — a revision that cannot beat the current baseline is
+      discarded, not applied, regardless of the optimizer's rationale.
+    implementation: |
+      Wired as the `attestStep` of `ImprovementWorkflow`, immediately after
+      `proposeStep`. The step calls `ExecutorAgent.REGRESSION_EXECUTE` for each
+      of the three held-out reference tasks under the proposed system prompt,
+      computes the mean quality score, and compares it to the baseline score
+      captured in `executeStep`. If `meanRegressionScore - baselineScore >= threshold`
+      (default 0.5, from `self-improving-agent.improvement.threshold`), the step
+      emits `AttestationRecorded` with `passed=true` and the workflow advances to
+      `applyStep`. On failure, `passed=false` is recorded and the workflow either
+      re-enters `proposeStep` with the failed attestation attached or transitions
+      to `rejectStep` if `maxRevisions` is reached.
+    regulation_anchors: []
+
+  - id: HM1
+    name: Expose a dedicated monitor stream for every applied or rejected revision
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: system-level
+    rationale: |
+      An agent that modifies its own prompt configuration is performing a privileged
+      operation. Even when the attestation gate passes, a human operator should be
+      able to observe every such change in real time without having to poll the
+      entity or replay the event log. A dedicated SSE endpoint for terminal
+      transitions — applied and rejected alike — gives monitoring tooling a single
+      subscription point. The stream is separate from the general config SSE so a
+      monitor client is not flooded with intermediate events during the revision
+      loop.
+    implementation: |
+      `AgentEndpoint` exposes `/api/configs/monitor/sse` as a Server-Sent Events
+      stream. It subscribes to the `AgentConfigEntity` event stream and filters
+      to `RevisionApplied` and `RevisionRejected` events only. Each event carries
+      the full `AgentConfig` state at the time of the transition so a monitor
+      can render the complete revision history without a follow-up fetch. The
+      stream stays open; new terminal transitions are pushed as they occur.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-cycle attestation recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: G1
+    label: Regression attestation gate
+    mechanism: CI gate
+    implementation: attestation-gate
+    source: —
+  - id: HM1
+    label: Revision monitor stream
+    mechanism: Human-on-the-loop
+    implementation: deployer-runtime-monitoring
+    source: —

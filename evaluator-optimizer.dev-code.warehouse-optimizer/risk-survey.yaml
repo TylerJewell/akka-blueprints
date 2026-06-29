@@ -1,0 +1,71 @@
+schema_version: 1
+sample_id: warehouse-optimizer
+
+# ---- Purpose ----
+purpose:
+  primary_function: query-optimization
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommendation-only
+  user_type: database-engineer
+
+# ---- Data ----
+data:
+  inputs:
+    - sql-statement
+    - optimization-objective-text
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommendation-only
+  decision_subject: query-or-schema-change
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+
+# ---- Failure ----
+failure:
+  blast_radius: single-schema
+  failure_modes:
+    - ddl-approved-without-review
+    - optimizer-proposes-conflicting-index
+    - evaluator-approves-semantically-incorrect-rewrite
+    - loop-stalls-waiting-for-dba
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: true
+  reviewer_role: database-administrator
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+    synthetic-media: false
+    content-generation: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER

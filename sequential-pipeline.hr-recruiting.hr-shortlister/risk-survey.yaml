@@ -1,0 +1,84 @@
+schema_version: 1
+sample_id: hr-shortlister
+
+# ---- Purpose ----
+purpose:
+  primary_function: automated-candidate-shortlisting
+  sector: hr-recruiting
+  decisions_surface: gated-human
+  user_type: recruiter-or-hiring-manager
+
+# ---- Data ----
+data:
+  inputs:
+    - resume-text-uploaded-by-recruiter
+    - job-criteria-configuration
+    - in-process-profile-corpus
+  data_classes:
+    pii: true           # name, email, resume text contain PII
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    special-category-employment: true  # age, gender, nationality, disability indicators may appear in resumes
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: gated-human   # recruiter must approve every shortlist decision before ERPNext write
+  decision_subject: job-applicant-shortlisting
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible  # recruiter can override before ERPNext write; after write, ERPNext record requires manual edit
+  recruiter_reviews_every_decision_before_erpnext_write: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-applicant
+  failure_modes:
+    - protected-attribute-leakage      # special-category field reaches scoring phase unsanitized
+    - biased-shortlisting              # population-level shortlisting rate skew by cohort
+    - misordered-phase-tool-call       # agent calls a SCORE tool during PARSE phase
+    - erpnext-write-failure            # ERPNext HTTP call fails after approval
+    - stale-recruiter-queue            # application stuck in AWAITING_APPROVAL with no recruiter action
+    - hallucinated-profile-field       # PARSE phase invents skills or qualifications absent from resume
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true    # recruiter approves every shortlist decision
+  human_on_loop: true    # fairness drift monitor surfaces population-level signals to compliance owner
+  reviewer_role: recruiter-or-hiring-manager
+  compliance_reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  recruiter_approves_before_erpnext_write: true
+  audit_frequency: daily  # FairnessDriftWorkflow fires daily
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+    - erpnext-http-adapter  # stubbed in dev mode
+  rate_limit_per_application: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+    automated-employment-decision: true   # shortlisting is an employment decision
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  applicant_disclosure_of_ai_shortlisting: TO_BE_COMPLETED_BY_DEPLOYER
+  equal-employment-law-review-completed: TO_BE_COMPLETED_BY_DEPLOYER

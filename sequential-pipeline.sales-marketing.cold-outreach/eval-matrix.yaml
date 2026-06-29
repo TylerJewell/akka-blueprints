@@ -1,0 +1,127 @@
+schema_version: 1
+sample_id: cold-outreach
+coordination_pattern: sequential-pipeline
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Block sendEmail until an approved review decision is recorded
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      Outbound cold email is an irreversible side-effect: once a message is
+      delivered there is no recall. In a sequential pipeline the agent's SEND
+      task is the only component that calls `sendEmail`, but the agent loop
+      can call tools at any iteration — including iterations that occur before
+      the human approval step has completed. Without a runtime gate at the
+      tool boundary, a mock-LLM path or a model that misreads its instruction
+      context could fire `sendEmail` before a reviewer has seen the draft.
+      The `before-tool-call` hook is the correct cut: it inspects the entity
+      state at the moment of the call, not at the moment the task was
+      dispatched, so late or out-of-order calls are blocked regardless of
+      how the agent reached them.
+    implementation: |
+      `SendGuardrail` is registered on `OutreachAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      It activates only on the tool name `sendEmail`; all other tools pass
+      through without inspection. On each `sendEmail` attempt the guardrail
+      reads the `ProspectEntity` status and `reviewDecision` field by
+      `prospectId` (carried in the in-flight `TaskDef.metadata`). Accept
+      rule: `status == SENDING` AND `reviewDecision.isPresent()` AND
+      `reviewDecision.get().approved() == true`. On reject, returns
+      `Guardrail.reject("send-blocked: sendEmail requires an approved review
+      decision, saw status <status> and reviewDecision <present/absent>")` and
+      calls `ProspectEntity.recordGuardrailRejection(phase, tool, reason)` so
+      the rejection appears in the UI's rejection-log strip and the audit
+      event log. On accept, the call proceeds to `SendTools.sendEmail`.
+    regulation_anchors: []
+
+  - id: H2
+    name: Reject email bodies that fail CAN-SPAM / GDPR compliance checks before returning them
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Cold-email campaigns are directly regulated by CAN-SPAM (US) and GDPR
+      Article 21 (EU). The two non-negotiable requirements shared by both
+      frameworks are the presence of an unsubscribe mechanism and the
+      identification of the sender's physical location. A model generating
+      outreach copy can omit these by accident — especially when personalizing
+      heavily or when the system prompt is long. Running the check
+      `before-agent-response` catches the omission before the draft is
+      committed to the entity and before a reviewer is asked to read it,
+      giving the agent an iteration to correct course inside the same task
+      rather than requiring a full re-run of the pipeline.
+    implementation: |
+      `ComplianceGuardrail` is registered on `OutreachAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      It activates only when the in-flight task's `phase` metadata equals
+      `"DRAFT"`. For each proposed agent response it extracts the email body
+      from the `EmailDraft` result and applies three rule checks:
+      (1) `body.contains("[unsubscribe]")` — unsubscribe notice present;
+      (2) the prospect's `hqCountry` from `FirmographicData` is not in the
+      deployer-supplied `src/main/resources/compliance/blocked-regions.json`
+      list (checked against the `ProspectProfile` carried in the task's
+      instruction context);
+      (3) `body.contains("[sender-address]")` — physical sender address
+      present. If any rule fails, returns `Guardrail.reject("compliance-
+      violation: " + failedRulesList)` with each failed rule identified by
+      id. On full pass, calls `ProspectEntity.recordComplianceCheck(
+      ComplianceCheckResult{passed: true, failedRules: List.of(),
+      checkedAt: now})` so the compliance badge in the UI shows `PASSED`.
+    regulation_anchors: []
+
+  - id: HITL1
+    name: Pause the pipeline for human approval before any send is attempted
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Mass cold-email campaigns carry reputational and legal risk that a
+      single-agent pipeline cannot fully evaluate on its own: brand voice,
+      relationship context, timing sensitivity, and list hygiene are all
+      human judgements. An application-layer HITL gate after the DRAFT phase
+      ensures that a human reads and explicitly approves every draft before
+      the send tool runs. The gate is distinct from the `before-tool-call`
+      guardrail (G1): the guardrail enforces the technical precondition at
+      the tool boundary; the HITL gate enforces the organisational policy at
+      the workflow level. Removing either one leaves a gap the other does not
+      cover.
+    implementation: |
+      `approvalStep` in `OutreachPipelineWorkflow` emits `ReviewRequested` on
+      `ProspectEntity` and then pauses the workflow for up to 86 400 s (24 h,
+      deployer-configurable). The entity transitions to `AWAITING_REVIEW` and
+      the UI shows a yellow "Review required" banner with Approve / Reject
+      buttons. A reviewer calls `POST /api/outreach/{id}/review` with
+      `{ approved: boolean, reason: string }`. `OutreachEndpoint` calls
+      `ProspectEntity.recordReviewDecision(decision)`, which emits
+      `ReviewDecided`. The workflow detects the state change and branches: if
+      `approved == true` it advances to `sendStep` (entity → `SENDING`); if
+      `approved == false` it ends with `REVIEW_REJECTED` (no send, no
+      `EmailSent` event). The `SendGuardrail` (G1) acts as a second independent
+      check: even if the workflow logic misfired, `sendEmail` cannot execute
+      without the approved `ReviewDecided` recorded on the entity.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Send-gate tool guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H2
+    label: CAN-SPAM / GDPR compliance check
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: HITL1
+    label: Human approval before send
+    mechanism: HITL
+    implementation: application-layer workflow pause
+    source: —

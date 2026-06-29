@@ -1,0 +1,44 @@
+schema_version: 1
+sample_id: weather-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Reject invalid tool-call parameters before any external call
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: parameter-validator
+    enforcement: blocking
+    rationale: |
+      A weather agent that calls geocoding and weather APIs without validating
+      parameters first will silently produce wrong results: an empty location
+      string returns a default city from most geocoders; a forecastDays value
+      of 0 or 30 either errors or returns an unexpected window; a unit string
+      of "kelvin" is accepted by some APIs and silently ignored by others.
+      These failures are hard to detect after the fact because the agent's
+      narrative still reads as plausible. Catching bad parameters before the
+      call exits the agent loop — while the agent still has remaining iterations
+      to self-correct — is cheaper than post-hoc detection and gives the agent
+      an explicit signal naming the failed constraint.
+    implementation: |
+      `ToolCallGuardrail` is registered on `WeatherAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      On each proposed tool call it reads the tool name and parameter map and
+      runs four checks: (1) for the `geocode` tool, `location` must be non-empty
+      and at most 200 characters; (2) for the `getWeather` tool, `forecastDays`
+      must be between 1 and 16 inclusive; (3) `units` must be one of `metric`,
+      `imperial`, or `standard`; (4) `lat` must be in [-90, 90] and `lon` in
+      [-180, 180] when explicitly supplied. On any failure the guardrail returns
+      a `ToolCallRejection` record naming the failed check; the agent loop
+      consumes one of its 4 iterations and retries with corrected parameters.
+      Passing calls flow through to `WeatherToolProvider`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-parameter guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

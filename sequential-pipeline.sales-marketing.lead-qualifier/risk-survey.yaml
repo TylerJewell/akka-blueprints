@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: lead-qualifier
+
+# ---- Purpose ----
+purpose:
+  primary_function: lead-qualification-pipeline
+  sector: sales-marketing
+  decisions_surface: recommend-only
+  user_type: sales-development-representative
+
+# ---- Data ----
+data:
+  inputs:
+    - raw-inquiry-text
+    - in-process-sample-inquiry-corpus
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: lead-qualification-and-crm-routing
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reviews_every_lead_before_crm_treated_as_authoritative: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-lead
+  failure_modes:
+    - crm-write-with-invalid-stage
+    - pii-leak-in-tool-payload
+    - premature-crm-write
+    - disqualified-lead-routed-to-sales
+    - misordered-tool-call
+    - missing-owner-assignment
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: sales-development-representative
+  reviewer_must_review_lead_before_crm_is_treated_as_authoritative: true
+  audit_frequency: weekly
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_lead: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  inquiry-data-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  crm-data-processor-agreement-in-place: TO_BE_COMPLETED_BY_DEPLOYER

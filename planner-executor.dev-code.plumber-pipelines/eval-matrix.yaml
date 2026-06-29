@@ -1,0 +1,39 @@
+schema_version: 1
+sample_id: plumber-data-engineering-assistant
+coordination_pattern: planner-executor
+domain: dev-code
+
+controls:
+  - id: E1
+    name: Validate every generated stage artifact against the schema registry before recording it
+    mechanism:
+      kind: ci-gate
+      hook: before-tool-call
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      Data engineering pipelines are load-bearing infrastructure. A stage artifact
+      (Spark job config, Beam pipeline definition, dBT model SQL) that references
+      wrong column types or non-existent source IDs will fail silently at runtime —
+      or, worse, silently corrupt downstream datasets. The test gate runs
+      deterministically at the boundary between specialist execution and ledger
+      recording, catching schema incompatibilities before they propagate to
+      subsequent planning decisions or to the final pipeline definition.
+    implementation: |
+      `PipelineTestGate.validate(StageResult, schemaRegistry)` is called by
+      `PipelineWorkflow`'s `testGateStep` between `dispatchStep` and
+      `recordStep`. The gate checks (a) the artifact is parseable JSON or YAML,
+      (b) all declared source column names appear in the registry entry for the
+      declared source id, (c) sink column types match the registry entry for
+      the declared sink id, and (d) no transform path references outside the
+      declared sinks list. On failure the workflow records a `StageBlocked`
+      entry with `verdict = BLOCKED_BY_TEST_GATE` and loops back to
+      `proposeStep` so the `PipelinePlannerAgent` sees the blocker and revises.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Pipeline test gate
+    mechanism: CI-gate
+    implementation: test-gate (schema-and-syntax validator before ledger recording)
+    source: —

@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: merchandiser
+coordination_pattern: single-agent
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Block write-class tool calls before merchant approval
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-classifier
+    enforcement: blocking
+    rationale: |
+      An ecommerce storefront is a live revenue surface. A product description that ships
+      with a hallucinated claim, a promotion with an incorrect discount depth, or a category
+      reordering that buries a high-margin item can cause immediate customer-facing harm
+      before anyone notices. Blocking write-class tool calls (updateProductDescription,
+      setPromotion, removePromotion, reorderCategory) during the proposal generation phase
+      ensures that no storefront state is modified until a merchant has reviewed and approved
+      the full proposal. The agent is free to read catalog data during generation; it surfaces
+      intended writes as ChangeRecommendations in its return value, not as live mutations.
+    implementation: |
+      `StorefrontGuardrail` is registered on `MerchandiserAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each tool
+      invocation attempt it inspects the tool name. If the name is `updateProductDescription`,
+      `setPromotion`, `removePromotion`, or `reorderCategory`, it returns
+      `Guardrail.reject(...)` with a structured error that names the blocked tool and
+      instructs the agent to surface the intended change as a `ChangeRecommendation` entry
+      instead. Read-class tool calls (`fetchProduct`, `searchCatalog`) are passed through
+      unconditionally. During `ProposalWorkflow.publishStep` — which only executes after
+      `ProposalApproved` is present on the entity — the guardrail's classification logic
+      allows write calls because the approval signal has already been recorded.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require merchant approval before publishing any storefront change
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: non-blocking
+    rationale: |
+      Automated merchandising changes affect prices, promotions, and product presentation
+      that customers see in real time. Errors in those changes — a markdown that is too deep,
+      a promotion targeting the wrong SKU set, a description that misrepresents the product —
+      carry financial and reputational risk. An application-level approval gate ensures a
+      human merchant reviews the full set of proposed changes, in context, before any write
+      executes. The gate also provides a natural audit record: who approved, when, and whether
+      any note was attached. Proposals that are neither approved nor rejected within 72 hours
+      expire automatically, preventing stale proposals from lingering and being approved out
+      of context.
+    implementation: |
+      `ProposalWorkflow.awaitApprovalStep` halts the workflow after `ProposalGenerated`
+      lands on `ProposalEntity`. The step polls `ProposalEntity.getProposal` every 5 seconds
+      and advances to `publishStep` only when `proposal.approval().isPresent()` and
+      `proposal.approval().get().status() == APPROVED`. A `REJECTED` status triggers the
+      error step; the entity transitions to `REJECTED` with the rejection note preserved.
+      The step timeout is 259200 seconds (72 hours, configurable via
+      `akka.javasdk.agent.approval-timeout-seconds`); if it fires, `ProposalExpired` is
+      emitted and the entity moves to `EXPIRED`. `ProposalEndpoint.approve` and
+      `ProposalEndpoint.reject` are the only ways to transition out of `PENDING_APPROVAL` —
+      there is no auto-approve path.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Block storefront writes before approval
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Merchant approval gate before publish
+    mechanism: HITL
+    implementation: application
+    source: —

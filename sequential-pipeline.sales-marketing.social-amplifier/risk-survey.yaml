@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: social-amplifier
+
+# ---- Purpose ----
+purpose:
+  primary_function: social-media-content-amplification
+  sector: sales-marketing
+  decisions_surface: automated-action
+  user_type: marketer-or-content-team
+
+# ---- Data ----
+data:
+  inputs:
+    - article-url
+    - article-text
+    - target-platform-selection
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: automated-action
+  decision_subject: social-media-post-content
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+  note: |
+    Once a post is published to a social platform, deletion is possible but the content
+    may have already been seen or shared. The system does not provide a retract step.
+
+# ---- Failure ----
+failure:
+  blast_radius: single-amplification-run
+  failure_modes:
+    - brand-policy-violation
+    - publish-gated
+    - character-limit-exceeded
+    - missing-required-hashtag
+    - informal-tone-on-professional-platform
+    - publish-stub-error
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: marketer-or-brand-manager
+  reviewer_reviews_brand_audit_score_after_publish: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+    - social-platform-publish-api
+  rate_limit_per_amplification: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  source-article-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  social-platform-api-terms-reviewed: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,20 @@
+# Eval Matrix for the swarm-pattern Akka sample.
+#
+# This is a general-domain educational baseline with no governance controls.
+# controls and simplified_view are intentionally empty — the swarm pattern itself
+# carries no jurisdiction-bound or risk-specific controls; deployers add their own
+# via a derived eval matrix after completing risk-survey.yaml.
+
+schema_version: 1
+sample_id: swarm-pattern
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: team-shared-list
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls: []
+
+simplified_view: []

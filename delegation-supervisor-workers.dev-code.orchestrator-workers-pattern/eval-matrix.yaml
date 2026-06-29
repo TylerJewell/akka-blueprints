@@ -1,0 +1,71 @@
+# Eval Matrix for the orchestrator-workers-pattern Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (dev-code domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: orchestrator-workers-pattern
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: dev-code
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Gate every file-write tool call before it executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: path-allowlist-enforcement
+    enforcement: blocking
+    rationale: >
+      FileEditor workers receive per-file instructions from the orchestrator, but
+      their tool calls are the only pathway through which edits reach external state.
+      A before-tool-call guardrail intercepts every applyEdit invocation and
+      rejects writes to paths outside the task's declared targetFiles set. This
+      prevents prompt-injection or mis-decomposition from causing out-of-scope
+      writes before any side effect occurs, which is the highest-value gate in an
+      agentic code-editing pipeline.
+    implementation: >
+      The before-tool-call guardrail is registered on FileEditor. Before forwarding
+      each applyEdit call, it extracts filePath from the tool arguments and verifies
+      membership in EditTask.targetFiles (retrieved from EditTaskEntity). On
+      rejection the guardrail returns an error result; EditWorkflow transitions to
+      TaskBlocked via EditTaskEntity.block, and no further worker steps run.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score the orchestrator's synthesis decision for changeset quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The orchestrator's synthesis step is the single decision point that merges all
+      worker outputs into a delivered changeset. Sampling that decision with a rubric
+      judge — checking coherence, diff accuracy, and review alignment — gives
+      operators a longitudinal view of synthesis quality without delaying delivery.
+      Because code-edit quality degradation may be subtle (logically correct but
+      inconsistent style or scope creep), asynchronous scoring after delivery is
+      preferable to a blocking gate.
+    implementation: >
+      QualitySampler (TimedAction, every 5 minutes) queries EditTaskView for the
+      oldest COMPLETED task lacking a qualityScore, runs a 1-5 rubric judge over
+      the Changeset content (file coherence, summary accuracy, review alignment),
+      and calls EditTaskEntity.recordQuality(score, rationale), emitting
+      QualityScored. The score appears beside the task row in the App UI.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: File-write tool-call guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Block writes to paths outside the declared target file set.
+  - id: E1
+    name: Changeset synthesis quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the orchestrator's changeset synthesis decision.

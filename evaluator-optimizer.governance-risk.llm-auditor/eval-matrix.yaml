@@ -1,0 +1,71 @@
+schema_version: 1
+sample_id: llm-auditor
+coordination_pattern: evaluator-optimizer
+domain: governance-risk
+
+controls:
+  - id: G1
+    name: Block responses that exceed the severity threshold before the audit loop starts
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: on-decision-eval
+    enforcement: blocking
+    rationale: |
+      A chatbot response that scores above the severity threshold (default: ≥ 9
+      on a 0–10 scale) poses an immediate risk to end users — no amount of
+      revision will make it safe enough to continue through the normal loop.
+      Allowing it into the revision cycle wastes compute cycles, exposes the
+      reviser to actively harmful content as input, and delays the operator
+      notification that a high-severity response was produced. A deterministic
+      severity scan before the first audit step catches these cases and routes
+      them directly to ESCALATED so an operator can review the original
+      response and the triggering indicators.
+    implementation: |
+      Wired as the `guardrailStep` of `AuditWorkflow`, immediately after
+      `startStep`. A pure-function check scans the inbound `ChatbotResponse`
+      text for keyword indicators (hardcoded list in `SeverityScanner.java`)
+      and computes an `initialSeverity` integer (0–10). If
+      `initialSeverity >= llm-auditor.audit.severity-blocking-threshold`
+      (default 9), the step emits `GuardrailVerdictRecorded` with
+      `verdict.passed = false` and `reasonCode = "SEVERITY_EXCEEDS_THRESHOLD"`,
+      then transitions to `escalateStep`. On pass, the guardrail records the
+      severity score for audit traceability and transitions to `auditStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every audit cycle's verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The critic's pass-or-revise verdict is the primary quality signal the
+      audit loop produces. Recording it as a typed event per cycle gives
+      operators a continuous stream of audit outcomes — pass rate by channel,
+      drift in average severity score, frequency of guardrail blocks,
+      escalation rate — without requiring changes to the workflow itself.
+      This event stream is also the audit trail a compliance team needs to
+      demonstrate that every chatbot response received governance review.
+    implementation: |
+      `AuditSampler` (TimedAction) fires every 30 s. Queries
+      `SessionsView.getAllSessions`, finds cycles that have completed an
+      audit verdict but do not yet have a matching `AuditRecorded` event,
+      and calls `SessionEntity.recordAuditEvent(cycleNumber, decision,
+      severityScore, guardrailBlocked)`. The call is idempotent on
+      `(sessionId, cycleNumber)`. The workflow also emits one `AuditRecorded`
+      event on each terminal transition (SessionApproved or SessionEscalated)
+      carrying the loop-level disposition and the terminal severity score.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Response guardrail · severity threshold
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: E1
+    label: Per-cycle audit recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

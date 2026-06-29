@@ -1,0 +1,81 @@
+schema_version: 1
+sample_id: java-bug-assistant
+
+# ---- Purpose ----
+purpose:
+  primary_function: software-bug-resolution-assistance
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-only
+  user_type: software-engineer-or-on-call-responder
+
+# ---- Data ----
+data:
+  inputs:
+    - submitted-bug-reports
+    - in-process-ticket-store
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    internal-credentials: true
+    internal-hostnames: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  sensitive_data_handled_by_normalizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: software-defect-resolution
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_recommendation_before_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-bug-report
+  failure_modes:
+    - hallucinated-fix
+    - missed-related-ticket
+    - overconfident-resolution
+    - partial-write-to-ticket-system
+    - credential-leakage-via-llm
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: software-engineer-or-on-call-responder
+  reviewer_must_read_recommendation_before_action: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-ticket-store-read
+    - in-process-ticket-store-write-guarded
+  rate_limit_per_bug: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  internal-data-handling-policy_reviewed: TO_BE_COMPLETED_BY_DEPLOYER

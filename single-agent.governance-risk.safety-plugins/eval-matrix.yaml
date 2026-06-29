@@ -1,0 +1,140 @@
+schema_version: 1
+sample_id: safety-plugins
+coordination_pattern: single-agent
+domain: governance-risk
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Text payloads submitted for safety screening frequently arrive with personal
+      identifiers already embedded — email addresses, phone numbers, government IDs,
+      and payment-card tokens that were included verbatim by the originating user or
+      system. A content-safety agent does not need those identifiers to classify a
+      payload as harmful or benign; sending them to an LLM is an unnecessary data
+      transfer. Redaction runs in the PayloadSanitizer Consumer, between the raw
+      submission event and the SafetyAgent task, so the model classifies the
+      semantic content of the payload without ever receiving the identifying strings.
+      The raw payload is preserved on SafetyEntity for audit, but never travels to
+      the model.
+    implementation: |
+      `PayloadSanitizer` Consumer subscribes to `PayloadSubmitted` events emitted by
+      `SafetyEntity`. It runs a pipeline of regex stages (well-known email, phone, SSN,
+      and payment-card formats), a heuristic stage (person names and postal addresses),
+      and an account-id-token stage. Outputs a `SanitizedPayload` carrying the redacted
+      text plus the list of PII categories found. Calls `SafetyEntity.attachSanitized`.
+      `SafetyWorkflow.screenStep` then passes `sanitized.redactedPayload` as the
+      `SafetyAgent` task attachment; the raw payload remains accessible only via
+      `request.rawPayload` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block harmful input patterns before the LLM call
+    mechanism:
+      kind: guardrail
+      hook: before-llm-call
+      flavor: input-pattern-filter
+    enforcement: blocking
+    rationale: |
+      A content-safety screener is a natural target for adversarial inputs: an attacker
+      who can fool the safety agent into classifying a harmful payload as benign has
+      defeated the entire control. The before-llm-call hook is the first and cheapest
+      defence: catch payloads that match known prompt-injection signatures or breach
+      absolute size limits before any LLM token budget is consumed. This guard does not
+      classify content — it enforces hard invariants that no model instruction can
+      override. Hard-blocking at this layer means injection attempts never reach
+      the agent's context window, even if the agent's system prompt were compromised.
+    implementation: |
+      `InputGuardrail` is registered on `SafetyAgent` via the agent's
+      guardrail-configuration block, bound to the `before-llm-call` hook. On each
+      invocation it (1) checks that the sanitized payload byte length does not exceed
+      the configured maximum, (2) scans the payload for strings matching any line in
+      `src/main/resources/safety-config/injection-patterns.txt` (case-insensitive),
+      and (3) asserts the submitted rule list is non-empty. A match on any check
+      returns `Guardrail.reject(<pattern-id>)`, terminating the task immediately.
+      `SafetyWorkflow.screenStep` receives the rejection result and fails over to the
+      error step, transitioning `SafetyEntity` to `FAILED` with the matching
+      pattern id as the reason.
+    regulation_anchors: []
+
+  - id: G2
+    name: Reject malformed safety decisions before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A safety classification system is only as reliable as the structure of the
+      decisions it records. A malformed response — wrong action enum, missing findings,
+      or a ruleId that refers to no submitted rule — would propagate silently into
+      the entity log and drive incorrect downstream behaviour (blocking content that
+      should pass, or passing content that should be blocked). The after-llm-response
+      hook catches structural problems at the boundary between the agent loop and the
+      workflow, before any event is written. Forcing a retry inside the same task
+      budget means the guardrail consumes an agent iteration rather than corrupting
+      the decision record.
+    implementation: |
+      `OutputGuardrail` is registered on `SafetyAgent` via the agent's
+      guardrail-configuration block, bound to the `after-llm-response` hook. On each
+      candidate response it (1) parses the response into `SafetyDecision`, (2) asserts
+      every `findings[].ruleId` is present in the submitted `List<SafetyRule>`, (3)
+      asserts every `action` is in `{ALLOW, REDACT, BLOCK}`, and (4) asserts every
+      submitted rule has at least one corresponding finding (no silent omissions). On
+      any failure returns a structured rejection naming the failed check; the agent loop
+      consumes one of its 3 iterations and retries. Passing responses flow through to
+      `screenStep`, which calls `SafetyEntity.recordDecision`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every safety decision for rationale quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A structurally valid safety decision can still be evidence-thin: BLOCK findings
+      with empty evidence quotes, ALLOW decisions with no justification, or an overall
+      action that disagrees with the most severe per-finding action. These patterns
+      indicate the agent classified on pattern-matching rather than semantic reasoning,
+      which means similar-but-novel payloads may be mis-classified. An on-decision
+      evaluator surfaces these quality signals without blocking the decision itself,
+      giving operators a ranked view of which decisions to audit when calibrating
+      safety thresholds.
+    implementation: |
+      `DecisionEvaluator` runs inside `SafetyWorkflow.evalStep`, fired immediately
+      after `DecisionRecorded` lands. The evaluator is deterministic and rule-based
+      (no LLM call — keeping the single-agent invariant honest): checks that every
+      BLOCK or REDACT `CategoryFinding` has non-empty `evidenceQuote` and `rationale`,
+      that ALLOW decisions carry at least one justification sentence in the overall
+      `summary`, and that the `overallAction` is consistent with the most severe
+      per-finding action (an overallAction of ALLOW when any finding is BLOCK loses
+      2 points). Emits `EvaluationScored` with a 1–5 score and a one-line rationale.
+      Screenings with score ≤ 2 are flagged in the UI for operator review.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Input pattern filter (before-llm-call)
+    mechanism: Guardrail
+    implementation: before-llm-call
+    source: —
+  - id: G2
+    label: Decision-form guardrail (after-llm-response)
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: E1
+    label: On-decision rationale eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

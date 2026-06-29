@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: mle-pipeline
+coordination_pattern: planner-executor
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Gate model promotion on passing evaluation metrics before the promote stage runs
+    mechanism:
+      kind: ci-gate
+      hook: before-tool-call
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      In an ML engineering pipeline, the highest-risk transition is promoting a
+      trained model to the next stage. A model that has not cleared accuracy and
+      fairness thresholds should not advance — doing so wastes downstream compute,
+      produces misleading reports, and can entrench unfair predictions in
+      downstream consumers. The eval gate is deterministic: it reads the
+      evaluation ledger, checks numeric thresholds (accuracy ≥ 0.80,
+      fairnessDelta ≤ 0.05), and blocks the dispatch before the promote stage
+      runs. The Planner must acknowledge the failure and replan — typically by
+      requesting a re-train with adjusted hyperparameters or a different feature
+      set.
+    implementation: |
+      `EvalGate.check(EvaluationLedger, StageDispatch)` is called by
+      `PipelineWorkflow`'s `gateStep` between `proposeStep` and `dispatchStep`
+      for any dispatch targeting the `PROMOTE` stage. The gate reads the ledger
+      for a `MODEL_EVALUATOR` entry with `gateOutcome == PASSED` and
+      `metrics.accuracy >= 0.80` and `metrics.fairnessDelta <= 0.05`. On
+      `GateResult{passed=false}`, the workflow calls
+      `PipelineRunEntity.recordGateFailure(stageName, reason)` (emitting
+      `StageGateFailed`) and loops back to `proposeStep` so the Planner sees
+      the blocker and must replan.
+    regulation_anchors: []
+
+  - id: E1
+    name: Watch every completed model run for metric drift and fairness degradation on a periodic schedule
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      Model quality degrades over time as data distributions shift and population
+      characteristics change. In the ML engineering domain this manifests as
+      accuracy and AUC drops (concept drift) and widening fairness deltas (group
+      disparities). A one-time gate at promotion time is not enough — models that
+      passed at launch can drift in production. The periodic drift watch compares
+      each completed run's metric bundle against a stored baseline and raises a
+      structured alert when any metric diverges beyond its tolerance. The alert
+      is non-blocking: it records a `DriftAlertRaised` event and surfaces a
+      warning badge in the UI, giving operators visibility without automatically
+      halting the pipeline.
+    implementation: |
+      `DriftWatchMonitor` (TimedAction) fires every 5 minutes. It queries
+      `PipelineRunView` for `COMPLETED` runs updated in the last hour, loads
+      each run's `MetricBundle` from the evaluation ledger, and calls
+      `DriftEvaluator.check(MetricBundle observed, MetricBundle baseline)`.
+      `DriftEvaluator` is a pure deterministic comparator: it raises a
+      `DriftAlert` for each metric whose `|observed - baseline| > 0.10`, and
+      for fairness when `fairnessDelta > 0.05`. When alerts are present, the
+      monitor calls `PipelineRunEntity.raiseDriftAlert(alert)`, which emits
+      `DriftAlertRaised` and appends the alert to `PipelineRun.driftAlerts`.
+      The UI surfaces these as warning badges on run cards; `GET /api/alerts`
+      returns all alerts across all runs, newest first.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Model promotion gate
+    mechanism: CI Gate
+    implementation: test-gate (EvalGate before promote dispatch)
+    source: —
+  - id: E1
+    label: Drift and fairness watch
+    mechanism: Periodic Eval
+    implementation: drift-fairness-watch (DriftWatchMonitor every 5 min)
+    source: —

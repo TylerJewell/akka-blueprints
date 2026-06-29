@@ -1,0 +1,69 @@
+schema_version: 1
+sample_id: discord-router
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block specialist drafts that violate the community-policy rubric
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: community-policy
+    enforcement: blocking
+    rationale: |
+      Discord bot replies reach a live public channel immediately on publish. A
+      specialist agent can return a well-formed draft that nevertheless violates
+      community policy — linking to an unapproved external site, impersonating an
+      official staff member, echoing a [REDACTED] token, or inserting off-topic
+      promotional content. The before-agent-response guardrail intercepts the draft
+      before it leaves the service and holds it in BLOCKED for moderator review
+      when any rule fires. The risk surface is distinct from general content
+      filtering: the concern is not toxicity but subtle policy breaches that would
+      erode community trust if published without review.
+    implementation: |
+      `ReplyGuardrail` is a typed Agent. `DiscordWorkflow.guardrailStep` invokes it
+      with the `SanitizedMessage` and the specialist's `BotReply` draft. The agent
+      returns `GuardrailVerdict { allowed, violations, rubricVersion }`. On
+      `allowed=false` the workflow emits `ReplyBlocked` (terminal `BLOCKED`) and a
+      moderator can either approve via `POST /api/messages/{id}/unblock` or leave the
+      message blocked. The guardrail step carries a 20 s timeout; on timeout the
+      message escalates rather than publishing a draft that was never checked.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Discord users frequently include personal contact details, Discord user-id
+      snowflakes, and author handles in messages they expect a bot to read. Neither
+      the classifier nor the specialists need raw identifiers to route or reply
+      correctly. Redacting before any LLM call prevents the model from repeating
+      personal data in its reply, eliminates one class of GDPR exposure, and ensures
+      the audit trail captures what was actually processed rather than what was
+      originally submitted.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `MessageQueue` events. For each
+      `InboundMessageReceived` it runs a regex stage (email addresses, phone
+      numbers in common formats, Discord user-id snowflakes matching `\d{17,19}`)
+      and an author-handle stage that replaces the raw handle with
+      `[REDACTED-HANDLE]`, then builds a `SanitizedMessage` carrying the redacted
+      content plus the list of categories found. The categories list is written to
+      the `MessageEntity` for audit; only the redacted content is forwarded to
+      agents.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-response community-policy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: vto-genmedia
+coordination_pattern: sequential-pipeline
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Block unsafe generated media before it reaches the data layer
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: after-llm-response
+    enforcement: blocking
+    rationale: |
+      In a media-generation pipeline for e-commerce, the fully-assembled composite image
+      and video clip are the only artefacts that can reveal unsafe content — a check on
+      individual tool calls cannot catch problems that emerge from the composition step
+      itself. The after-llm-response hook is the right cut: it fires after the LLM has
+      assembled the MediaResult but before that result is written to TryOnEntity or
+      returned to the workflow. Intercepting here means an unsafe image never touches the
+      data layer, never appears in the TryOnView, and never reaches the shopper's browser.
+      The guardrail records a SafetyRejected audit event on the entity so every rejection
+      is traceable, and the agent's 4-iteration retry budget gives the pipeline an
+      opportunity to produce a clean alternative without operator intervention.
+    implementation: |
+      `ImageSafetyGuardrail` is registered on `VtoAgent` via the agent's
+      guardrail-configuration block, bound to the `after-llm-response` hook. The guardrail
+      runs on every LLM response produced during the GENERATE task. It inspects the
+      `MediaResult.composite.url` and, when present, `MediaResult.videoClip.url` for four
+      unsafe content categories: EXPLICIT, MINORS, HATE, VIOLENCE. In the sample, the
+      presence of the literal substring "unsafe-fixture" in either url triggers a rejection
+      so the guardrail path is exercisable without a live content-moderation API. On reject,
+      the guardrail calls `TryOnEntity.recordSafetyRejection(category, reason, rejectedAt)`
+      (so the rejection is visible in the UI's safety-rejection log strip) and returns
+      `Guardrail.reject("safety-violation: <category> — <reason>")` to the agent loop. On
+      accept, the `MediaResult` flows normally to `VtoPipelineWorkflow.generateStep`, which
+      writes `MediaGenerated` onto the entity and advances to `validateStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every generated try-on output for render quality and completeness
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A composite image that passes the safety check can still fail the shopper's
+      expectations — wrong aspect ratio for the target viewport, garment colour that drifts
+      visually from the catalogue swatch, or a missing video clip when the shopper requested
+      one. An on-decision evaluator surfaces these gaps immediately after validation, giving
+      merchandising teams a fast signal about which try-on outputs need human review or
+      regeneration before being promoted to the product page. The score is visible on the
+      try-on card in the UI; cards scoring ≤ 2 are flagged with a red border so reviewers
+      can triage without reading every record.
+    implementation: |
+      `RenderQualityScorer` runs inside `VtoPipelineWorkflow.evalStep`, fired immediately
+      after `MediaValidated` lands. The scorer is deterministic and rule-based (no LLM call
+      — preserving the single-agent sequential-pipeline invariant). Four checks, one point
+      per check satisfied, on a base of 1:
+      (1) Aspect ratio within tolerance — `ValidatedMedia.dimensionReport.aspectRatioOk`
+      is `true`.
+      (2) Colour fidelity within threshold — `ValidatedMedia.colourReport.colourFidelityOk`
+      is `true` (CIE76 deltaE ≤ 10.0).
+      (3) Composite image present — `ValidatedMedia.composite.url` is non-null and
+      non-empty.
+      (4) Video clip present when requested — if `AssetBundle.includeVideo` is `true`,
+      `ValidatedMedia.videoClip.isPresent()` must be `true`.
+      Emits `EvaluationScored{score: 1-5, rationale: String}` with a rationale sentence
+      naming the largest gap. The score is surfaced on the App UI tab; try-on outputs with
+      score ≤ 2 are flagged for human inspection before use on a product page.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Image safety guardrail
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: E1
+    label: Render quality eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

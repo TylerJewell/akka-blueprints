@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: morning-email-debrief
+
+# ---- Purpose ----
+purpose:
+  primary_function: ops-automation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: read-only-summary
+  user_type: operations-staff
+
+# ---- Data ----
+data:
+  inputs:
+    - morning-email-batch
+  data_classes:
+    pii: true
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: read-only-summary
+  decision_subject: operations-team
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: no-action-taken
+
+# ---- Failure ----
+failure:
+  blast_radius: single-run-digest
+  failure_modes:
+    - pii-leakage-via-llm
+    - missing-high-priority-email-from-digest
+    - inaccurate-summary-causing-missed-action
+    - eval-score-degradation-not-noticed
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: operations-staff
+  reviewer_must_approve_every_outgoing: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    # The simulated mailbox poller is in-process; replace with IMAP/Gmail credentials when deploying.
+  rate_limit_per_message: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER

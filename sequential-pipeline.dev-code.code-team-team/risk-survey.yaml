@@ -1,0 +1,167 @@
+# Risk Survey for the code-team-team Akka sample.
+#
+# Pre-filled answers reflect what the sample's surface implies. Deployer-specific
+# answers are TO_BE_COMPLETED_BY_DEPLOYER and should be filled in before this
+# survey is used to materialize a deployer Eval Matrix.
+
+archetype:
+  id: code-team-team-sample
+  display_name: Game Builder Team (Akka Sample)
+  one_line_description: >
+    A sequential dev-team pipeline where an engineer agent writes a Python game,
+    a QA agent runs tests in a guarded sandbox, and a chief-QA agent decides ship
+    or rework.
+  scenario: |
+    A user (or simulator) submits a one-line game brief. An EngineerAgent built on
+    an LLM writes a small self-contained Python game. A QaAgent writes and runs tests
+    against the game in an in-process code-execution sandbox guarded by a
+    before-tool-call check, then returns a QaReport with a quality score. A
+    ChiefQaAgent makes the final ship-or-rework call. A build cannot reach SHIPPED
+    unless its tests pass.
+
+    There is no real external code-execution host in this sample; the sandbox is
+    modeled in-process with Akka components. The scenario is the canonical
+    "sequential-pipeline" pattern in the dev-code domain.
+
+  primary_regulations: []  # community dev-tooling sample, no jurisdiction-bound anchors
+
+  explicitly_not_applicable:
+    - clinical decision support
+    - judicial process
+    - employment decisions
+    - children data (unless deployer configures otherwise)
+    - predictive policing
+    - mass surveillance
+    - biometric identification
+    - synthetic media beyond generated source code
+    - frontier-scale training compute
+
+answers:
+  # ---- Pre-filled by sample author ----
+
+  # "Which business sector or regulated domain does this AI System operate in?"
+  sector.primary: ["software development", "developer tooling and code generation"]
+
+  # "Does this AI System make, recommend, or materially support consequential or material decisions?"
+  decisions.types: ["code ship/rework decisions"]
+
+  # "Can this AI System make or materially drive a decision without case-by-case human approval?"
+  decisions.automated: true
+
+  # "What categories of decisions does this AI System support?"
+  decisions.categories: ["software build sign-off"]
+
+  # "Is a human required to review system output before downstream action?"
+  runtime.human_review_required: false
+
+  # "What regulated or sensitive data does this AI System process?"
+  data.types: ["game briefs", "generated source code", "test results", "build metadata"]
+
+  # "Does this AI System execute or generate code?"
+  capabilities.code_execution: true
+
+  # "Does this AI System perform biometric identification?"
+  capabilities.biometric_identification: false
+
+  # "Does this AI System produce conversational output?"
+  capabilities.conversational_output: false
+
+  # "Does this AI System predict criminal behavior?"
+  capabilities.criminal_prediction: false
+
+  # "Does this AI System make employment decisions?"
+  capabilities.employment_decisions: false
+
+  # "Is this a general-purpose AI (GPAI) model?"
+  capabilities.gpai_model: true
+
+  # "Does this AI System perform legal reasoning?"
+  capabilities.legal_reasoning: false
+
+  # "Which modalities does this AI System support?"
+  capabilities.modalities: ["text", "code"]
+
+  # "Does this AI System have direct user-facing interaction?"
+  capabilities.user_facing_interaction: false
+
+  # "Can this AI System generate video content?"
+  capabilities.video_generation: false
+
+  # "Do this system's decisions affect natural persons?"
+  decisions.affects_natural_persons: false
+
+  # "Do this system's decisions affect a protected class?"
+  decisions.affects_protected_class: false
+
+  # "Are minors among the users?"
+  users.minors: false
+
+  # "Are children among the data subjects?"
+  subjects.children: false
+
+  # ---- Sample-author defaults ----
+
+  # "What is the upstream third-party topology of this AI System?"
+  third_party.topology: built on Akka
+
+  # "Have third-party vendors provided attestations for their components?"
+  third_party.vendor_attested: no
+
+  # ---- Deployer-specific (replace with deployer's answer) ----
+
+  # "Which regulatory or voluntary frameworks should this AI System be evaluated against?"
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "Which voluntary standards or internal frameworks does your organization commit this AI System to follow?"
+  voluntary_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "Where will this AI System be offered, deployed, used, or affect people?"
+  geography.jurisdictions: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "For this system, what framework roles does your organization perform?"
+  governance.actor_roles: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "What risk tier or regulatory class has been assigned to this AI System?"
+  governance.risk_tier: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "Which sector regulators or supervisory authorities oversee this system or business line?"
+  governance.supervisors: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "Who may be affected by this AI System?"
+  subjects.affected_persons: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "What is the deploying organization's annual revenue?"
+  organization.annual_revenue: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "How many employees does the deploying organization have?"
+  organization.employee_count: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "Which regulator designations has the organization received?"
+  organization.regulator_designations: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "Does the organization have local representatives in covered jurisdictions?"
+  organization.local_representatives: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "What is the training compute used for the model?"
+  model.training_compute: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "Through which regulator routes must incidents be reported?"
+  incidents.regulator_routes: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "Where will data be stored (data residency)?"
+  data.residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "How long is data retained (days)?"
+  data.retention_period_days: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "Is the deployer a governmental entity?"
+  deployer.is_governmental_entity: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "Is the system enrolled in a regulatory sandbox?"
+  governance.sandbox_participation: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "Is AI-literacy training current for the workforce?"
+  workforce.ai_literacy_training_current: TO_BE_COMPLETED_BY_DEPLOYER
+
+  # "What systems does this AI System integrate with?"
+  system.integrations: TO_BE_COMPLETED_BY_DEPLOYER

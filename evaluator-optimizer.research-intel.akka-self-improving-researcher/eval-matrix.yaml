@@ -1,0 +1,108 @@
+schema_version: 1
+sample_id: self-improving-deep-researcher
+coordination_pattern: evaluator-optimizer
+domain: research-intel
+
+controls:
+  - id: E1
+    name: Record prompt-memory drift as an observable eval event
+    mechanism:
+      kind: eval-periodic
+      hook: on-memory-change
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      A research agent that rewrites its own system prompt is a continuous
+      drift surface. Without observation, prompt mutations accumulate silently
+      until the agent's behaviour diverges noticeably from its declared purpose.
+      Hashing the PromptMemory blocks on each DriftSampler tick and recording
+      every fingerprint change as a PromptDriftRecorded event gives operators a
+      continuous, timestamped audit trail of how the agent's strategy has evolved
+      — without blocking any research session. The event includes the old and new
+      fingerprints plus the count of changed blocks so a reviewer can triage
+      magnitude without reading every diff.
+    implementation: |
+      `DriftSampler` (TimedAction) fires every 60 s. It reads the live
+      `PromptMemory` from `governance/prompt-memory.json`, computes SHA-256 of
+      the serialized blocks, and compares to the last-seen fingerprint stored
+      in a local volatile field. On mismatch it calls
+      `SessionEntity.recordDrift(oldFingerprint, newFingerprint, changedBlockCount)`,
+      which emits `PromptDriftRecorded`. The call is idempotent on the
+      `(oldFingerprint, newFingerprint)` pair so a duplicate tick is a no-op.
+      All `PromptDriftRecorded` events surface in the App UI's drift timeline
+      and in the `/api/sessions/sse` stream.
+    regulation_anchors: []
+
+  - id: S1
+    name: Fail CI when undeclared prompt drift exceeds the recertification threshold
+    mechanism:
+      kind: ci-gate
+      hook: build-time-check
+      flavor: periodic-recertification-gate
+    enforcement: build-gate
+    rationale: |
+      Shipping a service whose agent prompt has silently drifted past a known-good
+      baseline transfers unreviewed behaviour to production. The recertification
+      gate enforces a deliberate sign-off step: after any session updates
+      PromptMemory, the deployer must run the project's Maven verify phase, which
+      computes the live fingerprint and compares it to the signed-off baseline in
+      `governance/prompt-baseline.json`. If the number of changed blocks exceeds
+      `self-improving-researcher.drift.max-diff-blocks` (default 2), the build
+      fails with a structured message naming the drifted block IDs, blocking the
+      PR from merging until the deployer either updates the baseline file or
+      reverts the memory changes.
+    implementation: |
+      A Maven test in `PromptBaselineVerificationTest.java` loads
+      `governance/prompt-baseline.json` and `governance/prompt-memory.json`,
+      computes the diff (counting changed `blockId` entries), and fails with an
+      `AssertionError` if the count exceeds the configured threshold. The
+      threshold is read from the `self-improving-researcher.drift.max-diff-blocks`
+      application config property. Updating the baseline requires a deliberate
+      file edit plus a passing `mvn verify` — the process is intentionally manual
+      to enforce human sign-off. The generated `Bootstrap.java` also logs the
+      current drift count at startup so operators know the memory state without
+      running the build.
+    regulation_anchors: []
+
+  - id: H1
+    name: Expose every memory update as a real-time human-observable event stream
+    mechanism:
+      kind: hotl
+      hook: runtime-event-stream
+      flavor: deployer-runtime-monitoring
+    enforcement: system-level
+    rationale: |
+      Self-improvement that happens inside the service boundary is invisible to
+      operators unless the system deliberately externalises each change. A
+      human-on-the-loop monitor addresses this by forwarding every `MemoryUpdated`
+      event to a dedicated SSE channel that any authorised reviewer can subscribe
+      to without access to the entity store or the file system. The channel is
+      read-only; it gives visibility without granting write access, maintaining
+      the separation between observation and control.
+    implementation: |
+      `ResearchEndpoint` exposes a `GET /api/sessions/sse?channel=memory-updates`
+      path that streams only `MemoryUpdated` events from the `SessionsView`
+      projection. Each SSE event carries the full `MemoryDiff` payload —
+      changed block IDs, before/after content, per-change reason, and the
+      session that triggered the update. The App UI's drift timeline subscribes
+      to this channel directly and renders each update inline. The channel
+      requires no authentication in the demo but is annotated with a TODO comment
+      for the deployer to wire their preferred auth mechanism before production use.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Periodic prompt-drift recorder
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —
+  - id: S1
+    label: Prompt recertification gate
+    mechanism: CI gate
+    implementation: periodic-recertification-gate
+    source: —
+  - id: H1
+    label: Memory-update observer stream
+    mechanism: Human-on-the-loop
+    implementation: deployer-runtime-monitoring
+    source: —

@@ -1,0 +1,105 @@
+schema_version: 1
+sample_id: whatsapp-order-agent
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Validate every tool call before it executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: write-operation-validator
+    enforcement: blocking
+    rationale: |
+      An order management agent that can create, modify, and cancel orders is only
+      one malformed tool call away from creating phantom orders, overselling out-of-stock
+      SKUs, or cancelling another customer's order. The before-tool-call hook is the
+      correct insertion point: it intercepts the agent's intent before any write reaches
+      OrderEntity, validates the parameters against live catalog data and ownership
+      rules, and either permits the call or returns a structured rejection that the
+      agent can act on within its iteration budget.
+    implementation: |
+      `ToolGuardrail` is registered on `OrderAgent` via the agent's guardrail-configuration
+      block, bound to the `before-tool-call` hook. On each tool invocation it (1) looks up
+      the SKU in `ProductCatalogService` and rejects if not found, (2) checks that the
+      requested quantity is a positive integer and does not exceed `Product.stockQuantity`,
+      and (3) for cancel/modify calls verifies that the target order's `sessionId` matches
+      the calling session. On any failure it returns `Guardrail.reject(<structured-error>)`
+      naming the specific check that failed; the agent loop uses the rejection text to
+      re-plan within its `maxIterationsPerTask(4)` budget. Only calls that pass all three
+      checks are forwarded to `OrderEntity`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII from stored conversation context
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      WhatsApp conversations routinely contain phone numbers, delivery addresses,
+      payment reference tokens, and customer account identifiers. Persisting these
+      verbatim in the durable event log violates data-minimisation principles and
+      creates unnecessary exposure if the event store is audited or exported. The
+      sanitizer runs after each turn completes — before the turn is written into the
+      projected SessionView — so the durable UI-visible record never contains raw
+      contact data, while the entity retains the raw text in a separate audit field.
+    implementation: |
+      `ConversationSanitizer` Consumer subscribes to `TurnCompleted` events emitted
+      by `SessionEntity`. It applies a pipeline of regex stages covering E.164 and
+      NANP phone formats, street-address heuristics, payment-card-like token patterns,
+      and common customer-ID formats over both the raw `customerMessage` and
+      `agentReply` fields. Outputs a sanitized `TurnContext` carrying redaction markers
+      (e.g. `[REDACTED-PHONE]`, `[REDACTED-ADDRESS]`) and a `piiCategoriesRedacted`
+      list. Calls `SessionEntity.attachSanitizedTurn(sanitizedTurn, turnId)`. The
+      `SessionView` table updater projects only the sanitized turn; the raw text
+      remains on the entity's `TurnReceived` event and is accessible only via the
+      audit API, never via the view.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require human approval for high-value orders
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: non-blocking
+    rationale: |
+      A conversational agent has no out-of-band signal to distinguish a legitimate
+      bulk purchase from a misconfigured or manipulated order. Automatically executing
+      orders above a threshold without a human review step creates financial exposure
+      proportional to the catalog's most expensive SKU times the maximum quantity the
+      agent is permitted to request. A HITL gate for high-value orders ensures an
+      operator can inspect the pending order, the conversation that generated it, and
+      the tool-call trace before any irreversible write is committed.
+    implementation: |
+      `OrderWorkflow.hitlStep` fires when `AgentReply.hitlRequired == true`, which
+      `OrderAgent` sets whenever `AgentReply.pendingOrderTotal` exceeds the
+      `hitl.order.threshold` value from `application.conf` (default 500.0). The step
+      emits `ApprovalRequested` on `SessionEntity`, moving the session to
+      `AWAITING_APPROVAL`. The UI surfaces a review card in the HITL queue with
+      the full pending order and conversation history. `OrderEndpoint` exposes
+      `POST /api/hitl/{orderId}/approve` and `POST /api/hitl/{orderId}/reject`; these
+      call `SessionEntity.grantApproval` or `SessionEntity.rejectApproval`.
+      `hitlStep` polls `SessionEntity` every 2 s for the resulting event; on
+      `ApprovalGranted` it advances to `completeStep`; on `ApprovalRejected` it
+      transitions the entity to `FAILED` with a user-visible reason. The step times
+      out after 300 s if no operator response arrives.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-tool-call write guard
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: PII redaction from conversation log
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: H1
+    label: Operator approval for high-value orders
+    mechanism: HITL
+    implementation: application
+    source: —

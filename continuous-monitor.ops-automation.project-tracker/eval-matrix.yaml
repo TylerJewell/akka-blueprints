@@ -1,0 +1,40 @@
+schema_version: 1
+sample_id: project-tracker
+coordination_pattern: continuous-monitor
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Block task actions unless policy checks pass
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: scope-enforcement
+    enforcement: blocking
+    rationale: |
+      Task assignments, nudge messages, and escalations affect real people: they redirect
+      work, impose social pressure, and surface individuals to management. An automated
+      agent that fires any of these actions without a policy gate can mis-assign work to
+      team members who are at capacity, send nudges that violate communication norms, or
+      trigger escalations without the authority to do so. The guardrail runs synchronously
+      before each of the three outbound tools (assignTask, sendNudge, escalateTask) and
+      checks capacity, content policy, and authority rules derived from the deployer's
+      configuration. A blocked action produces a structured DispatchResult with a
+      blockReason that the audit trail retains; the task stays in its current status and
+      the issue surfaces in the UI.
+    implementation: |
+      `GuardrailChecker` is a plain Java class called synchronously from `PlannerWorkflow`
+      (before the assignTask call in guardrailCheckStep) and from `StaleTaskChecker`
+      (before each sendNudge and escalateTask call). It exposes three static methods:
+      checkAssignment, checkNudge, and checkEscalation. Each returns a `DispatchResult`
+      with dispatched=false and a blockReason when a rule is violated. On a block,
+      `PlannerWorkflow` emits `TaskAssignmentBlocked` on `PlannerTaskEntity` and ends the
+      workflow step; `StaleTaskChecker` skips the dispatch and logs the result.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Task-action scope guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: it-helpdesk
+
+# ---- Purpose ----
+purpose:
+  primary_function: it-helpdesk
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: technician-queue
+  user_type: internal-employee
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-employee-it-requests
+  data_classes:
+    pii: true
+    credentials: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  secrets_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-with-guardrail
+  decision_subject: internal-employee
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-ticket-can-be-closed
+  routing_decisions_made_by_ai: true
+  resolution_decisions_made_by_ai: true
+  ticket_creation_gated_by_guardrail: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-employee
+  failure_modes:
+    - wrong-domain-routing
+    - credential-leakage-via-llm
+    - unauthorized-permission-grant
+    - open-ended-admin-ticket-creation
+    - p1-priority-without-approver
+    - duplicate-incident-creation
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: it-technician
+  reviewer_must_approve_every_outgoing: false
+  reviewer_must_unblock_guardrail_failures: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_request: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  employee_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: generator-critic
+coordination_pattern: evaluator-optimizer
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Gate the accepted draft against the content policy before release
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      The reflector's ACCEPT verdict confirms internal quality criteria are met,
+      but it does not evaluate the draft against the operator's content policy.
+      A draft that passes the reflection rubric can still contain phrases an
+      operator has flagged as prohibited for their deployment context. Running a
+      deterministic policy check on the accepted text before it reaches the
+      caller ensures the operator's policy obligations are enforced even when the
+      reflector has not been instructed about them. Keeping the two checks
+      separate lets operators update the phrase list without touching the
+      reflector prompt or the rubric.
+    implementation: |
+      Wired as the `guardrailStep` of `ReflectionWorkflow`, immediately after
+      `reflectStep` returns `ACCEPT`. A pure-function scan of
+      `draft.text()` against the phrase list in
+      `basic-reflection.policy.forbidden-phrases` (default: empty list;
+      operators extend via application.conf or env override). On failure, emits
+      `RoundGuardrailVerdictRecorded` with `verdict.passed = false` and
+      `reasonCode = "POLICY_VIOLATION"`, then transitions to `policyReviseStep`,
+      which calls `GeneratorAgent.POLICY_REVISE` with a structured feedback
+      string listing the offending phrases. The revised draft goes directly back
+      to `guardrailStep`; it does not re-enter the reflector loop. A second
+      guardrail failure fails over to `rejectStep` via
+      `defaultStepRecovery(maxRetries(2).failoverTo(rejectStep))`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every round's reflector verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The reflector's accept-or-revise verdict is the quality signal the loop
+      produces each round. Persisting it as a typed event per round gives
+      operators a continuous quality stream — accept rate by round number, drift
+      in average score over time, frequency of policy-violation guardrail blocks
+      — without coupling the workflow to any external analytics sink. The events
+      are queryable from the entity and surfaced verbatim in the App UI's
+      per-round timeline, providing an audit trail that covers both the iteration
+      dynamics and the terminal outcome.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `EssaysView.getAllEssays`, finds rounds that have been reflected upon but
+      do not yet have a matching `ReflectionRecorded` event, and calls
+      `EssayEntity.recordReflectionEval(roundNumber, verdict, score,
+      guardrailPassed)`. The call is idempotent on `(essayId, roundNumber)`.
+      The workflow itself also emits one `ReflectionRecorded` event on the
+      terminal transition (`EssayReleased` or `EssayRejectedFinal`) carrying the
+      whole loop's outcome — round count, best score, and whether the guardrail
+      was invoked.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · content policy
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Per-round eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

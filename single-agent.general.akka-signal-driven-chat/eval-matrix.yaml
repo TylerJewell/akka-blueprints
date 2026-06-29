@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: signal-driven-chat
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: H1
+    name: Pause workflow and inject operator context before resuming
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: non-blocking
+    rationale: |
+      A long-running conversational workflow can drift — the agent may be mid-way
+      through a multi-turn exchange when an operator notices the conversation has
+      gone off-course. Application-level HITL gives the operator a named, typed
+      mechanism (pauseSignal + resumeSignal with a correctiveNote) to halt turn
+      processing, inject corrective context, and resume — without killing the session
+      and losing accumulated conversation history. This is distinct from post-hoc
+      review: the operator intervenes inside the running workflow, and the correction
+      becomes part of the turn log, making the intervention auditable.
+    implementation: |
+      `ChatSessionWorkflow` exposes a `pauseSignal(PauseSignal)` that transitions
+      the workflow to `pausedStep` and calls `ChatSessionEntity.pauseSession(reason)`,
+      emitting a `SessionPaused` event. The workflow suspends in `pausedStep` with a
+      300 s timeout. When a `resumeSignal(ResumeSignal)` arrives, the workflow extracts
+      `correctiveNote`; if non-empty it prepends the note (tagged `[OPERATOR NOTE]`)
+      to the next `processTurnStep`'s conversation context before invoking `ChatAgent`.
+      `ChatSessionEntity.resumeSession(correctiveNote)` emits `SessionResumed`,
+      preserving the note in the entity's event log for audit. The UI surfaces both
+      the Pause and Resume buttons only when the session is in the correct state.
+    regulation_anchors: []
+
+  - id: G1
+    name: Validate inbound signals before driving the agent
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: input-validator
+    enforcement: blocking
+    rationale: |
+      Workflow signals are the primary external input surface for a running session.
+      Unlike the initial request — which is validated by the HTTP layer — mid-flight
+      signals arrive asynchronously and bypass the normal request-handling path. An
+      unchecked blank or oversized signal would produce a degenerate agent task
+      (empty instructions, or a context that exceeds the model's token budget). A
+      prompt-injection attempt hidden in a follow-up signal is indistinguishable from
+      a legitimate continuation unless validated. The before-agent-invocation hook is
+      the correct cut point: signals are screened before the task is built, so the
+      model never sees a malformed or injected input.
+    implementation: |
+      `SignalValidator` is registered on `ChatAgent` via the agent's guardrail-
+      configuration block, bound to the `before-agent-invocation` hook. On each
+      `AddTurnSignal` it checks: (1) prompt is non-empty and not whitespace-only,
+      (2) prompt length is ≤ 8000 characters, (3) prompt does not contain a token
+      from the blocked-phrase list in `application.conf` (akka.javasdk.agent.
+      blocked-phrases), (4) source is a valid `TurnSource` enum value. On any
+      failure, `SignalValidator` returns a structured rejection identifying the failed
+      check; `ChatSessionWorkflow` treats this as a failed step and records
+      `SessionFailed` on `ChatSessionEntity`. Valid signals proceed to
+      `processTurnStep` unchanged.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Operator pause + inject
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: G1
+    label: Inbound-signal guardrail
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —

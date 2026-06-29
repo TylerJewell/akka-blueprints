@@ -1,0 +1,65 @@
+# Eval Matrix for the akka-agents-as-tools Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (general domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: akka-agents-as-tools
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Gate every sub-agent tool call before it is dispatched
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: >
+      In the agents-as-tools topology the supervisor's routing decision IS a tool call.
+      A prohibited tool name or a malformed argument set could trigger an unintended
+      sub-agent invocation — for example, calling the translate tool on personally
+      identifiable text when the deployer has not cleared that data class. A before-tool-call
+      guardrail intercepts the RoutingDecision before dispatch, so the check runs at the
+      only point where a veto is still effective.
+    implementation: >
+      CompositionWorkflow.guardrailStep runs immediately after Supervisor returns a
+      RoutingDecision and before dispatchStep selects the sub-agent. The step inspects
+      RoutingDecision.selectedTool against a configurable allowlist and validates the
+      task arguments. On failure the workflow calls TaskRequestEntity.block and the
+      request enters BLOCKED without any sub-agent ever running.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample completed task decisions for output quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The supervisor assembles a final TaskResult by merging its routing reasoning with the
+      sub-agent's ToolResult. That assembly decision is invisible to the user unless it is
+      logged and scored. Sampling one completed task every five minutes with a rubric judge
+      gives operators a running quality signal without blocking delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries CompositionView for the oldest
+      COMPLETED request lacking an evalScore, runs a 1-5 rubric judge over the TaskResult
+      output, and calls TaskRequestEntity.recordEval(score, rationale), emitting TaskEvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Before-tool-call guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Block a prohibited or malformed sub-agent tool call before dispatch.
+  - id: E1
+    name: Task output quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the supervisor's assembled task result.

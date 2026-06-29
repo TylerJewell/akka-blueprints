@@ -1,0 +1,84 @@
+# Eval Matrix for the parallel-hiring-reviewers Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (hr-recruiting domain) with no
+# industry- or jurisdiction-bound anchors pre-selected, so regulation_anchors is
+# intentionally an empty list across all controls. Deployers operating under EEOC,
+# EU AI Act high-risk (employment decisions), or local bias-in-hiring law should
+# populate regulation_anchors with the relevant corpus entries.
+
+schema_version: 1
+sample_id: parallel-hiring-reviewers
+coordination_pattern: debate-multi-perspective
+domain: hr-recruiting
+
+matrix_cell:
+  coordination_pattern: debate-multi-perspective
+  domain: hr-recruiting
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: S1
+    name: Redact protected attributes from the candidate profile before any reviewer reads it
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: system-level
+    rationale: |
+      Hiring decisions are consequential and legally constrained. Résumé text
+      submitted by a recruiter or applicant can surface protected attributes —
+      inferred gender markers, age indicators, marital status phrases,
+      national-origin cues, and race/ethnicity markers — that reviewers should
+      not encounter. Exposing those attributes to the HR, manager, or team
+      reviewer before evaluation is complete risks anchoring bias and creates
+      direct legal exposure under equal-opportunity frameworks. Redacting at
+      intake keeps protected attributes out of every agent prompt and out of the
+      persisted evaluation record.
+    implementation: |
+      The deterministic `SpecialCategorySanitizer` runs in
+      `ReviewWorkflow.sanitizeStep` before the coordinator plans or any reviewer
+      is dispatched. It replaces gender markers, age indicators, marital status
+      phrases, national-origin cues, and race/ethnicity markers with typed
+      placeholders ([GENDER], [AGE], [MARITAL_STATUS], [ORIGIN], [RACE]) and
+      returns a redaction count. Only the redacted résumé text is persisted on
+      `CandidateEntity` (via `ProfileSanitized`); the raw text lives in the
+      workflow's transient state and is never stored.
+    regulation_anchors: []
+
+  - id: E1
+    name: Monitor reviewer perspectives for fairness drift over time
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      In a parallel multi-reviewer hiring panel, a systematic imbalance can
+      develop over time: one reviewer role may consistently recommend DECLINE for
+      candidates with similar profiles while others recommend ADVANCE, or the
+      panel coordinator may weight one perspective disproportionately in
+      aggregation. Neither pattern is visible from a single evaluation; it only
+      emerges over a population of decisions. Periodic fairness scoring samples
+      completed evaluations and flags when the three-perspective balance drifts,
+      giving operators an early signal before a pattern becomes a liability.
+    implementation: |
+      `FairnessSampler` (TimedAction) fires every 10 minutes. It picks the
+      oldest DECIDED evaluation without a `fairnessScore`, calls `FairnessJudge`
+      with the three perspective reviews and the overall recommendation against
+      a 1–5 proportionality rubric, and emits a `FairnessScored` event with the
+      score and a one-sentence rationale. The scores surface on the App UI tab
+      beside each evaluation, and operators can inspect trends across the
+      evaluation list to identify systematic drift.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Special-category sanitizer
+    mechanism: Sanitizer
+    implementation: protected-attribute redaction at intake
+    source: —
+  - id: E1
+    label: Fairness drift watch
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —

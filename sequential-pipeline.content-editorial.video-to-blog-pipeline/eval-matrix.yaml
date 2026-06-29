@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: video-to-blog-pipeline
+coordination_pattern: sequential-pipeline
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Screen final blog post response for prohibited content before recording
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      In a content-editorial pipeline, the most consequential failure is publishing
+      output that contains harmful health advice, undisclosed affiliate language, or
+      deceptive-disclosure patterns. These failures do not arise from incorrect tool
+      calls earlier in the pipeline — a structurally valid TRANSCRIPT → SUMMARISE →
+      DRAFT chain can still produce a POLISH response whose prose crosses a content
+      boundary. The before-agent-response hook is the correct cut: it inspects the
+      finished response text after all prose-polishing tool calls have completed but
+      before the `PostPolished` event is recorded on the entity, giving the guardrail
+      access to the final output without blocking any intermediate tool calls. On
+      rejection the agent loop retries the POLISH task within its 3-iteration budget,
+      and a `GuardrailRejected` event records the prohibited phrase for operator audit.
+    implementation: |
+      `PublishGuardrail` is registered on `BlogAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. It
+      loads a prohibited-phrase list from `src/main/resources/config/prohibited-phrases.txt`
+      at startup (one phrase per line, case-insensitive match). On every POLISH task
+      response it scans the `BlogPost` serialisation for any prohibited phrase. If a
+      match is found, it returns `Guardrail.reject("content-violation: response contains
+      prohibited phrase '<phrase>'")` and calls `BlogPostEntity.recordGuardrailRejection(
+      phase, reason)` so the rejection appears in the UI's rejection-log strip and in the
+      audit log. On accept, the response passes through unchanged and `polishStep` records
+      `PostPolished`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every emitted blog post for editorial quality and structural completeness
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A blog post that passes the publish guardrail can still fall short editorially —
+      a section with no heading, a word count far outside the target range, or a section
+      count that drifted between the draft and polish phases. These patterns are hard for
+      a human reviewer to catch quickly when scanning a list of posts. An on-decision
+      evaluator that runs immediately after `PostPolished` surfaces these gaps with a
+      structured score and a one-sentence rationale, letting an editor triage quickly:
+      posts scoring ≤ 2 are flagged visually and warrant a closer read before scheduling.
+    implementation: |
+      `EditorialScorer` runs inside `BlogPipelineWorkflow.evalStep`, fired immediately
+      after `PostPolished` lands. The scorer is deterministic and rule-based (no LLM
+      call — keeping the single-agent sequential-pipeline invariant honest). Four checks,
+      one point per check satisfied, on a base of 1:
+      (1) Section parity — `post.sections.size() == draft.sections.size()` (no silent
+      expansion or collapse during polishing).
+      (2) Heading completeness — every `PostSection.heading` is non-empty.
+      (3) Word count — `400 <= post.wordCount <= 1200` (target editorial range).
+      (4) Body completeness — every `PostSection.body` is non-empty.
+      Emits `EvaluationScored{score: 1-5, rationale: String}` with a rationale sentence
+      naming the largest gap. The score is surfaced on the App UI tab; posts with score
+      ≤ 2 are flagged with a red card border for human inspection before publishing.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Publish content guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Editorial quality eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

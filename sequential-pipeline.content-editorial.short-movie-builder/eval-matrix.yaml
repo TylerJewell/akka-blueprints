@@ -1,0 +1,58 @@
+schema_version: 1
+sample_id: short-movie-agents
+coordination_pattern: sequential-pipeline
+domain: content-editorial
+
+controls:
+  - id: H1
+    name: Block policy-violating content before committing any phase result
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: after-llm-response
+    enforcement: blocking
+    rationale: |
+      Content-editorial pipelines produce user-visible text at every phase —
+      a script scene, a storyboard description, an assembly note, a review
+      summary — and each of those phases can independently introduce a policy
+      violation: explicit language, a regulated brand name used fictionally,
+      a legally restricted claim, or incoherent violent imagery. Checking
+      safety at the tool-call boundary (before-tool-call) would miss violations
+      that arise from how the LLM *combines* tool outputs into a structured
+      result. The after-llm-response hook is the minimal and correct cut:
+      it fires once per task result, after the LLM has produced the complete
+      payload and before the workflow writes it as an immutable event on the
+      entity. A violation returned at this hook costs the agent one iteration
+      of its four-iteration budget; if the agent cannot produce a clean result
+      within budget, the production fails with a structured error rather than
+      committing policy-violating content to the event log.
+    implementation: |
+      `ContentSafetyGuard` is registered on `MovieAgent` via the agent's
+      guardrail-configuration block, bound to the `after-llm-response` hook.
+      After every task result (WRITE_SCRIPT, DESIGN_STORYBOARD,
+      ASSEMBLE_PACKAGE, REVIEW_PACKAGE) the guard receives the complete text
+      payload and applies four deterministic rule checks in order:
+      (1) Explicit/graphic content — keyword scan against a configurable
+      banned-word list loaded from `src/main/resources/safety/banned-words.txt`.
+      (2) Regulated brand names — lookup against
+      `src/main/resources/safety/regulated-brands.txt`; a match causes
+      rejection with violationType `regulated-brand`.
+      (3) Legally restricted claims — regex pattern match against
+      `src/main/resources/safety/restricted-claim-patterns.txt`; a match
+      causes rejection with violationType `restricted-claim`.
+      (4) Incoherent violence — keyword scan against a secondary list;
+      causes rejection with violationType `incoherent-violence`.
+      On reject, the guard calls `MovieEntity.recordSafetyBlock(phase,
+      violationType, reason)` via the component client so the block appears in
+      the UI's safety-block log strip and the audit event log, then returns
+      `Guardrail.reject("safety-block: <violationType>: <reason>")` to the
+      agent loop. On accept, `Guardrail.accept()` is returned and the workflow
+      proceeds to commit the event.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Content safety guardrail
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —

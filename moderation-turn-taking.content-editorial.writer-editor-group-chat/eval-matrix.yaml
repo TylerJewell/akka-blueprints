@@ -1,0 +1,98 @@
+# Eval Matrix for the writer-editor-group-chat Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (content-editorial domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: writer-editor-group-chat
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: moderation-turn-taking
+  domain: content-editorial
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Quality-check each agent turn before broadcast
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      Each agent's content is broadcast to the shared transcript and feeds the
+      other agent's next turn. A low-quality or unsafe turn must not enter the
+      conversation; the guardrail runs before the turn is published.
+    implementation: >
+      GroupChatWorkflow runs a before-agent-response guardrail on the content
+      returned by WriterAgent and EditorAgent. A failing check emits TurnBlocked
+      on ConversationEntity and re-requests the same speaker instead of calling
+      publishTurn.
+    regulation_anchors: []
+
+  - id: E1
+    name: Treat each Editor critique as an event-triggered eval
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The Editor's approve/revise decision is an evaluation of the current
+      draft. Recording it as an event-triggered eval surfaces a per-round
+      quality signal in the transcript.
+    implementation: >
+      TurnEvalConsumer subscribes to ConversationEntity events; on a
+      TurnPublished where the speaker is EDITOR it records the Critique score as
+      an eval result surfaced beside the turn in TurnView and the UI.
+    regulation_anchors: []
+
+  - id: A1
+    name: Test-gate before deployment
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: >
+      The round-robin loop and its terminal transitions must be covered before
+      any deploy.
+    implementation: >
+      Maven test phase plus an integration test driving a full
+      open -> writer -> editor -> approve flow end-to-end against the in-memory
+      testkit.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Operator halt of new conversations
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: >
+      An operator must be able to stop new conversations if a content incident
+      is detected.
+    implementation: >
+      A KeyValueEntity SystemControl holds a halted boolean; ChatEndpoint and
+      ConversationConsumer check it before accepting or starting work.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Turn quality gate
+    mechanism: "guardrail · before-agent-response"
+    short: Block a low-quality or unsafe turn before it joins the transcript.
+  - id: E1
+    name: Editor critique eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Record a score on every Editor decision turn.
+  - id: A1
+    name: Test gate
+    mechanism: "ci-gate · test-gate"
+    short: Round-robin tests must pass before deploy.
+  - id: HT1
+    name: System halt
+    mechanism: "halt · operator-regulator-stop"
+    short: Operator can stop new conversations.

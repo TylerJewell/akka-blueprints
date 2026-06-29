@@ -1,0 +1,43 @@
+schema_version: 1
+sample_id: games-sales
+coordination_pattern: single-agent
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Reject malformed recommendations before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A customer-facing sales UI amplifies the impact of a bad agent response: an
+      out-of-range confidence score renders a broken UI widget, a hallucinated catalog
+      entry directs a customer to a product that does not exist, and an empty suggestion
+      list leaves the customer with nothing to act on. The before-agent-response hook is
+      the correct cut point — catching these problems before the recommendation reaches
+      SessionEntity means they never appear in the live list or the SSE stream. The agent
+      retries within its iteration budget, so the customer experiences a brief pause rather
+      than a visible error.
+    implementation: |
+      `RecommendationGuardrail` is registered on `SalesAssistantAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. At startup
+      the class loads the set of valid `catalogId` values from
+      `src/main/resources/sample-events/game-catalog.jsonl` into an in-memory `Set<String>`.
+      On each candidate response it (1) parses the response into `SalesRecommendation`,
+      (2) asserts `suggestions` is non-empty, (3) asserts every `suggestions[].catalogId`
+      is present in the loaded catalog set, (4) asserts every `suggestions[].confidenceScore`
+      is in `[0.0, 1.0]`, and (5) asserts `summary` is non-empty. On any failure it returns
+      a structured rejection naming the failed check; the agent loop consumes one of its
+      3 iterations and retries. Passing responses flow through to `SessionWorkflow.queryStep`
+      or `followUpStep`, which then call `SessionEntity.recordRecommendation` or
+      `recordFollowUp`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Recommendation-form guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

@@ -1,0 +1,116 @@
+# Eval Matrix for the meeting-assistant Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires
+# regulation_anchors on each control. This is a community-content sample
+# (ops-automation domain) with no industry- or jurisdiction-bound anchors, so
+# regulation_anchors is intentionally an empty list across all controls.
+
+schema_version: 1
+sample_id: meeting-assistant
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: sequential-pipeline
+  domain: ops-automation
+
+integration_tier: real-service-via-env-var
+
+controls:
+  - id: S1
+    name: Redact personal data before the model sees the transcript
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Meeting transcripts routinely contain names, emails, and phone numbers.
+      Redacting them before any model call keeps personal data out of the
+      prompt and out of downstream Trello and Slack writes.
+    implementation: >
+      PipelineWorkflow.sanitizeStep runs PiiRedactor.redact over the raw notes
+      (emails, phone numbers, capitalised name heuristics) and emits
+      NotesSanitized with a redaction count. The agent only ever receives the
+      redacted text.
+    regulation_anchors: []
+
+  - id: G1
+    name: Guard external writes against non-allowlisted targets
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Creating a Trello card or posting a Slack message is an external write.
+      A before-tool-call guardrail confirms the target board and channel are
+      allowlisted and the meeting is in EXTRACTED state before the write fires.
+    implementation: >
+      PipelineWorkflow.dispatchStep invokes a before-tool-call guardrail before
+      each TrelloClient/SlackClient call; a non-allowlisted target or wrong
+      status causes recordFailure and a DispatchFailed event with the reason.
+    regulation_anchors: []
+
+  - id: P1
+    name: Retry meetings stuck before dispatch
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: >
+      A meeting that reached EXTRACTED but never dispatched (transient failure)
+      should be re-driven rather than left silently incomplete.
+    implementation: >
+      DispatchRetryMonitor TimedAction runs every 30s, queries MeetingsView for
+      meetings in EXTRACTED older than 60 seconds, and re-runs the workflow
+      dispatch for each.
+    regulation_anchors: []
+
+  - id: A1
+    name: Test-gate before deployment
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: >
+      The pipeline performs external writes; tests must pass before any deploy.
+    implementation: >
+      Maven test phase plus an integration test driving submit -> sanitize ->
+      extract -> dispatch end-to-end against the in-memory testkit and the
+      in-process SimEndpoint.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Operator halt of intake
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: >
+      An operator must be able to stop accepting new meeting notes if an
+      incident with downstream writes is detected.
+    implementation: >
+      KeyValueEntity SystemControl holds a halted boolean; MeetingEndpoint and
+      NotesConsumer check it before accepting or processing work.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: PII redaction
+    mechanism: "sanitizer · pii"
+    short: Redact names, emails, phones before the model call.
+  - id: G1
+    name: Guard external writes
+    mechanism: "guardrail · before-tool-call"
+    short: Block Trello/Slack writes to non-allowlisted targets.
+  - id: P1
+    name: Dispatch retry watch
+    mechanism: "eval-periodic · performance-monitor"
+    short: Re-drive meetings stuck in EXTRACTED.
+  - id: A1
+    name: Test gate
+    mechanism: "ci-gate · test-gate"
+    short: Tests must pass before deploy.
+  - id: HT1
+    name: Intake halt
+    mechanism: "halt · operator-regulator-stop"
+    short: Operator can stop accepting new notes.

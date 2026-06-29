@@ -1,0 +1,129 @@
+# Eval Matrix for the mortgage-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (finance-analysis domain) with no specific
+# jurisdiction-bound anchors pre-filled; deployers add their own anchors before use.
+
+schema_version: 1
+sample_id: mortgage-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: S1
+    name: Strip applicant PII before it reaches any agent prompt
+    mechanism:
+      kind: sanitizer
+      hook: system-level
+      flavor: pii
+    enforcement: system-level
+    rationale: >
+      Mortgage applications contain applicant names, addresses, national insurance numbers,
+      and income statements. Forwarding raw identity fields into LLM prompts risks
+      unintended retention, logging, and model training on personal data. A system-level
+      PII sanitiser intercepts the application at the workflow boundary, replaces identity
+      fields with an opaque applicantRef, and prevents any AutonomousAgent from ever
+      receiving raw personal identifiers. This is necessary even before an eligibility
+      check, because the model's reasoning output may echo back inputs verbatim.
+    implementation: >
+      MortgageWorkflow receives the full ApplicationRequest from ApplicationConsumer but
+      passes only the sanitised applicantRef and financial parameters to each agent
+      invocation. Raw identity data is held exclusively in ApplicationEntity's event log
+      and state, which is never forwarded to MortgageSupervisor, EligibilityAgent,
+      DocumentationAgent, UnderwritingAgent, or CustomerCommsAgent. The sanitiser runs at
+      the start of decomposeStep, before any forAutonomousAgent call is issued.
+    regulation_anchors: []
+
+  - id: S2
+    name: Filter proposed lending terms against sectoral product rules before HITL gate
+    mechanism:
+      kind: sanitizer
+      hook: before-agent-response
+      flavor: sector
+    enforcement: blocking
+    rationale: >
+      Mortgage lending is governed by product-specific rules — rate ceilings, maximum LTV
+      thresholds, affordability stress-test requirements, and consumer credit regulations.
+      An AI-proposed term structure that violates these rules cannot legally proceed to a
+      human underwriter for sign-off, because the underwriter's approval would still result
+      in a non-compliant product. The sectoral compliance filter must therefore run before
+      the HITL gate so that a credentialled reviewer never inherits a structurally illegal
+      recommendation.
+    implementation: >
+      MortgageWorkflow's complianceStep is a deterministic rule check, not an LLM call.
+      It loads a product-rule table from src/main/resources/compliance/product-rules.yaml
+      and evaluates the UnderwritingAssessment's TermStructure against rate caps, LTV
+      ceilings, and affordability thresholds. On any violation, the step calls
+      ApplicationEntity.applyComplianceHold with a structured reason and transitions the
+      application to COMPLIANCE_HOLD without advancing to signOffStep.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require a credentialled underwriter to approve before the final decision
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Mortgage lending decisions are consequential and regulated: they affect whether
+      applicants can acquire property and are subject to responsible-lending obligations.
+      Allowing an AI system to issue an approval or decline autonomously would violate
+      both internal credit policy and applicable consumer-finance regulation. The HITL gate
+      ensures a credentialled underwriter reviews the full RecommendationPacket and
+      explicitly records a decision before the workflow can advance to the outcome
+      notification stage.
+    implementation: >
+      MortgageWorkflow's signOffStep emits a SignOffRequested event on ApplicationEntity
+      (status → PENDING_SIGNOFF) and suspends via a paused Workflow step. The step does
+      not poll; it resumes only when MortgageEndpoint receives POST /api/applications/{id}/decision
+      and calls ApplicationEntity.recordDecision, which transitions the application to
+      APPROVED or DECLINED and unblocks the workflow. The App UI surfaces a "Make decision"
+      panel on PENDING_SIGNOFF rows so the underwriter can act without leaving the interface.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score the supervisor's recommendation packet for lending-decision quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      A mortgage recommendation packet merges three independent agent assessments into a
+      single artefact that a human underwriter relies on to make a consequential credit
+      decision. Periodic quality scoring of these packets provides a feedback signal on
+      whether the agents' reasoning is accurate, internally consistent, and appropriately
+      calibrated to risk — without blocking delivery of the decision to the applicant.
+      Over time, low scores should trigger a review of the relevant agent prompts and
+      term-structure logic.
+    implementation: >
+      DecisionEvalSampler (TimedAction, every 5 minutes) queries ApplicationView for the
+      oldest APPROVED or DECLINED application lacking an evalScore. It runs a 1-5 rubric
+      judge over the RecommendationPacket — assessing eligibility reasoning, documentation
+      completeness logic, and proposed term appropriateness — then calls
+      ApplicationEntity.recordEval(score, rationale), emitting DecisionEvalScored. The
+      score and rationale appear in the App UI row without blocking the applicant's outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: Applicant PII sanitiser
+    mechanism: "sanitizer · system-level · pii"
+    short: Strip identity fields from all agent prompts; pass only the opaque applicantRef.
+  - id: S2
+    name: Lending terms compliance filter
+    mechanism: "sanitizer · before-agent-response · sector"
+    short: Block term structures that violate product rate caps, LTV ceilings, or affordability rules.
+  - id: H1
+    name: Underwriter sign-off gate
+    mechanism: "hitl · application"
+    short: Pause the workflow at PENDING_SIGNOFF until a credentialled underwriter records a decision.
+  - id: E1
+    name: Recommendation packet quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score each packet after decision; surface score in the App UI without blocking delivery.

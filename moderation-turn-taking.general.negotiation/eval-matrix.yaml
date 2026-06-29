@@ -1,0 +1,111 @@
+# Eval Matrix for the negotiation Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain sample with no industry- or jurisdiction-bound
+# anchors, so regulation_anchors is intentionally an empty list across all controls. Treat
+# the requirement as relaxed for non-anchored samples.
+#
+# G1 and E1 are the pattern-specific controls drawn from the corpus entry
+# (akka.playground.negotiation). A1 and HT1 are the standard operational controls every
+# deployable governed service carries.
+
+schema_version: 1
+sample_id: negotiation
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: moderation-turn-taking
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Hold every offer and the final terms inside the declared bands
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-bounds-check
+    enforcement: blocking
+    rationale: >
+      The final negotiated terms carry commercial implications. An agent that offers above
+      the buyer's budget, below the seller's floor, or settles outside the floor-to-budget
+      band would commit terms no party authorised. An output guardrail on every agent
+      response keeps each offer and the concluded price inside the bands the request declared.
+    implementation: >
+      A before-agent-response guardrail on BuyerAgent rejects any Offer whose price exceeds
+      buyerBudget; on SellerAgent rejects any Offer below sellerFloor; on FacilitatorAgent
+      rejects any FacilitatorDecision whose finalPrice falls outside the sellerFloor-to-
+      buyerBudget band or whose verdict is CONVERGED without a finalPrice. A rejected
+      response fails the workflow step, which fails over to the error step and concludes the
+      negotiation as NO_DEAL.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score the outcome on the convergence or stop decision
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The Facilitator's convergence or no-deal decision is the consequential moment of the
+      negotiation. An automated evaluator on that decision surfaces how the surplus split
+      between the parties, how many rounds it took, and whether a deal was reached, giving an
+      operator a quality signal without blocking the result.
+    implementation: >
+      OutcomeEvaluator (a Consumer) subscribes to NegotiationEntity events and, on
+      NegotiationConcluded, computes an outcome score from the surplus split (how the final
+      price sits between floor and budget), the rounds used against the ten-round cap, and the
+      deal flag, then calls NegotiationEntity.recordEvaluation. The score and notes render
+      beside the concluded negotiation in the App UI tab.
+    regulation_anchors: []
+
+  - id: A1
+    name: Test-gate the turn-taking loop before deployment
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: >
+      The convergence arithmetic and the ten-round cap decide every outcome. A regression in
+      either could silently commit bad terms or loop forever, so tests must pass before any
+      deploy.
+    implementation: >
+      The Maven test phase plus an integration test driving a deal scenario (budget above
+      floor converges with a final price in band) and a no-deal scenario (budget below floor
+      ends NO_DEAL at or before round ten) against the in-memory testkit.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Operator halt of new negotiations
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: >
+      An operator must be able to stop the system from starting new negotiations if a pricing
+      incident or a misbehaving agent is detected, without interrupting negotiations already
+      in flight.
+    implementation: >
+      SystemControl (a KeyValueEntity) holds a halted boolean. NegotiationEndpoint exposes
+      POST /api/system/halt and /api/system/resume; NegotiationRequestConsumer reads
+      SystemControl.isHalted before starting a workflow and skips the start while halted.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Offers stay in band
+    mechanism: "guardrail · before-agent-response"
+    short: Reject any offer or final price outside the floor-to-budget band.
+  - id: E1
+    name: Outcome eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Score every concluded negotiation on surplus split and rounds used.
+  - id: A1
+    name: Test gate
+    mechanism: "ci-gate · test-gate"
+    short: Deal and no-deal tests must pass before deploy.
+  - id: HT1
+    name: Operator halt
+    mechanism: "halt · operator-regulator-stop"
+    short: Operator can stop new negotiations from starting.

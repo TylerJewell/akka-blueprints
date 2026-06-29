@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: image-policy-scorer
+coordination_pattern: evaluator-optimizer
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Block prohibited brand-safety signals before the scorer runs
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      Generated image descriptions can carry latent brand-safety signals — violence,
+      adult-explicit content, hate speech — that a downstream policy scorer may
+      inconsistently flag depending on its rubric state. Sending a description
+      that already contains a known prohibited signal to the scorer wastes a
+      scoring cycle and risks inconsistent LLM-driven feedback masking a
+      deterministic violation. A rule-based gate checks the generator's
+      brandSafetySignal field against a configurable prohibited-signal list
+      before any scorer call occurs. A match short-circuits the attempt back to
+      the generator with a structured feedback note and a reasonCode of
+      PROHIBITED_SIGNAL, keeping the scorer focused on policy-ambiguous cases
+      rather than clear-cut violations.
+    implementation: |
+      Wired as the `gateStep` of `ScoringWorkflow`, immediately after
+      `generateStep`. A pure-function check on whether
+      `description.brandSafetySignal()` is contained in the
+      `image-policy-scorer.scoring.prohibited-signals` list loaded from
+      application.conf. On a match, emits `AttemptGateVerdictRecorded` with
+      `verdict.passed = false` and `reasonCode = "PROHIBITED_SIGNAL"`, then
+      transitions back to `generateStep` with a fixed `PolicyNotes("Description
+      contains a prohibited brand-safety signal; revise and resubmit.")`. The
+      generator's next call sees the structured feedback as the prior policy
+      notes. The cycle still counts toward `maxAttempts`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every cycle's policy decision as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The scorer's pass-or-fail decision is the highest-information signal the
+      image-policy loop produces. Recording it as a typed event per attempt gives
+      compliance operators a continuous quality stream — pass rate by attempt
+      number, score distribution over time, frequency of gate-blocked signals —
+      without instrumenting the workflow. When aggregated across many images,
+      these events expose systematic rubric drift and audience-tier mismatches
+      that would otherwise be invisible until a manual audit.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `ImagesView.getAllImages`, finds attempts that have been scored but do not
+      yet have a matching `PolicyEvalRecorded` event, and calls
+      `ImageEntity.recordEval(attemptNumber, decision, score, gateBlocked)`. The
+      call is idempotent on `(imageId, attemptNumber)`. The workflow itself also
+      emits one `PolicyEvalRecorded` event on the terminal transition
+      (ImageApproved or ImageRejectedFinal) carrying the whole loop's outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Safety gate · prohibited-signal check
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: E1
+    label: Per-attempt policy eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

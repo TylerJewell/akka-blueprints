@@ -1,0 +1,80 @@
+schema_version: 1
+sample_id: conversational-interview
+
+# ---- Purpose ----
+purpose:
+  primary_function: ai-assisted-interview-question-generation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: assist-only
+  user_type: hiring-coordinator-or-recruiter
+
+# ---- Data ----
+data:
+  inputs:
+    - candidate-answers
+    - role-definitions
+    - conversation-history
+  data_classes:
+    pii: true
+    special_category_personal_data: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  special_category_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: assist-only
+  decision_subject: interview-question-sequence
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  coordinator_reviews_every_question_before_delivery: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-interview-session
+  failure_modes:
+    - biased-question-generation
+    - protected-disclosure-elicitation
+    - special-category-leakage-via-llm
+    - question-off-competency
+    - incomplete-turn-sequence
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: hiring-coordinator
+  coordinator_reads_every_question_before_delivery: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_session: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  candidate_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  equal-employment-opportunity-policy-in-place: TO_BE_COMPLETED_BY_DEPLOYER
+  interview-data-use-limited-to-hiring-decision: TO_BE_COMPLETED_BY_DEPLOYER

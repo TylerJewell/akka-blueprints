@@ -1,0 +1,70 @@
+schema_version: 1
+sample_id: sql-gen-validator-loop
+coordination_pattern: evaluator-optimizer
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Block mutating SQL before the validator runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: input-policy
+    enforcement: blocking
+    rationale: |
+      SQL generation agents operating over natural-language inputs can produce
+      mutating statements (DROP, DELETE, UPDATE, INSERT, TRUNCATE, ALTER) when
+      the question is ambiguous or adversarially crafted. Running such a query
+      against any live database, even a dev schema, would cause irreversible
+      data loss. A deterministic keyword scan before the validator step catches
+      the violation before any schema-aware tooling is invoked, returns
+      structured feedback to the generator, and keeps the validation cycle
+      focused on correctness rather than safety.
+    implementation: |
+      Wired as the `guardrailStep` of `SqlWorkflow`, immediately after
+      `generateStep`. A pure-function regex scan checks `query.sql()` for
+      whole-word matches of {DROP, DELETE, UPDATE, INSERT, TRUNCATE, ALTER},
+      case-insensitive. On a match, emits
+      `AttemptMutationGuardrailVerdictRecorded` with `verdict.passed = false`
+      and `reasonCode = "MUTATION_FORBIDDEN"`, then transitions back to
+      `generateStep` with a fixed `ValidationNotes("Query contains a mutating
+      keyword; rewrite as a SELECT-only statement.")`. The attempt count still
+      increments so the ceiling is respected.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every cycle's validation outcome as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The validator's VALID/INVALID verdict and its 1–5 score are the
+      highest-information signal the generation loop produces. Capturing them
+      as typed events per attempt gives operators a continuous quality stream —
+      first-attempt pass rate, score distribution, frequency of mutation
+      blocks, and schema-coverage gaps — without coupling observability
+      infrastructure to the workflow itself. Accumulated eval events also serve
+      as training signal for prompt improvement.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `QueryRequestView.getAllRequests`, finds attempts that have been validated
+      but do not yet have a matching `ValidationEvalRecorded` event, and calls
+      `QueryRequestEntity.recordEval(attemptNumber, verdict, score,
+      mutationBlocked)`. The call is idempotent on `(requestId, attemptNumber)`.
+      `SqlWorkflow` also emits one `ValidationEvalRecorded` event on the
+      terminal transition (QueryRequestAccepted or QueryRequestFailedFinal)
+      carrying the whole loop's outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Mutation guardrail · before-tool-call
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Per-attempt validation recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

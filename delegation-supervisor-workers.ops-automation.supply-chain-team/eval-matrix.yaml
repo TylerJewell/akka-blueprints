@@ -1,0 +1,70 @@
+# Eval Matrix for the supply-chain-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (ops-automation domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: supply-chain-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: ops-automation
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Vet the supply recommendation before it reaches the operator
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The synthesised supply chain recommendation is the operator-facing artifact. A
+      recommendation that contains infeasible routes (negative transit days, costs above
+      budget ceiling), physically impossible stock positions (negative on-hand quantities),
+      or references to restricted trade partners must be caught before it is persisted and
+      acted upon. An output guardrail on DemandCoordinator intercepts the recommendation
+      at synthesis time, before it is written to SupplyOrderEntity, so no bad
+      recommendation ever reaches a procurement operator.
+    implementation: >
+      A before-agent-response guardrail on DemandCoordinator runs a deterministic validator
+      (checks for non-negative quantities, transit days in range 1-30, cost above zero)
+      plus an LLM judge over the SupplyRecommendation in OptimizationWorkflow.guardrailStep.
+      On failure the workflow calls SupplyOrderEntity.block and the order enters BLOCKED
+      with a failureReason describing the violation.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the coordinator synthesis decision for fulfillment quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The coordinator's synthesis decision merges a stock assessment and a route plan into
+      one recommendation. Because supply chain recommendations affect procurement spend and
+      delivery commitments, periodic quality scoring reveals systematic weaknesses in how
+      the coordinator balances cost against lead time. Scoring is non-blocking so completed
+      recommendations reach operators without delay; the score surfaces as an annotation
+      beside each order.
+    implementation: >
+      FulfillmentEvalSampler (TimedAction, every 5 minutes) queries SupplyOrderView for the
+      oldest RECOMMENDED order lacking an evalScore, runs a 1-5 rubric judge over the
+      SupplyRecommendation content (checking cost efficiency, route feasibility, and summary
+      coherence), and calls SupplyOrderEntity.recordEval(score, rationale), emitting
+      RecommendationScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Recommendation output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a recommendation with infeasible routes or invalid stock quantities.
+  - id: E1
+    name: Fulfillment quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's supply chain synthesis decision.

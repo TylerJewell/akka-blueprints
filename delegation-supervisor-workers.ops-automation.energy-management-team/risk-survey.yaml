@@ -1,0 +1,125 @@
+# Risk Survey for the energy-management-team Akka sample.
+#
+# Pre-filled answers reflect what the sample's surface implies. Deployer-specific answers
+# are TO_BE_COMPLETED_BY_DEPLOYER and must be filled in before this survey is used to
+# materialize a deployer Eval Matrix.
+
+archetype:
+  id: energy-management-team-sample
+  display_name: Energy Efficiency Management Agent (Akka Sample)
+  one_line_description: >
+    A coordinator dispatches HVAC, lighting, and equipment analysis to three specialist agents
+    in parallel, gates every control action through a safety guardrail, and consolidates results
+    into one actionable efficiency report.
+  scenario: |
+    A user (or simulator) triggers an optimization cycle for a building zone. EnergyCoordinator
+    decomposes the cycle into three parallel subsystem queries. HvacSpecialist, LightingSpecialist,
+    and EquipmentSpecialist analyse their respective telemetry and return typed reports. Before
+    any control-action tool executes, a before-tool-call guardrail checks it against safety and
+    comfort thresholds. The Coordinator consolidates all three reports into a ConsolidatedReport
+    estimating energy savings. A periodic eval sampler scores the consolidated report quality.
+    Building telemetry and control tools are modelled in-process — no external BMS integration
+    is required for this sample. The scenario is the canonical "delegation-supervisor-workers"
+    pattern in the ops-automation domain.
+
+  primary_regulations: []  # community sample, no jurisdiction-bound anchors
+
+  explicitly_not_applicable:
+    - clinical decision support
+    - judicial process
+    - employment decisions
+    - children data (unless deployer configures otherwise)
+    - predictive policing
+    - mass surveillance
+    - autonomous lethal targeting
+    - behavioral manipulation
+    - synthetic media beyond text
+    - frontier-scale training compute
+    - financial advice or credit decisions
+
+answers:
+  # ---- Pre-filled by sample author ----
+
+  sector.primary: ["building operations", "energy management", "facilities automation"]
+  decisions.types: ["energy optimization recommendations", "equipment control actions"]
+  decisions.automated: false
+  decisions.authority_level: recommend-only
+  decisions.categories: ["operational efficiency recommendations", "building control suggestions"]
+  runtime.human_review_required: true
+
+  data.types:
+    - building zone identifiers
+    - HVAC telemetry (load kW, setpoints)
+    - occupancy and daylight sensor readings
+    - equipment operating parameters
+    - optimization cycle metadata
+
+  data.pii: false
+
+  capability.direct_human_interaction: false
+  capability.synthetic_media: false
+  capability.content_generation: true
+  capability.emotion_recognition: false
+  capability.biometric_categorisation: false
+  capability.law_enforcement_authorization: false
+  capability.law_enforcement_context: false
+  capability.critical_infrastructure: true   # building systems qualify
+  capability.defense_context: false
+
+  model.gpai: true
+  model.foundation: true
+  model.systemic_risk: false
+
+  capabilities.synthetic_media_modalities: []
+  capabilities.predictive_policing: false
+  capabilities.mass_surveillance: false
+  capabilities.autonomous_lethal_targeting: false
+  capabilities.behavioral_manipulation: false
+  capabilities.clinical_decision_support: false
+  capabilities.judicial_process_use: false
+  capabilities.audio_generation: false
+  capabilities.video_generation: false
+  capabilities.biometric_identification: false
+  capabilities.conversational_output: false
+  capabilities.criminal_prediction: false
+  capabilities.employment_decisions: false
+  capabilities.gpai_model: true
+  capabilities.legal_reasoning: false
+  capabilities.modalities: ["text"]
+  capabilities.user_facing_interaction: false
+
+  decisions.employment_decision: false
+  decisions.consequential_domains: ["building operations", "energy consumption"]
+  decisions.affects_natural_persons: true   # occupants affected by comfort/temperature changes
+  decisions.affects_protected_class: false
+  regulations.sectoral_product_law: ["none"]
+
+  users.minors: false
+  subjects.children: false
+
+  # ---- Sample-author defaults ----
+  third_party.topology: built on Akka
+  third_party.vendor_attested: no
+
+  # ---- Deployer-specific (replace with deployer's answer) ----
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  voluntary_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  geography.jurisdictions: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.actor_roles: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.risk_tier: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.supervisors: TO_BE_COMPLETED_BY_DEPLOYER
+  subjects.affected_persons: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.annual_revenue: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.employee_count: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.regulator_designations: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.local_representatives: TO_BE_COMPLETED_BY_DEPLOYER
+  model.training_compute: TO_BE_COMPLETED_BY_DEPLOYER
+  incidents.regulator_routes: TO_BE_COMPLETED_BY_DEPLOYER
+  data.residency: TO_BE_COMPLETED_BY_DEPLOYER
+  data.retention_period_days: TO_BE_COMPLETED_BY_DEPLOYER
+  deployer.is_governmental_entity: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.sandbox_participation: TO_BE_COMPLETED_BY_DEPLOYER
+  attestations.eu_gpai_code_of_practice: TO_BE_COMPLETED_BY_DEPLOYER
+  attestations.safety_framework_published: TO_BE_COMPLETED_BY_DEPLOYER
+  workforce.ai_literacy_training_current: TO_BE_COMPLETED_BY_DEPLOYER
+  system.integrations: TO_BE_COMPLETED_BY_DEPLOYER

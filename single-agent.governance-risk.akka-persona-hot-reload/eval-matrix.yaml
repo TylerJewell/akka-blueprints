@@ -1,0 +1,106 @@
+schema_version: 1
+sample_id: persona-hot-reload
+coordination_pattern: single-agent
+domain: governance-risk
+
+controls:
+  - id: C1
+    name: Gate every persona payload before it reaches the agent
+    mechanism:
+      kind: ci-gate
+      hook: configuration-gate
+      flavor: configuration-gate
+    enforcement: build-gate
+    rationale: |
+      Runtime persona mutation is a direct injection surface: a malformed or adversarial
+      instruction set pushed to the Configuration Store applies immediately to every
+      subsequent agent conversation. The gate runs synchronously inside PersonaChangeConsumer
+      before any PersonaActivated event is written. It checks structural completeness
+      (all three mandatory keys present and non-blank), screens for known prompt-injection
+      directive patterns, and validates the requested model against an explicit allowlist.
+      A payload that fails any check never reaches PersonaAgent — the entity records
+      PersonaRejected instead and the previous persona remains active.
+    implementation: |
+      `PersonaValidator` is a plain Java class invoked synchronously by
+      `PersonaChangeConsumer` on receipt of each `PersonaChangeProposed` event. Structural
+      check: `agentRole`, `agentGoal`, `agentInstructions` all non-blank. Forbidden-pattern
+      check: `agentInstructions` is matched against a configurable regex list loaded from
+      `application.conf` `validation.forbidden-patterns` (default list covers known
+      jailbreak directives). Model-allowlist check: if `agentModel` is present, it must be
+      in the set defined in `application.conf` `validation.allowed-models`. `ValidationResult`
+      carries a boolean and a rejection reason. A `valid=false` result causes `PersonaChangeConsumer`
+      to call `PersonaEntity.reject(changeId, reason)` and NOT start `PersonaWatchWorkflow`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Revalidate agent behavior after every persona swap
+    mechanism:
+      kind: eval-event
+      hook: on-change-revalidation
+      flavor: on-change-revalidation
+    enforcement: non-blocking
+    rationale: |
+      A structurally valid persona can still produce harmful or off-policy behavior. The
+      "Restricted" fixture, for example, must refuse speculation and advice — a gate check
+      cannot verify this without actually running the agent. The behavioral revalidation
+      suite provides that signal: a fixed probe set designed for each persona fixture is
+      run immediately after activation, and the responses are scored against expected
+      behavioral signatures. A FAIL result does not roll back the persona (the gate already
+      approved the payload), but it surfaces immediately in the App UI and is included in
+      the monitoring-hook payload so a human operator can decide whether to push a
+      corrective change.
+    implementation: |
+      `BehavioralRevalidator` runs inside `PersonaWatchWorkflow.revalidationStep`,
+      fired immediately after `PersonaActivated` lands. The revalidator is deterministic
+      and rule-based — it does NOT make its own LLM call; it scores probe responses
+      returned by `PersonaAgent.runSingleTask(ANSWER_QUERY, probe.question)`. Probes are
+      loaded from `src/main/resources/sample-events/probe-set.jsonl`. Each probe carries
+      an `expectedBehaviorSignature` (e.g., "must contain refusal phrase", "must not contain
+      speculation"). Scoring: if all `ProbeOutcome == PASS` → `PASS`; if any pass → `PARTIAL`;
+      if none pass → `FAIL`. Emits `PersonaRevalidated` with the full `RevalidationResult`.
+      The App UI shows the badge on the persona change card; score FAIL highlights the card
+      border red.
+    regulation_anchors: []
+
+  - id: H1
+    name: Monitor live agent responses after every persona swap
+    mechanism:
+      kind: hotl
+      hook: deployer-runtime-monitoring
+      flavor: deployer-runtime-monitoring
+    enforcement: system-level
+    rationale: |
+      Even with a gate and a revalidation suite, the first real conversations after a
+      persona swap are the highest-risk window: the probes are fixed and cannot cover
+      every production query pattern. The human-on-the-loop monitoring window forwards
+      all agent responses from the 5 minutes immediately after activation to a configurable
+      operator channel. This gives a designated human the signal to push a rollback persona
+      change without blocking any conversation. The window is time-bounded and closes
+      automatically — it is not a permanent audit stream.
+    implementation: |
+      `PersonaChangeConsumer` opens the monitoring window on receipt of `PersonaActivated`.
+      For the next 300 seconds, every `AgentResponse` emitted by `PersonaAgent` with a
+      matching `changeId` is forwarded via an HTTP POST to the webhook URL configured in
+      `application.conf` `monitoring.operator-webhook` (skipped if not set). A counter
+      tracks `forwardedCount`. After 300 s, `PersonaChangeConsumer` calls
+      `PersonaEntity.closeMonitoringWindow(forwardedCount)`, which emits `MonitoringWindowClosed`
+      and transitions the entity to `MONITORED`. The App UI shows an orange banner during
+      the open window with elapsed time and forwarded-response count.
+    regulation_anchors: []
+
+simplified_view:
+  - id: C1
+    label: Persona payload gate
+    mechanism: CI-gate
+    implementation: configuration-gate
+    source: —
+  - id: E1
+    label: Post-swap behavioral revalidation
+    mechanism: Eval · event
+    implementation: on-change-revalidation
+    source: —
+  - id: H1
+    label: Live monitoring window
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring
+    source: —

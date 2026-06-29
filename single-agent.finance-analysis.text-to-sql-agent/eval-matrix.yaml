@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: text-to-sql-agent
+coordination_pattern: single-agent
+domain: finance-analysis
+
+controls:
+  - id: G1
+    name: Block destructive or injected SQL before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: sql-safety-validator
+    enforcement: blocking
+    rationale: |
+      A natural-language-to-SQL agent operates against a live database. If the LLM
+      generates a destructive statement (DROP, DELETE, UPDATE, INSERT, TRUNCATE) or
+      an injection signature (' OR 1=1 --, UNION SELECT), executing it would corrupt
+      or exfiltrate financial records. The before-tool-call hook is the correct cut:
+      the SQL string is available for inspection the moment the agent emits the tool
+      call, before the JDBC driver ever receives it. Blocking here means a guardrail
+      failure forces a retry within the same task iteration budget rather than
+      writing a bad query to the audit log or the database.
+    implementation: |
+      `SqlGuardrail` is registered on `SqlGeneratorAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook and scoped
+      to the tool named "execute_sql". On each tool invocation it (1) upper-cases the
+      SQL and checks for DDL/DML keywords (DROP, DELETE, UPDATE, INSERT, TRUNCATE,
+      ALTER, CREATE TABLE, CREATE INDEX), (2) checks for common injection patterns
+      (single-quote-semicolons, double-dash comments, UNION SELECT), (3) checks that
+      the FROM clause references only "receipts" (the single table in scope). On any
+      failure it returns a structured rejection message naming the failed check; the
+      agent loop consumes one of its 4 iterations and reformulates the query. Passing
+      SQL flows through to the `execute_sql` @Tool method, which opens a read-only
+      JDBC connection to the embedded SQLite database.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact customer identifiers from query results before response
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      The receipts table stores customer_name and customer_email for every transaction.
+      When an agent answers a question like "which customer spent the most?", the raw
+      result rows contain real personal identifiers. Returning those identifiers verbatim
+      in a chat-style finance interface is a data-minimisation failure: the question can
+      be answered with an anonymised label (CUSTOMER-A) or a redaction token without
+      exposing the underlying identity. The sanitizer runs after query execution and
+      before any result reaches the UI or the SSE stream, so the raw data is preserved
+      on the entity for authorised audit access while the user-facing surface shows only
+      the redacted form.
+    implementation: |
+      `ResultSanitizer` Consumer subscribes to `QueryExecuted` events emitted by
+      `QueryEntity`. For each result row it scans every column: any column named
+      `customer_name` or `customer_email` has its string value replaced with
+      `[REDACTED-NAME]` or `[REDACTED-EMAIL]` respectively; any other column whose
+      string value matches an RFC-5322 email regex is also replaced with
+      `[REDACTED-EMAIL]`. The Consumer builds a `SanitizedResult` carrying the
+      redacted rows and a `piiCategoriesFound` list, then calls
+      `QueryEntity.attachSanitized(sanitized)`. The raw `RawQueryResult` remains
+      accessible only via the entity's internal state (and the `/api/queries/{id}`
+      response body for authorised callers); the `QueryView` row and the SSE stream
+      carry only the sanitized form.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: SQL safety guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: Customer PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

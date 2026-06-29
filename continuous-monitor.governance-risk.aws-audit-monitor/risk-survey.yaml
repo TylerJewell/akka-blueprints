@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: aws-audit-monitor
+
+# ---- Purpose ----
+purpose:
+  primary_function: governance-risk-audit
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: advisory-only
+  user_type: risk-officer
+
+# ---- Data ----
+data:
+  inputs:
+    - aws-configuration-findings
+    - resource-metadata
+    - control-framework-mappings
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    cloud-account-identifiers: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  account_ids_normalized_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: advisory-only
+  decision_subject: cloud-resource
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible-until-published
+
+# ---- Failure ----
+failure:
+  blast_radius: organization-wide
+  failure_modes:
+    - missed-critical-misconfiguration
+    - false-positive-flooding
+    - incorrect-severity-assignment
+    - stale-control-mapping-drift
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: risk-officer
+  reviewer_must_approve_every_outgoing: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    # The simulated AWS scanner is in-process; replace with real AWS SDK calls when deploying.
+  rate_limit_per_finding: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  applicable_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

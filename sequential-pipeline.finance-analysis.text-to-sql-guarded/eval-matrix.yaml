@@ -1,0 +1,117 @@
+schema_version: 1
+sample_id: text-to-sql-guarded
+coordination_pattern: sequential-pipeline
+domain: finance-analysis
+
+controls:
+  - id: G1
+    name: Reject tool calls whose phase precondition is not yet satisfied
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: |
+      A financial query pipeline carries strict ordering guarantees: the SQL statement
+      must be generated and safety-inspected before the database is contacted, and raw
+      results must be fetched before they can be formatted. If a later-phase tool
+      (e.g., executeSql from the QUERY phase) is callable while the PARSE phase has
+      not yet recorded a ParsedQuery, the pipeline degrades silently and the safety
+      inspection in parseStep is bypassed entirely — a destructive statement could
+      reach the database unchecked. The before-tool-call hook is the right enforcement
+      point: it intercepts the misordered call at the agent–tool boundary before any
+      database I/O occurs, surfaces a structured rejection to the agent loop so it can
+      self-correct, and records the GuardrailRejected event for the audit trail.
+    implementation: |
+      `SqlGuardrail` is registered on `SqlAgent` via the agent's guardrail-configuration
+      block, bound to the `before-tool-call` hook. Each function-tool class (`ParseTools`,
+      `QueryTools`, `FormatTools`) carries a `SqlPhase` constant on its methods. On every
+      tool call the guardrail reads the candidate's `SqlPhase` and the current
+      `QueryEntity.status` (looked up via the `queryId` carried in the in-flight
+      `TaskDef.metadata`) and applies the accept matrix: `PARSE` tools require
+      `status ∈ {CREATED, PARSING}`; `QUERY` tools require `status ∈ {PARSED, QUERYING}`
+      AND `parsedQuery.isPresent()`; `FORMAT` tools require `status ∈ {QUERIED, FORMATTING}`
+      AND `rawResult.isPresent()`. On reject, the guardrail returns a structured
+      `phase-violation` error to the agent loop and calls
+      `QueryEntity.recordGuardrailRejection` so the rejection is visible in the UI's
+      rejection-log strip and in the audit log. On accept, the call proceeds.
+    regulation_anchors: []
+
+  - id: H1
+    name: Halt automatically when generated SQL contains destructive statement patterns
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: blocking
+    rationale: |
+      Language models asked to translate natural-language financial questions into SQL
+      can produce DROP, DELETE, UPDATE, INSERT, ALTER, TRUNCATE, or GRANT statements —
+      either by misunderstanding a question ("remove all entries older than 2020"),
+      through prompt injection in the user's question, or by model error. Executing any
+      of those statements against a financial database would cause irreversible data loss
+      or privilege escalation. The halt must fire before the database is contacted and
+      must not be retryable within the same pipeline run; the user must submit a corrected
+      question. Placing the check at the workflow level, after the agent returns
+      ParsedQuery but before queryStep starts, ensures that the SQL is inspected in every
+      run regardless of which model provider or prompt trajectory produced it.
+    implementation: |
+      `SqlSafetyInspector` runs inside `QueryPipelineWorkflow.parseStep` immediately after
+      the agent returns a `ParsedQuery` and before `QueryEntity.recordParsed` is called.
+      It applies a case-insensitive word-boundary scan for the pattern set
+      `{DROP, DELETE, UPDATE, INSERT, ALTER, TRUNCATE, GRANT}`. On any match it returns
+      `SafetyDecision{safe: false, matchedPattern: Optional.of("<pattern>")}`. The workflow
+      then writes `SafetyHaltFired{sql, matchedPattern}` on the entity, transitions status
+      to `HALTED`, and ends via `haltStep` — `queryStep` is never reached and the H2
+      database connection is never opened for this run. The halt is final; no
+      `defaultStepRecovery` retry applies to `haltStep`. The UI surfaces the halt reason
+      and matched pattern to the user.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII from raw database result rows before storing or surfacing them
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Financial database queries over employee and transaction tables frequently project
+      columns that carry personally identifiable information — Social Security Numbers,
+      account numbers, and employee names. Even a correctly-scoped read-only SELECT can
+      return this data. If raw result rows are passed directly to the formatting agent,
+      persisted on the entity, or returned in the API response, PII is exposed outside
+      its authorised boundary. The sanitizer must run on the raw result set before any
+      downstream processing sees it, so that the LLM's FORMAT task context, the stored
+      QueryReport, the View row, and the API response all carry only redacted values.
+    implementation: |
+      `PiiSanitizer` runs inside `QueryPipelineWorkflow.formatStep` on the `RawResult`
+      returned by `queryStep`, before `runSingleTask(FORMAT_RESULTS)` is called. It applies
+      three ordered redaction rules: (1) SSN rule — any cell value matching the regex
+      `\d{3}-\d{2}-\d{4}` is replaced with `***-**-****` regardless of column name;
+      (2) account-number rule — cells in columns named `account_number`, `acct_no`, or
+      `account_id` (exact, case-insensitive match) are replaced with `[REDACTED]` when the
+      value is a 9–12 digit sequence; (3) name rule — cells in columns named
+      `employee_name`, `customer_name`, or `full_name` are checked against an in-process
+      name lookup table built at startup from the seeded H2 data; matches are replaced with
+      `[NAME REDACTED]`. The sanitizer produces a `SanitizedResult{rows, redactionSummary}`
+      carrying a `redactionCount` and `List<String> redactedFields`. The `SanitizedResult`
+      is what `SqlAgent`'s FORMAT task receives as context and what is embedded in the
+      `QueryReport` written onto `QueryEntity`. The raw `RawResult` is also stored on the
+      entity (for the audit trail) but is never returned in the public API response.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Phase-gate tool guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Destructive-SQL safety halt
+    mechanism: Halt
+    implementation: automatic-safety-halt
+    source: —
+  - id: S1
+    label: PII redaction sanitizer
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

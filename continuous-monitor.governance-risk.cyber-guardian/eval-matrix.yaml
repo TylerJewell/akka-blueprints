@@ -1,0 +1,64 @@
+schema_version: 1
+sample_id: cyber-guardian-agent
+coordination_pattern: continuous-monitor
+domain: governance-risk
+
+controls:
+  - id: E1
+    name: Emit structured eval event on every incident close
+    mechanism:
+      kind: eval-event
+      hook: on-incident-close
+      flavor: on-incident-reporter
+    enforcement: non-blocking
+    rationale: |
+      Every cybersecurity incident — regardless of severity — produces a structured
+      EvalEventPayload that external audit pipelines and dashboards can consume. Without
+      a mandatory per-incident record, low-severity events accumulate silently and
+      pattern analysis becomes impossible. Capturing severity verdict, halt decision,
+      playbook flag, and confidence score in one canonical record gives downstream
+      reviewers the data they need to assess drift in model accuracy over time.
+    implementation: |
+      `EvalEventEmitter` TimedAction fires every 5 minutes. It queries `IncidentView` for
+      CLOSED or IGNORED incidents that do not yet have an `evalEvent` field populated,
+      picks up to 10 (oldest-first), constructs an `EvalEventPayload` per incident from
+      the entity's final state, and calls `IncidentEntity.recordEvalEvent`. The entity
+      emits an `EvalEventEmitted` event and sets the `evalEvent` field. The payload is
+      available on `GET /api/threats/{id}` and surfaced in the UI's App UI tab.
+    regulation_anchors: []
+
+  - id: H1
+    name: Automatically isolate host on CRITICAL severity confirmation
+    mechanism:
+      kind: halt
+      hook: on-severity-confirmed
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      For CRITICAL-severity threats — ransomware propagation, active privilege escalation,
+      confirmed C2 beacons — waiting for a human to read an alert and approve action is
+      not acceptable. The system issues a `HaltDirective` immediately upon CRITICAL
+      severity confirmation, before any remediation playbook is drafted. The halt is
+      recorded as a first-class event so it is auditable, reversible, and cannot be
+      silently skipped. Human approval is required only to lift the halt, not to issue it.
+    implementation: |
+      Inside `IncidentWorkflow`, the `haltStep` is unconditionally inserted before
+      `remediationStep` whenever `ThreatClassifierAgent` returns `severity = CRITICAL`.
+      `SafetyHaltAgent` is called with the `ThreatAssessment` and `ThreatSignal`; it
+      returns a `HaltDirective` (simulated isolation; no live network call in the
+      blueprint). `IncidentEntity` emits `HaltIssued` and transitions to status `HALTED`.
+      `SafetyHaltAgent` is constitutionally prohibited from calling any lift tool — only
+      `POST /api/threats/{id}/lift-halt` (via `ThreatEndpoint`) can emit `HaltLifted`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-incident eval event
+    mechanism: Eval · event
+    implementation: on-incident-reporter
+    source: —
+  - id: H1
+    label: Auto-isolate on CRITICAL
+    mechanism: Halt
+    implementation: automatic-safety-halt
+    source: —

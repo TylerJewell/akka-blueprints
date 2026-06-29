@@ -1,0 +1,94 @@
+# Eval Matrix for the akka-hitl-gate Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (ops-automation domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: akka-hitl-gate
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: ops-automation
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human approval gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Automated ops actions can have irreversible side effects on running
+      infrastructure or data pipelines. Inserting a mandatory human approval
+      gate between the proposal and execution phases ensures a person reviews
+      the proposed action payload and estimated impact before anything is
+      applied. This is the defining characteristic of the human-in-loop-gate
+      coordination pattern and the primary risk control in this sample.
+    implementation: >
+      GateWorkflow pauses in awaitApprovalStep, polling ActionEntity status
+      every 5 seconds. POST /api/actions/{id}/approve and
+      POST /api/actions/{id}/reject transition the entity; the workflow
+      resumes on the next poll and routes to executeStep or terminates.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the execution tool unless the action is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      In an ops-automation context, the execution tool represents a write to
+      a system under management. Running it on an action that has not passed
+      human review would bypass the gate entirely if the workflow state ever
+      desyncs. A before-tool-call guardrail provides a second line of defence:
+      even if the workflow reaches executeStep by an unexpected path, the
+      simulated execution tool is blocked unless ActionEntity.status is
+      APPROVED at the moment the tool call is attempted.
+    implementation: >
+      before-tool-call guardrail on ExecutionAgent re-reads ActionEntity.status
+      and allows the simulated execution tool only when status is APPROVED.
+      Any other status causes the guardrail to block the call and surface an
+      error that the workflow treats as a terminal failure for that run.
+    regulation_anchors: []
+
+  - id: G2
+    name: Quality-check the action proposal before human review
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      A proposal that arrives at the reviewer with an empty summary or a
+      missing actionPayload cannot be meaningfully approved or rejected.
+      An output guardrail on ProposalAgent rejects incomplete proposals
+      before they are persisted, forcing the agent to retry rather than
+      surfacing an unusable draft to the human reviewer. This keeps the
+      approval step meaningful and prevents the workflow from stalling on
+      a non-actionable proposal.
+    implementation: >
+      before-agent-response guardrail on ProposalAgent checks that summary,
+      estimatedImpact, and actionPayload are all non-empty before the
+      ActionProposal is persisted via ActionEntity.recordProposal.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/reject before execution runs.
+  - id: G1
+    name: Guard execution tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block execution unless ActionEntity status is APPROVED.
+  - id: G2
+    name: Proposal completeness gate
+    mechanism: "guardrail · before-agent-response"
+    short: Block incomplete proposals from reaching the reviewer.

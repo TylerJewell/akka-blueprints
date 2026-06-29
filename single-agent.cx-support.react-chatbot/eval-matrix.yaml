@@ -1,0 +1,42 @@
+schema_version: 1
+sample_id: basictoolcallingchatbot
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Intercept policy-violating replies before they reach the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: content-policy-validator
+    enforcement: blocking
+    rationale: |
+      A chatbot that responds directly to end users has no human review step between
+      the model's output and the channel. Without a response gate, a single bad iteration
+      can expose system-prompt contents, fabricate contact details the user might act on,
+      or reply outside the declared scope in ways that create liability. The
+      before-agent-response hook is the right cut: it fires on every candidate final answer,
+      catches the violation before it leaves the agent loop, and forces a retry — so the
+      user sees only content that passed the check.
+    implementation: |
+      `ReplyGuardrail` is registered on `ChatAgent` via the agent's guardrail-configuration
+      block, bound to the `before-agent-response` hook. On each candidate `ChatReply` it
+      (1) scans `content` for system-prompt disclosure patterns from
+      `guardrail-policy.json#system-prompt-disclosure-patterns`, (2) checks for PII-like
+      tokens the agent fabricated rather than parroted from the user's own input
+      (regex patterns from `guardrail-policy.json#pii-fabrication-patterns`), and (3)
+      scans for scope-breach keywords from `guardrail-policy.json#scope-breach-keywords`.
+      On any match it returns a structured `Guardrail.reject(code)` where code is one of
+      `policy-violation | pii-leak | scope-breach`; the agent loop consumes one of its
+      3 iterations and retries. If all 3 iterations fail the check, `ConversationWorkflow`
+      transitions to the error step, which calls `ConversationEntity.failTurn(reason)` and
+      emits `TurnFailed`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Content-policy reply guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

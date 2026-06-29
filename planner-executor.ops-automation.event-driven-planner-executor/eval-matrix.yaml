@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: event-driven-planner-executor
+coordination_pattern: planner-executor
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Vet every executor dispatch before the step runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      In an operations-automation context the four executors reach outside the
+      application boundary — HTTP endpoints, message queues, databases, and
+      shell scripts. A mis-directed dispatch (HTTP call to a non-allow-listed
+      host, queue publish to a system-reserved topic, a database mutation, a
+      script not in the safe set) can cause real state changes before any human
+      notices. Stopping the dispatch at the planning boundary — before the step
+      fires — is the most effective point to contain blast radius. A deterministic
+      vetter running synchronously in the workflow's guardrail step catches
+      policy violations without any LLM involved.
+    implementation: |
+      `StepGuardrail.vet(DispatchDecision)` is called by `JobWorkflow`'s
+      `guardrailStep` between `proposeStep` and `dispatchStep`. The vetter
+      checks (a) the executor allow-list (`ExecutorKind` enum — HTTP, QUEUE,
+      DB, SCRIPT only), (b) a per-executor content policy: HTTP host must
+      be in `{akka.io, doc.akka.io, github.com, registry.example.io}`,
+      QUEUE topic must not match `_sys.*`, DB step must not contain
+      INSERT/UPDATE/DELETE/DROP keywords, SCRIPT name must be in
+      `{deploy.sh, status.sh, rollback.sh, health.sh}`. On reject, the
+      workflow records a `StepBlocked` entry on the step ledger, then loops
+      back to `proposeStep` so the Orchestrator sees the blocker and revises.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Let the operator pause new dispatches without killing in-flight steps
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: blocking
+    rationale: |
+      Ops-automation jobs interact with live infrastructure. An operator who
+      notices unexpected queue depth growth, elevated retry counts, or a rogue
+      script invocation needs to pause new work without aborting the step that
+      is already running — an abrupt kill could leave a partially-applied
+      change in a worse state than completing the in-flight step. The runtime
+      monitoring surface also surfaces queue-depth and retry metrics from the
+      step ledger so the operator can make an informed decision before halting.
+    implementation: |
+      `SystemControlEntity` (single instance keyed by literal `"global"`)
+      holds the halt flag. The App UI tab shows the operator dashboard with
+      Halt / Resume buttons backed by `POST /api/control/halt` and
+      `POST /api/control/resume`. Every `JobWorkflow` reads the flag in its
+      `checkHaltStep` at the top of each loop iteration. On `halted=true`,
+      the workflow finishes the in-flight step, then emits `JobHaltedOperator`
+      and ends the job in `HALTED`. The dashboard also renders aggregate
+      retry counts and blocked-step counts from the step ledger for each
+      in-flight job, giving the operator the observability the control
+      surface requires.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Dispatch guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: HO1
+    label: Operator runtime monitoring
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring (SystemControlEntity + dashboard)
+    source: —

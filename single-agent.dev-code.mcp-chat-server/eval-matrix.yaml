@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: mcp-chat-server
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Block disallowed MCP tool calls before they execute
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-validator
+    enforcement: blocking
+    rationale: |
+      A CodeAgent with access to an MCP server can call any tool the server exposes,
+      including tools whose names or inputs could be abused to probe internal infrastructure,
+      exfiltrate data, or invoke computationally expensive operations. The before-tool-call
+      hook is the right cut-point: it intercepts each tool invocation before the HTTP
+      request leaves the JVM, letting the system enforce an allow-list, validate the
+      destination URL, and cap payload size — all without wrapping or modifying the MCP
+      client itself. A blocked call is logged as a ToolCall audit record so the deployer
+      can observe which tools the agent tried to use.
+    implementation: |
+      `ToolCallGuardrail` is registered on `ChatAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      invocation it (1) checks the tool name against the allow-list read from
+      `application.conf` at startup, (2) asserts the server URL prefix matches the
+      configured MCP server base URL (preventing SSRF-by-tool-call), and (3) asserts
+      the serialised input payload does not exceed `configuredMaxToolInputBytes`. On any
+      failure it returns `Guardrail.blockToolCall(<structured-reason>)`; the agent loop
+      receives a structured refusal message and may choose a different tool or proceed
+      without it. The blocked invocation is recorded as a `ToolCall{outcome: BLOCKED}`
+      entry appended to `ChatReply.toolCallsAudited`. A blocked call does not consume
+      an agent iteration and does not abort the task.
+    regulation_anchors: []
+
+  - id: G2
+    name: Reject out-of-policy replies before they reach the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A chat agent that calls external tools can incorporate tool output verbatim into
+      its reply. Tool output may contain injected instructions, disallowed content, or
+      oversized payloads that would degrade the user experience or violate content
+      policies. The before-agent-response hook intercepts the candidate reply before it
+      is returned to the workflow, ensuring that only structurally valid, length-bounded,
+      content-policy-conformant replies ever reach the user interface. Rejected replies
+      force a retry within the same task, giving the agent a chance to produce a
+      well-formed response before the turn is failed.
+    implementation: |
+      `ReplyGuardrail` is registered on `ChatAgent` via the agent's guardrail-configuration
+      block, bound to the `before-agent-response` hook. On each candidate response it
+      (1) parses the response into `ChatReply`, (2) asserts `replyText.length()` is within
+      `configuredMaxReplyChars` (read from `application.conf`), and (3) asserts `replyText`
+      does not match any pattern in `configuredDisallowedPatterns` (a regex list also from
+      `application.conf`). On any failure it returns `Guardrail.reject(<structured-error>)`
+      naming the failed check; the agent loop consumes one of its 4 iterations and retries.
+      Passing responses flow through to `ChatWorkflow.recordReplyStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: MCP tool-call allow-list
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: G2
+    label: Reply content + structure guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

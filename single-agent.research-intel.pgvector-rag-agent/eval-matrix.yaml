@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: pgvector-rag-agent
+coordination_pattern: single-agent
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Reject uncited answers before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: citation-validator
+    enforcement: blocking
+    rationale: |
+      A retrieval-augmented answer that contains no citations is indistinguishable
+      from a hallucinated answer — the user cannot tell whether any claim came from
+      the corpus or from the model's parametric knowledge. The before-agent-response
+      hook is the right enforcement point: catch uncited or incorrectly-cited
+      responses before they leave the agent's loop, force a retry within the same
+      task, and only let grounded answers reach the workflow. An answer citing a
+      chunk id that was not in the retrieved set is equally problematic — it signals
+      the agent fabricated a source reference — and is rejected on the same path.
+    implementation: |
+      `CitationGuardrail` is registered on `CorpusQueryAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate `Answer` it (1) asserts `answerText` is non-empty,
+      (2) asserts `citations` is non-empty unless the answer contains the
+      sentinel phrase "insufficient context" (which signals the corpus lacks
+      relevant information — a well-formed, not a hallucinated, response),
+      and (3) asserts every `Citation.chunkId` is present in the
+      `List<RetrievedPassage>` that the workflow stored in its state during
+      `retrieveStep`. On any failure returns a structured rejection naming
+      the failed check; the agent loop consumes one of its 3 iterations and
+      retries. Passing responses flow through to `answerStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every answer for citation density and grounding quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A well-formed, citation-present answer can still be poorly grounded — the
+      model may cite only one passage out of five retrieved, write an answer that
+      is disproportionately long relative to the evidence, or include a citation
+      that technically passed the guardrail's structural check but references a
+      low-relevance chunk. An on-decision evaluator surfaces these patterns
+      without blocking the answer itself, giving researchers a fast signal about
+      which answers merit closer inspection before they are used as authoritative
+      research findings.
+    implementation: |
+      `AnswerEvaluationScorer` runs inside `QueryWorkflow.evalStep`, fired
+      immediately after `AnswerRecorded` lands. The scorer is deterministic
+      and rule-based (no LLM call — keeping the single-agent invariant honest):
+      measures citation density (citations per 100 words of answer text; full
+      score requires ≥ 0.5), checks that every `Citation.chunkId` is in the
+      retrieved set (structural guard that mirrors G1 but as a scored signal,
+      not a blocker), checks that `answerText` length is proportionate to
+      the number of retrieved passages (an answer shorter than 20 words for a
+      5-passage retrieval loses a point), and applies a 1-point deduction for
+      an answer whose `citations` list is empty and whose text lacks the
+      "insufficient context" sentinel (indicating the guardrail pass was
+      marginal). Emits `EvaluationScored` with a 1–5 score and a one-line
+      rationale. Answers with score ≤ 2 are flagged in the UI for researcher
+      review.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Citation guardrail before answer
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision grounding eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

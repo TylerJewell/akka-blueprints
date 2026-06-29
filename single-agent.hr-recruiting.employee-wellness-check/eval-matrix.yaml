@@ -1,0 +1,106 @@
+schema_version: 1
+sample_id: wellness-check-agent
+coordination_pattern: single-agent
+domain: hr-recruiting
+
+controls:
+  - id: S1
+    name: Redact special-category wellness data before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: blocking
+    rationale: |
+      Employee check-in responses frequently contain mental-health markers (references to
+      anxiety, depression, burnout, or self-harm), disability-related language, physical
+      health indicators, and emotional-state identifiers. Under GDPR Article 9, these are
+      special-category data requiring explicit justification for processing. Feeding them
+      raw into an LLM constitutes processing by a third-party sub-processor without the
+      special-category safeguards the regulation demands. Redaction runs in a Consumer
+      between the raw submission and the agent invocation; the raw response is preserved on
+      the entity for audit purposes but is never the input seen by the model.
+    implementation: |
+      `ResponseSanitizer` Consumer subscribes to `ResponseReceived` events emitted by
+      `CheckInEntity`. It runs a pipeline of regex stages (pattern-matched mental-health
+      terms, disability vocabulary), a heuristic stage (emotional-state language, self-harm
+      indicators), and a physical-health-token stage. Outputs a `SanitizedResponse` carrying
+      the redacted answer map plus the list of special categories found. Calls
+      `CheckInEntity.attachSanitized(sanitized)`. `CheckInWorkflow.analyseStep` then passes
+      `sanitized.redactedAnswers` serialised as plain text as the `WellnessCheckAgent` task
+      attachment; the raw payload remains accessible only via `response.answers` on the
+      entity, never on the wire to the model.
+    regulation_anchors:
+      - GDPR Art. 9
+
+  - id: G1
+    name: Block malformed or harmful agent responses before they leave the agent loop
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A wellness check-in system that lets an ill-formed morale classification or an
+      unhandled crisis signal propagate into the entity log could suppress a crisis
+      escalation or display a garbled assessment to HR. The before-agent-response hook
+      catches these at the earliest possible point — inside the agent's iteration loop —
+      before the workflow ever sees the response. For crisis signals specifically, the
+      guardrail takes an active role: it emits `CrisisEscalated` on `CheckInEntity` before
+      accepting the response, ensuring that a crisis is routed to a human regardless of
+      what the workflow does next.
+    implementation: |
+      `ResponseGuardrail` is registered on `WellnessCheckAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate response it (1) parses the response into `CheckInAnalysis`, (2) asserts
+      `moraleLevel` is in `{HIGH, MODERATE, LOW, CRISIS}`, (3) asserts `crisisFlag` is a
+      boolean, and (4) asserts `recommendation` is non-empty. If `crisisFlag == true`, it
+      additionally calls `componentClient.forEventSourcedEntity(CheckInEntity.class,
+      checkInId).call(CheckInEntity::escalateCrisis)` before returning `Guardrail.accept()`.
+      On any structural failure returns a structured rejection naming the failed check; the
+      agent loop consumes one of its 3 iterations and retries. Structurally passing,
+      non-crisis responses flow through to `analyseStep`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Human-on-the-loop review of aggregate morale signals for workforce risk
+    mechanism:
+      kind: hotl
+      flavor: post-market-surveillance
+    enforcement: non-blocking
+    rationale: |
+      Individual check-in analyses are reviewed by the automated pipeline, but aggregate
+      morale deterioration — a campaign where more than a quarter of responses are LOW or
+      CRISIS — is a workforce risk signal that requires a human HR decision-maker to review
+      before any organisational action is taken. This post-market-surveillance check prevents
+      the system from silently normalising a workforce in distress. Under GDPR Article 9, any
+      systemic processing of special-category data at scale that feeds into employment
+      decisions requires documented human oversight; this control provides the mechanism.
+    implementation: |
+      `MoraleSurveillance` runs inside `CheckInWorkflow.surveillanceStep`, fired after
+      `AnalysisRecorded` lands for each check-in. The evaluator is deterministic and
+      rule-based (no LLM call — keeping the single-agent invariant honest): it reads the
+      parent `CampaignView` row, computes
+      `(lowCount + crisisCount) / responsesReceived`, and if the ratio exceeds 0.25 emits
+      `SurveillanceEvaluated{riskFlagRaised: true}` with a rationale paragraph naming the
+      measured ratio. `CampaignEntity` updates its campaign card to show the **Risk review
+      required** banner. A human HR decision-maker must acknowledge the flag before any
+      workforce action is recorded in the downstream HR system.
+    regulation_anchors:
+      - GDPR Art. 9
+
+simplified_view:
+  - id: S1
+    label: Special-category redaction before LLM
+    mechanism: Sanitizer
+    implementation: special-category
+    source: GDPR Art. 9
+  - id: G1
+    label: Response-form guardrail + crisis intercept
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: H1
+    label: Aggregate morale surveillance — human review
+    mechanism: HOTL
+    implementation: post-market-surveillance
+    source: GDPR Art. 9

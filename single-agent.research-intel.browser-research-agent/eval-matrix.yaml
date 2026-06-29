@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: reddit-search
+coordination_pattern: single-agent
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Validate every browser navigation before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: url-allow-list-validator
+    enforcement: blocking
+    rationale: |
+      A browser-driving agent issues navigation calls as tool invocations. Without
+      a gate at the tool boundary, the agent can be prompted — deliberately or via
+      a confused-deputy from scraped page content — to visit arbitrary URLs outside
+      Reddit, including credential endpoints, data-exfiltration targets, or API
+      token routes. The before-tool-call hook is the correct cut point: it fires
+      before the headless browser executes anything, making the block unconditional
+      regardless of how the URL was constructed. Blocking at the tool level also
+      surfaces a structured rejection back to the agent loop, which allows it to
+      recover gracefully rather than silently skipping the page.
+    implementation: |
+      `NavigationGuardrail` is registered on `BrowserResearchAgent` via the
+      agent's guardrail-configuration block, bound to the `before-tool-call`
+      hook targeting the `navigate` tool. On each invocation it (1) parses the
+      destination URL, (2) asserts the scheme is `https`, (3) asserts the host
+      is in the static allow-list `{reddit.com, www.reddit.com, old.reddit.com}`,
+      and (4) checks the path against a blocked-pattern set (`^/login`,
+      `^/register`, `^/api/v1`, `^/message`). A URL that passes all four checks
+      returns `Guardrail.allow()`; any failure returns `Guardrail.reject(
+      "navigation.blocked: <reason>")`, which the agent loop receives as a
+      structured tool-call error. The agent is expected to propose an alternative
+      path; if it retries the blocked URL verbatim, the same rejection fires again
+      and consumes another iteration toward `maxIterationsPerTask`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Halt agent session when page-visit budget is exhausted
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      Headless browser agents are particularly prone to runaway sessions: a
+      paginated subreddit, an infinite-scroll page, or a redirect loop can
+      multiply page visits far beyond what the user intended. Because each page
+      visit incurs LLM inference cost (the agent must read and summarise what
+      it scraped), unbounded sessions create unpredictable cost spikes that are
+      invisible until an invoice arrives. The budget halt enforces the ceiling the
+      user declared at submission time and ensures partial results are preserved
+      rather than lost when the halt fires, so the session is recoverable without
+      a full restart.
+    implementation: |
+      `BudgetEnforcer` is a deterministic supporting class (no LLM call). During
+      `ResearchWorkflow.browseStep`, after each `PageVisited` event is appended to
+      `ResearchJobEntity`, the workflow calls `BudgetEnforcer.checkBudget(jobId,
+      maxPages)`. The enforcer reads the entity's `pagesVisited` counter and
+      compares it to `maxPages` from the submitted `ResearchTopic`. When
+      `pagesVisited >= maxPages` it returns `BudgetSignal.EXCEEDED`, which causes
+      the workflow to stop the agent task, record a `BudgetExhausted` event on the
+      entity, and transition to `BUDGET_EXHAUSTED`. The partial `ResearchReport`
+      accumulated in the agent's task result up to that point is extracted and
+      passed to `RelevanceScorer` before the workflow terminates, so the user
+      receives a ranked partial report rather than an empty result.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Navigation URL guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Page-budget automatic halt
+    mechanism: Halt
+    implementation: automatic-safety-halt
+    source: —

@@ -1,0 +1,93 @@
+# Eval Matrix for the assistloop-support Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (cx-support domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: assistloop-support
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: cx-support
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human approval gate before customer delivery
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      A support response drafted by an AI agent must not reach the customer
+      without a supervisor's explicit sign-off. In customer-facing channels,
+      an incorrect or harmful response can erode trust and trigger regulatory
+      scrutiny under consumer-protection frameworks. The approval gate
+      between triage and resolution is the defining safety mechanism of this
+      coordination pattern.
+    implementation: >
+      SupportWorkflow pauses in awaitApprovalStep, polling TicketEntity status
+      every 5 seconds. POST /api/tickets/{id}/approve and
+      POST /api/tickets/{id}/reject transition the entity; the workflow
+      resumes on the next poll after the supervisor acts.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the deliver-response tool unless the ticket is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Delivery of a response to a customer is a customer-impacting external
+      write. If the workflow were to reach the resolve step with a ticket
+      status other than APPROVED — through a race condition or retry — the
+      guardrail provides a second independent check, ensuring that no
+      unapproved content is ever dispatched. This defense-in-depth layer is
+      distinct from the workflow gate and operates at the agent boundary.
+    implementation: >
+      A before-tool-call guardrail on ResolutionAgent re-reads
+      TicketEntity.status immediately before the simulated deliver-response
+      tool executes. If the status is not APPROVED, the tool call is blocked
+      and the workflow step fails rather than delivering an unapproved
+      response.
+    regulation_anchors: []
+
+  - id: G2
+    name: Quality-check the triage draft before it enters the supervisor queue
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      Support responses that are too short, off-topic, or contain harmful
+      content should never appear in the supervisor review queue. Filtering
+      at the before-agent-response boundary prevents low-quality drafts from
+      consuming supervisor attention and ensures that every item in the queue
+      meets a baseline standard before a human evaluates it.
+    implementation: >
+      A before-agent-response guardrail on TriageAgent checks that the
+      DraftResponse body meets a minimum length threshold and that the
+      response content relates to the original customer message before the
+      draft is persisted to TicketEntity for supervisor review.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for supervisor approve/reject before customer delivery.
+  - id: G1
+    name: Guard deliver-response tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block resolution delivery unless ticket status is APPROVED.
+  - id: G2
+    name: Triage quality gate
+    mechanism: "guardrail · before-agent-response"
+    short: Block low-quality triage drafts from reaching the supervisor queue.

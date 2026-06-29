@@ -1,0 +1,93 @@
+schema_version: 1
+sample_id: custom-orchestration-agent
+coordination_pattern: planner-executor
+domain: general
+
+controls:
+  - id: G1
+    name: Vet every tool call before it fires
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The orchestration strategy chooses the next tool by name at runtime; an
+      operator can swap the strategy without redeploying. That flexibility makes
+      the allow-list enforcement especially important: a misconfigured strategy
+      could route to a destructive command or an out-of-scope file path. A
+      deterministic guardrail wired to the dispatch hook catches those cases
+      before the tool fires and forces the orchestrator to produce a revised
+      routing decision.
+    implementation: |
+      `ToolCallGuardrail.vet(RoutingDecision, OrchestrationStrategy)` is called
+      by `TaskWorkflow`'s `guardrailStep` between `routeStep` and `dispatchStep`.
+      The vetter checks (a) that the tool name appears in `strategy.allowedTools`,
+      (b) a per-tool content policy: "command" subtasks must not match the
+      destructive-command pattern, "code" subtasks must not reference paths
+      outside `/workspace/`, "search" subtasks must name only allow-listed hosts.
+      On reject, the workflow appends a `TraceEntry { verdict: BLOCKED_BY_GUARDRAIL }`
+      via `TaskEntity.recordBlock` and loops back to `routeStep`.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Let the operator pause new tool dispatches without killing in-flight work
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: blocking
+    rationale: |
+      Because the orchestration strategy is operator-configurable, an operator
+      who activates an untested strategy must be able to stop new dispatches
+      immediately if the routing behaviour looks wrong — without losing the
+      result of the tool call currently in flight. Graceful drain at the
+      dispatch boundary is safer than a hard workflow kill.
+    implementation: |
+      `SystemControlEntity` (single instance keyed by `"global"`) holds the halt
+      flag. The App UI operator pane offers Halt / Resume buttons backed by
+      `POST /api/control/halt` and `POST /api/control/resume`. Every
+      `TaskWorkflow` reads the flag in `checkHaltStep` at the top of each loop
+      iteration. On `halted=true`, the workflow finishes the in-flight tool call,
+      then emits `TaskHaltedOperator` and ends the task in `HALTED`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub secret-shaped strings from every tool result
+    mechanism:
+      kind: sanitizer
+      flavor: secret
+    enforcement: blocking
+    rationale: |
+      Tool results re-enter the orchestrator's context as input to the next
+      routing decision. If a fixture file or a code-generation output contains
+      an API key or a JWT, leaving it in the execution trace lets that material
+      appear in subsequent LLM prompts and in the SSE feed the UI consumes.
+      The sanitizer makes redaction unconditional and deterministic regardless
+      of which strategy is active or which tool produced the result.
+    implementation: |
+      `SecretScrubber.scrub(String)` runs in `TaskWorkflow`'s `sanitizeStep`
+      between the tool call and `recordStep`. It applies labelled-replacement
+      regexes for AWS access keys, GitHub tokens, JWTs, OpenAI keys, and generic
+      bearer tokens, plus a high-entropy fallback for tokens ≥ 32 characters
+      whose Shannon entropy exceeds 4.5 bits/char. Replacements are tagged:
+      `[REDACTED:aws-access-key]`, `[REDACTED:github-token]`, `[REDACTED:jwt]`,
+      etc. The scrubbed string is what lands on the `TraceEntry` event and what
+      the orchestrator sees on its next routing prompt.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-call guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call (strategy-aware allow-list + content policy)
+    source: —
+  - id: HO1
+    label: Operator runtime monitoring
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring (SystemControlEntity + dashboard)
+    source: —
+  - id: S1
+    label: Secret sanitizer
+    mechanism: Sanitizer
+    implementation: secret (regex + entropy redactor)
+    source: —

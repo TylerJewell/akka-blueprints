@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: field-service-dispatcher
+
+# ---- Purpose ----
+purpose:
+  primary_function: field-service-scheduling-and-dispatch
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: automated-action-with-operator-oversight
+  user_type: field-operations-coordinator
+
+# ---- Data ----
+data:
+  inputs:
+    - work-order-descriptions
+    - service-address-and-zone
+    - technician-fixture-roster
+    - shift-window-data
+    - assignment-history
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: true
+    employment-data: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: act-with-guardrails
+  decision_subject: technician-assignment-and-routing
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+
+# ---- Failure ----
+failure:
+  blast_radius: single-schedule-scope
+  failure_modes:
+    - out-of-shift-window-assignment
+    - skill-qualification-mismatch
+    - technician-overloading
+    - credential-leakage-in-output
+    - stalled-schedule-no-progress
+    - unfair-assignment-distribution
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: continuous
+  operator_pause_control: true
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - simulated-route-optimization
+    - simulated-availability-check
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER

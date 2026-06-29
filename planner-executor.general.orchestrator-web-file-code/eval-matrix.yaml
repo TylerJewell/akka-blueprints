@@ -1,0 +1,117 @@
+schema_version: 1
+sample_id: orchestrator-web-file-code
+coordination_pattern: planner-executor
+domain: general
+
+controls:
+  - id: G1
+    name: Vet every specialist dispatch before the subtask runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The Orchestrator chooses one of four specialists with broad reach — web,
+      file, code, terminal. A bad dispatch decision (terminal command outside
+      the allow-list, write to a forbidden path, fetch from a non-allow-listed
+      host) is the single largest blast-radius event in this system. A
+      deterministic guardrail wired to the dispatch hook stops the subtask
+      before it executes and forces the Orchestrator to revise.
+    implementation: |
+      `DispatchGuardrail.vet(DispatchDecision)` is called by `TaskWorkflow`'s
+      `guardrailStep` between `proposeStep` and `dispatchStep`. The vetter
+      checks (a) the specialist allow-list, (b) a per-specialist content
+      policy (TERMINAL command allow-list, CODER path scope `/workspace/`,
+      WEB host allow-list, FILE path scope `sample-data/files/`). On reject,
+      the workflow records a `SubtaskBlocked` entry on the progress ledger,
+      then loops back to `proposeStep` so the Orchestrator sees the blocker
+      and tries again.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the workflow automatically when an unsafe action is observed
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      The guardrail catches obvious bad dispatches. The auto-halt is the
+      second line of defence: even a permitted subtask can return a result
+      that reveals an unsafe action attempt or evidence of an environment
+      compromise. When the post-execution evaluator detects one, the system
+      stops on its own — no operator action required.
+    implementation: |
+      `SafetyEvaluator.evaluate(ProgressEntry)` runs in `TaskWorkflow`'s
+      `autoHaltEvalStep` after every recorded subtask. It flags UNSAFE on
+      destructive-shell evidence, sensitive-path writes, and explicit
+      prompt-injection markers. On UNSAFE the workflow transitions to
+      `haltedStep`, which emits `TaskHaltedAutomatic` and ends the workflow
+      with the task in `HALTED`.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Let the operator pause new dispatches without killing in-flight work
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: blocking
+    rationale: |
+      A human on the loop (the deployer's operator) must be able to pause
+      the system when something looks off — without losing the subtask that
+      is currently running. The pause is a graceful drain, not a hard kill.
+    implementation: |
+      `SystemControlEntity` (single instance keyed by literal `"global"`)
+      holds the halt flag. The App UI tab shows the operator dashboard with
+      Halt / Resume buttons backed by `POST /api/control/halt` and
+      `POST /api/control/resume`. Every `TaskWorkflow` reads the flag in its
+      `checkHaltStep` at the top of each loop iteration. On `halted=true`,
+      the workflow finishes the in-flight subtask, then emits
+      `TaskHaltedOperator` and ends the task in `HALTED`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub secret-shaped strings from every specialist result
+    mechanism:
+      kind: sanitizer
+      flavor: secret
+    enforcement: blocking
+    rationale: |
+      Specialists return text the Orchestrator reads on its next loop tick.
+      If a fixture file or a coder output contains an API key, a JWT, or a
+      bearer token, leaving it in the progress ledger lets that material
+      land in subsequent LLM prompts and in the SSE feed the UI consumes.
+      The sanitizer makes the redaction unconditional and deterministic.
+    implementation: |
+      `SecretScrubber.scrub(String)` runs in `TaskWorkflow`'s `sanitizeStep`
+      between the specialist call and `recordStep`. It applies a sequence of
+      labelled-replacement regexes (AWS access key, GitHub token, JWT,
+      OpenAI key, generic bearer token) plus a high-entropy fallback for
+      tokens ≥ 32 characters whose Shannon entropy exceeds 4.5 bits/char.
+      Replacements are tagged: `[REDACTED:aws-access-key]`,
+      `[REDACTED:github-token]`, `[REDACTED:jwt]`, etc. The scrubbed string
+      is what lands on the `ProgressEntry` event and what the Orchestrator
+      sees on the next prompt.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Dispatch guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: HT1
+    label: Automatic safety halt
+    mechanism: Halt
+    implementation: automatic-safety-halt (post-execution evaluator)
+    source: —
+  - id: HO1
+    label: Operator runtime monitoring
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring (SystemControlEntity + dashboard)
+    source: —
+  - id: S1
+    label: Secret sanitizer
+    mechanism: Sanitizer
+    implementation: secret (regex + entropy redactor)
+    source: —

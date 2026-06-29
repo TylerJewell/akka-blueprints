@@ -1,0 +1,61 @@
+schema_version: 1
+sample_id: todoist-organizer
+coordination_pattern: continuous-monitor
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Block task mutation when classification confidence is insufficient
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: scope-enforcement
+    enforcement: blocking
+    rationale: |
+      A background organizer that silently moves tasks into wrong projects corrupts the
+      user's workspace in ways that are hard to detect and tedious to reverse. The guardrail
+      prevents any call to the Todoist updateTask tool unless the classifier returned
+      high or medium confidence and the target project is in the configured allow-list.
+      Low-confidence results are surfaced as SKIPPED with an explicit reason rather than
+      silently degrading the user's data.
+    implementation: |
+      `OrganizerWorkflow`'s `guardrailStep` runs synchronously after `TaskClassifierAgent`
+      returns. It inspects `ClassificationResult.confidence` against a configured minimum
+      threshold (default: reject "low") and checks `targetProjectId` against the
+      `organizer.project-allowlist` config entry. If either check fails, it emits
+      `GuardrailChecked(allowed=false, reason=…)` to `TodoistTaskEntity` and transitions the
+      workflow to the skip branch, ending with `TaskSkipped`. The `updateTask` tool call in
+      `updateStep` is only reached when `guardrailVerdict.allowed == true`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Periodic eval of classification quality
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      An ops-automation agent that reclassifies tasks on a schedule can drift quietly — the
+      model may start routing tasks to the wrong project as workspace structure evolves or as
+      task-description patterns change. The eval sampler provides a continuous quality signal,
+      distinct from per-task guardrail checks, and flags degradation before it affects a
+      significant portion of the inbox.
+    implementation: |
+      `EvalRunner` TimedAction fires every 60 minutes. It queries `OrganizerView` for up to 5
+      UPDATED tasks without an `evalScore`, oldest-first. For each, it calls `EvalJudge`
+      (typed Agent with a 1–5 rubric: correct project / accurate labels / priority alignment)
+      and emits `EvalScored(score, rationale)` to `TodoistTaskEntity`. The score is surfaced
+      on the App UI's task detail panel and in the `/api/organizer/{id}` response.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Task mutation guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Classification quality eval
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

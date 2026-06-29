@@ -1,0 +1,65 @@
+# Eval Matrix for the concurrent-research-writer Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (research-intel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: concurrent-research-writer
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: research-intel
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Vet the assembled report before it reaches the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The assembled report is the user-facing artifact and merges outputs from two
+      independent workers. Without a vetting step, unsupported claims from either
+      worker could be silently incorporated. An output guardrail catches fabricated
+      references and ungrounded assertions before the report is returned, so a
+      flawed assembly never reaches the reader.
+    implementation: >
+      A before-agent-response guardrail on ReportCoordinator runs a deterministic
+      reference-checker plus an LLM judge over the AssembledReport in
+      ReportWorkflow.guardrailStep. On failure the workflow calls ReportEntity.block
+      and the report enters BLOCKED with a failureReason.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the coordinator assembly decision for readability and accuracy
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The coordinator's assembly step merges a SourceBundle and a DraftSection into
+      one polished report. Because both inputs can vary in quality, sampling the final
+      assembly with a rubric judge surfaces a readability-and-accuracy score that the
+      reader sees beside the report — without blocking delivery or adding latency to
+      the critical path.
+    implementation: >
+      QualitySampler (TimedAction, every 5 minutes) queries ReportView for the oldest
+      ASSEMBLED report lacking a qualityScore, runs a 1-5 rubric judge over the
+      assembled headline and body, and calls ReportEntity.recordScore(score, rationale),
+      emitting ReportScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Report output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a report with unsupported claims or fabricated references.
+  - id: E1
+    name: Assembly quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's assembly decision for readability and accuracy.

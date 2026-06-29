@@ -1,0 +1,42 @@
+schema_version: 1
+sample_id: java-bug-assistant
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Block malformed ticket writes before the agent commits
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      Bug-resolution agents operating against a shared ticket system pose a write-integrity
+      risk: a partially-formed recommendation written to the ticket store can mislead
+      on-call engineers who act on it immediately without reading the full report. Because the
+      agent decides to write a ticket as part of its plan, the before-tool-call hook is the
+      correct cut point — it intercepts the intent to write before any bytes reach the store,
+      forces the agent to revise a malformed recommendation within the same task, and only
+      allows well-formed payloads through. This is materially different from a post-hoc check:
+      no partial state ever lands in the ticket system.
+    implementation: |
+      `TicketWriteGuardrail` is registered on `BugResolutionAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. It fires on every
+      `createTicket` or `updateTicket` tool call the agent attempts. On each candidate call it
+      (1) asserts `action` is one of `RESOLVED`, `NEEDS_INVESTIGATION`, `ESCALATE`;
+      (2) asserts `candidateFixes` is non-empty (a recommendation with no fixes is
+      unactionable); (3) asserts `rationale` is non-empty and at least 20 characters (a
+      one-word rationale gives engineers nothing to act on); (4) asserts every
+      `CandidateFix.confidenceScore` is in `0..100`. On any failure returns a structured
+      rejection naming the failed check; the `BugResolutionAgent` loop consumes one of its
+      4 iterations and revises its plan. Passing calls flow through to the in-process
+      `TicketStore`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Ticket-write guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: ambient-durable-agent-pubsub
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Reject invalid topic payloads before agent invocation
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: payload-schema-validator
+    enforcement: blocking
+    rationale: |
+      Pub/sub topics are open surfaces: any publisher — including misconfigured
+      producers and opportunistic adversaries — can put arbitrary bytes onto
+      weather.requests. Without a validation gate, a malformed or injected payload
+      reaches the WeatherAgent and either causes a deserialisation failure deep in
+      the workflow or, worse, lets crafted prompt content ride in through fields
+      the agent reads. Running the guardrail as the first workflow step, before any
+      agent task is started, ensures that only structurally valid, injection-clean
+      payloads ever reach WeatherAgent.
+    implementation: |
+      `PayloadGuardrail` is a plain Java class instantiated inside
+      `WeatherWorkflow.validateStep`. It receives the raw `WeatherRequestPayload`
+      and runs four checks: (1) `location` is non-null, 1–256 characters; (2)
+      `horizon` parses to a valid `ForecastHorizon` enum value; (3)
+      `alertCategories` is non-null; (4) `requesterContact` does not contain
+      SQL/script-injection characters (`<`, `>`, `;`, `--`, `'`, `"`). On any
+      failure it returns a `ValidationResult{valid=false, violationCodes=[...]}`,
+      and `validateStep` calls `RequestEntity.fail(violationCodes.toString())`
+      then transitions to the workflow error step — `forecastStep` is never
+      reached. Passing payloads advance to `sanitizeStep`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub PII from inbound event payloads before the agent task attachment
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Ops-automation topics receive messages from a wide range of producers —
+      monitoring daemons, alert routers, field devices — many of which embed
+      contact details, device owner names, or internal network identifiers
+      alongside the operational data. Sending those identifiers verbatim to an
+      LLM violates data-minimisation principles and risks leaking them into
+      model logs or training feedback. The sanitizer runs as a dedicated
+      workflow step between validation and agent invocation; the raw payload is
+      preserved on `RequestEntity` for audit, but the model's task attachment
+      never contains the original PII strings.
+    implementation: |
+      `RequestSanitizer` is a plain Java class instantiated inside
+      `WeatherWorkflow.sanitizeStep`. It runs a regex-and-heuristic pipeline over
+      `location` and `requesterContact`: email addresses → `[REDACTED-EMAIL]`,
+      phone numbers → `[REDACTED-PHONE]`, person-name heuristics (title + two
+      capitalised words) → `[REDACTED-NAME]`, internal-network hostname patterns
+      (RFC-1918 subnet strings, `.internal` / `.local` / `.corp` suffixes) →
+      `[REDACTED-HOST]`. It records the categories found and returns a
+      `SanitizedPayload`. `WeatherWorkflow.forecastStep` constructs the
+      `WeatherAgent` task attachment exclusively from `SanitizedPayload` — the
+      raw `WeatherRequestPayload` is structurally unavailable to that step.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Payload-schema guardrail (pre-agent)
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

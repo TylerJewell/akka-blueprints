@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: guardrails-pattern
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Block non-compliant prompts before the model call
+    mechanism:
+      kind: guardrail
+      hook: before-llm-call
+      flavor: before-llm-call
+    enforcement: blocking
+    rationale: |
+      An AI agent that receives arbitrary user input without pre-screening carries
+      the full risk of every prompt it processes — jailbreak attempts, restricted-domain
+      requests, and injection patterns all reach the model and consume tokens. The
+      before-llm-call hook is the correct cut point: it fires inside the agent before the
+      prompt is serialized and sent, so a matched violation costs nothing downstream. In
+      this blueprint the guardrail also updates the interaction entity's state to BLOCKED,
+      giving the UI and the event log a durable record that the model was never invoked.
+    implementation: |
+      `PromptGuardrail` is registered on `AssistantAgent` via the agent's
+      guardrail-configuration block, bound to the `before-llm-call` hook. On each call it
+      reads the active `PolicyProfile` from the task context and evaluates the prompt text
+      against the profile's pattern set: GENERAL screens for jailbreak markers only;
+      CONSERVATIVE adds restricted-domain terms; STRICT additionally rejects prompts
+      exceeding a token-length threshold. On a match, `Guardrail.block(ruleId)` is returned
+      — the agent immediately surfaces a BLOCKED outcome to `InteractionWorkflow` without
+      forwarding any text to the model. On pass, the prompt proceeds unchanged. The
+      `InteractionWorkflow.promptGuardStep` also calls `PromptGuardrail.check()` directly
+      before invoking the agent, recording `PromptGuardChecked` or `PromptBlocked` events on
+      `InteractionEntity` so the outcome is auditable even when the agent path is bypassed.
+    regulation_anchors: []
+
+  - id: G2
+    name: Reject non-conforming replies before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      A guardrail on the input side prevents non-compliant prompts, but does not prevent
+      the model from spontaneously generating non-compliant or structurally broken replies.
+      The before-agent-response hook covers this gap: it validates the candidate response
+      before it is surfaced to the caller, forcing the agent loop to retry rather than letting
+      a malformed or policy-violating reply propagate into the entity log and the UI. Without
+      this second gate, the system could pass input screening yet still emit an output that
+      violates the same policy.
+    implementation: |
+      `ReplyGuardrail` is registered on `AssistantAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate response it (1) parses the response into `AgentReply`, asserting `text` and
+      `category` are non-null and `confidence` is in `[0.0, 1.0]`, (2) checks the reply text
+      against the active `PolicyProfile`'s blocked-topic patterns — the same vocabulary used
+      by `PromptGuardrail` — to catch spontaneous policy violations in generated content, and
+      (3) confirms the `ReplyCategory` enum value is valid. On any failure,
+      `Guardrail.reject(reason)` is returned; the agent loop consumes one of its three
+      iterations and retries. Passing responses flow to `InteractionWorkflow.agentStep`.
+      The workflow's `replyGuardStep` then calls `ReplyGuardrail.check()` a second time as a
+      post-hoc record step, emitting `ReplyGuardChecked` on `InteractionEntity` so the
+      outcome is visible in the interaction timeline.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Input guardrail (before LLM call)
+    mechanism: Guardrail
+    implementation: before-llm-call
+    source: —
+  - id: G2
+    label: Output guardrail (before agent response)
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

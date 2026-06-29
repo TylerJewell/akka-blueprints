@@ -1,0 +1,26 @@
+schema_version: 1
+sample_id: <kebab-name>
+coordination_pattern: <one of the 12 patterns>
+domain: <one of the 12 domains or 'general'>
+
+controls:
+  - id: G1
+    name: TODO — concise obligation in active voice
+    mechanism:
+      kind: guardrail        # or hitl / hotl / sanitizer / eval-event / eval-periodic / ci-gate / halt
+      hook: before-tool-call # required when kind=guardrail; one of the 6 lifecycle hooks
+      flavor: scope-enforcement
+    enforcement: blocking    # or non-blocking / build-gate / system-level
+    rationale: |
+      TODO — why this control exists at all.
+    implementation: |
+      TODO — name the Akka components that realise it. The generated system
+      wires it exactly as written.
+    regulation_anchors: []   # populate only if industry-anchored (finance, healthcare, employment)
+
+simplified_view:
+  - id: G1
+    label: TODO short label
+    mechanism: Guardrail     # Human-readable
+    implementation: before-tool-call
+    source: —

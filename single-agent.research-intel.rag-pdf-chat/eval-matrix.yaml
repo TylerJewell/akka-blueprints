@@ -1,0 +1,43 @@
+schema_version: 1
+sample_id: rag-pdf-chat
+coordination_pattern: single-agent
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Reject answers with invalid or missing citations before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: citation-validator
+    enforcement: blocking
+    rationale: |
+      A RAG agent whose citations are not verified before the answer leaves the loop
+      can confidently reference passage ids that were never in the supplied context.
+      Users relying on inline citations to trace claims back to the source document
+      have no way to detect fabricated references until they manually cross-check the
+      answer — by which point the damage to trust is done. The before-agent-response
+      hook is the correct cut point: the agent loop holds the set of passage ids it
+      supplied as the task attachment, so validation is a local membership check
+      rather than an external call. A fabricated citation never reaches the entity
+      log or the UI.
+    implementation: |
+      `CitationGuardrail` is registered on `PdfChatAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate response it (1) parses the response into `CitedAnswer`,
+      (2) for every entry in `citations` asserts that `CitedPassage.passageId` is
+      present in the set of passage ids supplied in the `passages.json` task
+      attachment, (3) asserts that if `answerable == true` then `citations` is
+      non-empty, and (4) asserts that if `answerable == false` then `citations` is
+      empty and `answerText` equals the required refusal phrase. On any failure
+      returns a structured rejection naming the failed check; the agent loop
+      consumes one of its 3 iterations and retries. Passing responses flow through
+      to `answerStep` in `ChatSessionWorkflow`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Citation-presence guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

@@ -1,0 +1,109 @@
+schema_version: 1
+sample_id: email-triage-assistant
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: S1
+    name: Strip PII from email content before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Incoming emails routinely carry the sender's personal details — email
+      addresses, phone numbers, government identifiers, payment-card-like
+      tokens, names, and postal addresses — as both prose in the body and
+      extracted text from attachments. Forwarding raw email content to a
+      language model creates an avoidable exposure: the model call leaves
+      the process boundary, may be logged by the provider, and could surface
+      identifiers in a generated reply draft. Sanitization runs in a Consumer
+      between the raw submission and the agent invocation; the raw email body
+      is preserved on the entity for audit but is never the input seen by
+      the model.
+    implementation: |
+      `EmailSanitizer` Consumer subscribes to `EmailSubmitted` events emitted
+      by `EmailEntity`. It runs a pipeline of regex stages (well-known format
+      patterns for emails, phones, SSN-like, payment-card-like), a heuristic
+      stage (person names, postal addresses), and an account-id-token stage
+      across both `submission.rawBody` and every `AttachmentContent.textContent`.
+      Outputs a `SanitizedEmail` carrying the redacted body, the list of
+      redacted attachment texts, and the union list of categories found.
+      Calls `EmailEntity.attachSanitized(sanitized)`. `TriageWorkflow.triageStep`
+      then passes `sanitized.redactedBody` and `sanitized.redactedAttachmentTexts`
+      as `EmailTriageAgent` task attachments; the raw payload remains accessible
+      only via `submission.rawBody` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block outbound send until user approval is recorded
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-gate
+    enforcement: blocking
+    rationale: |
+      Email is an external, irreversible channel. An agent that can send email
+      autonomously — without a human reviewing the draft — could deliver
+      incorrect classification rationale, expose sanitized content in the reply,
+      or contact the wrong recipient. The `before-tool-call` hook is the right
+      cut point: intercept the agent's `send_email` tool invocation before it
+      executes, check whether the user has explicitly approved this email's draft
+      in `ConfirmationEntity`, and block if not. The guardrail does not retry the
+      agent — it surfaces a structured block error so the workflow's `confirmStep`
+      remains the primary synchronisation gate.
+    implementation: |
+      `SendGuardrail` is registered on `EmailTriageAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook and
+      scoped to the `send_email` tool. On each invocation it reads
+      `ConfirmationEntity.getDecision(emailId)`. If the decision is `APPROVED`,
+      the guardrail passes and the tool call executes. If the decision is absent
+      or `REJECTED`, `SendGuardrail` returns `Guardrail.block("send-pending-
+      confirmation")` — the tool call does not execute, and the block reason is
+      surfaced in the service log. `TriageWorkflow.confirmStep` remains the
+      canonical gate; the guardrail is a defence-in-depth check preventing any
+      agent-loop path from bypassing the confirmation step.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require explicit user approval before draft is sent
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Draft quality cannot be guaranteed at classification time: the agent may
+      misread urgency, assign the wrong category, or produce a draft reply that
+      misrepresents the sender's intent. Email is also an irreversible action —
+      once sent, there is no recall path in standard mail systems. Requiring a
+      human to read the draft and click Approve before any send can proceed keeps
+      the agent in an advisory role and prevents consequential errors from
+      reaching external recipients without oversight.
+    implementation: |
+      `TriageWorkflow.confirmStep` pauses execution after `DraftReady` lands on
+      `EmailEntity`. The step polls `ConfirmationEntity.getDecision(emailId)` every
+      2 s up to the step's 300 s timeout. The UI's **Approve** and **Reject**
+      buttons POST to `TriageEndpoint POST /api/emails/{id}/confirm`, which writes
+      a `ConfirmationDecision` to `ConfirmationEntity`. On `APPROVED`, the workflow
+      advances to `sendStep`; on `REJECTED`, it calls `EmailEntity.recordRejected`
+      and halts. No send can ever reach `sendStep` without a prior `APPROVED`
+      decision recorded in `ConfirmationEntity` — the `SendGuardrail` provides a
+      second layer of enforcement at the tool-call level.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII strip before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Send-tool call gate
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Human approval before send
+    mechanism: HITL
+    implementation: application
+    source: —

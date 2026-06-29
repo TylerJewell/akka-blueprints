@@ -1,0 +1,103 @@
+schema_version: 1
+sample_id: deal-strategy-analyst
+coordination_pattern: single-agent
+domain: sales-marketing
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Deal context bundles routinely contain buyer email addresses, direct-dial phone
+      numbers, postal addresses, and confidential company names that appear under NDA
+      obligations. Forwarding those identifiers verbatim to the model creates unnecessary
+      data-minimisation risk: the model does not need to know the exact email address of
+      the economic buyer to recommend which stakeholder role to contact next. Redaction
+      runs in a Consumer between the raw submission and the agent invocation; the raw
+      context is preserved on the entity for audit but is never the payload seen by
+      the model.
+    implementation: |
+      `DealContextSanitizer` Consumer subscribes to `DealSubmitted` events emitted by
+      `DealEntity`. It runs a pipeline of regex stages (emails, phone numbers, postal
+      addresses), a heuristic stage (person names), and a pattern stage for confidential
+      company names (all-caps tokens, strings following "NDA:" markers, account-id-like
+      tokens). Outputs a `SanitizedContext` carrying the redacted text plus the list of
+      categories found. Calls `DealEntity.attachSanitized(sanitized)`.
+      `AnalysisWorkflow.analyseStep` then passes `sanitized.redactedContext` as the
+      `DealStrategyAgent` task attachment; the raw payload remains accessible only via
+      `context.rawContext` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject malformed recommendations before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A deal-strategy recommendation that references a stakeholder role not present in
+      the submitted context, or that uses an action type outside the agreed vocabulary,
+      would send the sales rep chasing a non-existent contact or performing an undefined
+      action. The before-agent-response hook is the right cut point: catch the structural
+      problem before it leaves the agent's loop, force a retry inside the same task, and
+      only let coherent recommendations reach the workflow and the entity log.
+    implementation: |
+      `RecommendationGuardrail` is registered on `DealStrategyAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate response it (1) parses the response into `StrategyRecommendation`, (2)
+      asserts every `nextSteps[].stakeholderRole` matches a role present in the submitted
+      `List<StakeholderSignal>`, (3) asserts every `actionType` is in the allowed enum
+      `{FOLLOW_UP_EMAIL, SCHEDULE_CALL, SEND_PROPOSAL, REQUEST_INTRO, ESCALATE,
+      ADDRESS_OBJECTION, PROVIDE_REFERENCE}`, and (4) asserts no two next steps share
+      the same `priority` value. On any failure returns a structured rejection naming
+      the failed check; the agent loop consumes one of its 3 iterations and retries.
+      Passing responses flow through to `analyseStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every recommendation for actionability
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A structurally valid recommendation can still be operationally useless — next steps
+      with missing deadlines give the rep no sense of urgency, one-word rationales provide
+      no context for the call, and an urgency of CRITICAL paired with only low-friction
+      action types signals a miscalibrated model response. An on-decision evaluator
+      surfaces these patterns without blocking the recommendation itself, giving the rep
+      and their manager a fast signal about which recommended plans are worth trusting
+      without further scrutiny.
+    implementation: |
+      `RecommendationScorer` runs inside `AnalysisWorkflow.evalStep`, fired immediately
+      after `RecommendationRecorded` lands. The scorer is deterministic and rule-based
+      (no LLM call — keeping the single-agent invariant honest): checks that every
+      `NextStep.suggestedDeadline` is non-empty, that every `NextStep.rationale` is
+      longer than a single word, that priority values form a contiguous sequence with no
+      gaps, and that the declared `urgency` is consistent with the action types present
+      (a `CRITICAL` deal whose entire next-step list consists of `FOLLOW_UP_EMAIL` actions
+      loses one point). Emits `EvaluationScored` with a 1–5 score and a one-line rationale.
+      The score is surfaced on the App UI card; deals with score ≤ 2 have their card border
+      highlighted in red as a prompt for the rep to verify the recommendation before acting.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Recommendation-form guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision actionability eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

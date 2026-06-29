@@ -1,0 +1,81 @@
+schema_version: 1
+sample_id: skrestaurantbooking
+
+# ---- Purpose ----
+purpose:
+  primary_function: restaurant-reservation-booking
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: automated-action
+  user_type: end-user-consumer
+
+# ---- Data ----
+data:
+  inputs:
+    - freeform-reservation-request
+    - restaurant-catalogue
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_categories_collected:
+    - contact-name
+    - contact-email
+
+# ---- Decisions ----
+decisions:
+  authority_level: automated-action
+  decision_subject: restaurant-reservation
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-before-commit
+  human_confirmation_required_before_external_write: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-reservation
+  failure_modes:
+    - wrong-restaurant
+    - wrong-date
+    - overbooking-conflict
+    - contact-data-misrouted
+    - confirmation-timeout
+    - stub-unavailable
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: end-user-consumer
+  user_must_confirm_before_external_write: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - booking-stub-write
+  rate_limit_per_session: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  booking-terms-accepted-by-user: TO_BE_COMPLETED_BY_DEPLOYER

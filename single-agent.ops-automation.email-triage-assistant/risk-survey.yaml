@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: email-triage-assistant
+
+# ---- Purpose ----
+purpose:
+  primary_function: email-triage-and-draft-generation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: assist-and-confirm
+  user_type: operations-staff-or-support-agent
+
+# ---- Data ----
+data:
+  inputs:
+    - submitted-email-body
+    - email-attachments-text-content
+  data_classes:
+    pii: true
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: assist-and-confirm
+  decision_subject: outbound-email-reply
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: irreversible-once-sent
+  reviewer_reads_every_draft_before_send: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-email-thread
+  failure_modes:
+    - wrong-urgency-classification
+    - wrong-category-assignment
+    - draft-reply-misrepresents-sender-intent
+    - pii-leakage-via-llm
+    - send-without-approval
+    - attachment-content-not-processed
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: operations-staff-or-support-agent
+  reviewer_must_approve_before_send: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - send_email (simulated; deployer replaces with real SMTP or API)
+  rate_limit_per_email: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  email-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

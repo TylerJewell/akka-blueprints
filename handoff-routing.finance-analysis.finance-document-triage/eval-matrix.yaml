@@ -1,0 +1,128 @@
+schema_version: 1
+sample_id: finance-document-triage
+coordination_pattern: handoff-routing
+domain: finance-analysis
+
+controls:
+  - id: S1
+    name: Redact personal identifiers before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Finance documents routinely carry names, account numbers, tax identification
+      numbers, and national identifier numbers. These fields are not needed by a
+      classifier or processor to determine document type or produce a processing
+      summary. Redaction occurs inside a Consumer (`PiiSanitizer`) before the
+      document enters the workflow, so no LLM call ever sees raw personal
+      identifiers. The categories found are retained in the entity for audit;
+      only the redacted text is forwarded.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `DocumentQueue` events. For each
+      `InboundDocumentReceived` it runs a regex pipeline (account numbers matching
+      `ACCT-\w+` and numeric patterns of 8–17 digits, tax ids matching the
+      `[A-Z]{2}\d{6,12}` form, national ids matching `NID-\w+`, and name
+      heuristics on greeting and signature positions), produces an intermediate
+      redacted payload, and calls `DocumentEntity.registerIncoming` then
+      `attachPiiSanitized`. The `piiCategoriesFound` list is preserved on the
+      `SanitizedDocument` for auditing purposes only.
+    regulation_anchors: []
+
+  - id: S2
+    name: Redact financial-sector regulated fields before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: blocking
+    rationale: |
+      After PII redaction, finance documents may still carry AML risk flags, raw
+      credit scores, fund codes, and regulatory threshold amounts. Transmitting
+      these fields to a general-purpose language model creates data-handling risk
+      under financial-sector regulations and introduces the possibility of the
+      model making regulatory inferences it is not authorised to make. A second
+      Consumer pass redacts these fields before the workflow — and therefore
+      before any agent — sees the document.
+    implementation: |
+      `SectorSanitizer` Consumer subscribes to `DocumentEntity` events and reacts
+      to each `DocumentPiiSanitized` event. It applies a second redaction stage
+      targeting AML flags (`AML-\w+`), credit-score tokens (`FICO:\d+`,
+      `SCORE:\d+`), fund codes (`FUND-\w+`), and regulatory amounts
+      (`REG-AMT:\d+`). It assembles the final `SanitizedDocument` carrying both
+      `piiCategoriesFound` (from the first pass) and `sectorFieldsRedacted` (from
+      this pass), calls `DocumentEntity.attachSectorSanitized`, and then starts a
+      `DocumentWorkflow`. No LLM call occurs at any earlier stage.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block processor drafts that violate the finance-policy rubric
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-rubric
+    enforcement: blocking
+    rationale: |
+      A processor agent can return a draft whose structure is well-formed but whose
+      content is policy-violating — citing an invented approval reference number,
+      fabricating a creditworthiness conclusion from a redacted credit score, or
+      issuing an autonomous regulatory conclusion that requires a licensed compliance
+      officer. The before-agent-response guardrail intercepts the draft before it is
+      committed as the published result and blocks any draft that trips the rubric.
+      This is the final automated gate before a processing result becomes visible
+      to downstream systems or operators.
+    implementation: |
+      `OutputGuardrail` is a typed Agent. `DocumentWorkflow.guardrailStep` invokes
+      it with the `SanitizedDocument` and the processor's `ProcessingResult` draft.
+      The agent returns `GuardrailVerdict { allowed, violations, rubricVersion }`.
+      On `allowed=false` the workflow emits `ResultBlocked` (terminal `BLOCKED`)
+      and the operator can either unblock via `POST /api/documents/{id}/unblock` or
+      leave the document blocked for manual disposition. The violation list is
+      preserved in the entity for audit regardless of the operator's decision.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every classification decision inline
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The routing decision is the most consequential step of the handoff for a
+      finance document: misrouting an invoice to the loan processor or a compliance
+      alert to the invoice processor produces results of entirely the wrong shape
+      and authority level. An on-decision eval provides a continuous, per-document
+      signal independent of operator spot checks. Persistent low scores indicate a
+      regression in the classifier or a drift in the document vocabulary that
+      requires prompt attention.
+    implementation: |
+      `ClassificationEvalScorer` Consumer subscribes to `DocumentEntity` events.
+      On every `DocumentClassified` it calls `ClassificationJudge` (typed Agent)
+      with the `SanitizedDocument` and the `ClassificationDecision`. The judge
+      returns `ClassificationScore { score: 1–5, rationale }`. The Consumer then
+      calls `DocumentEntity.recordClassificationScore` which emits
+      `ClassificationScored`. The score is non-blocking — a low score does not
+      alter the workflow flow; it surfaces on the App UI tab as a per-document
+      score chip and (in a deployed setting) would feed a system-level alert.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: S2
+    label: Sector-data redaction
+    mechanism: Sanitizer
+    implementation: sector
+    source: —
+  - id: G1
+    label: Before-response finance-policy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision classification eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

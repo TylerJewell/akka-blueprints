@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: activity-interrupt-cancellation
+
+# ---- Purpose ----
+purpose:
+  primary_function: ops-automation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: automated-execution-with-operator-override
+  user_type: operations-engineer
+
+# ---- Data ----
+data:
+  inputs:
+    - automation-task-definitions
+    - infrastructure-state-snapshots
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    infrastructure-credentials: TO_BE_COMPLETED_BY_DEPLOYER
+    configuration-secrets: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: automated-with-cancellation
+  decision_subject: infrastructure-resource
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible-via-cleanup
+
+# ---- Failure ----
+failure:
+  blast_radius: TO_BE_COMPLETED_BY_DEPLOYER
+  failure_modes:
+    - partial-execution-without-cleanup
+    - runaway-agent-exceeding-scope
+    - cleanup-plan-incomplete-after-cancellation
+    - stale-task-not-detected-in-time
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: operations-engineer
+  reviewer_can_cancel_any_running_task: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    # TaskRunnerAgent tool calls are domain-specific; replace the stubs with
+    # real integrations (e.g., AWS SDK, kubectl) when deploying.
+  stale_timeout_seconds: 300
+  rate_limit_per_task: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  change-management-approval-required: TO_BE_COMPLETED_BY_DEPLOYER

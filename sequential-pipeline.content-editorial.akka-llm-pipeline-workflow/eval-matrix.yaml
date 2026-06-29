@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: akka-llm-pipeline-workflow
+coordination_pattern: sequential-pipeline
+domain: content-editorial
+
+controls:
+  - id: H1
+    name: Validate structured outline before advancing to the draft activity
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: after-llm-response
+    enforcement: blocking
+    rationale: |
+      The outline LLM call produces a `PostOutline` that becomes the sole context for the
+      subsequent draft call. If the outline is malformed — missing a title, carrying an
+      empty sections list, or returning a zero word target — the draft activity will either
+      produce a structurally incoherent post or silently invent structure the user never
+      requested. Catching the malformed output at the `after-llm-response` boundary, before
+      the workflow advances, prevents a downstream draft that is garbage-in / garbage-out.
+      The check is blocking because passing an invalid outline to the draft step has no
+      recoverable path within a single workflow run — the post must fail fast with a
+      structured reason so the caller can resubmit with a corrected topic.
+    implementation: |
+      `SchemaGuardrail` is registered on `OutlineActivity` via the activity's
+      guardrail-configuration block, bound to the `after-llm-response` hook. On every
+      outline LLM response the guardrail applies four checks: (1) `title` is non-blank,
+      (2) `sections` is non-empty, (3) every `OutlineSection.heading` is non-blank,
+      (4) `wordTarget > 0`. On any failure, it returns `Guardrail.reject(
+      "validation-failed: <field> <reason>")` and calls
+      `PostEntity.recordValidationFailure(field, reason)` so the structured reason is
+      visible in the App UI card and in the audit log. `ContentWorkflow.outlineStep`
+      receives the rejection, transitions the post to `FAILED` via `failStep`, and ends
+      the workflow. The draft activity is never called.
+    regulation_anchors: []
+
+  - id: H2
+    name: Review draft against editorial policy before marking post ready
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      The draft activity produces a `BlogPost` destined for publication. Without a
+      pre-publication check, a draft that violates word-count constraints, contains
+      prohibited topic phrases, or fails to cover sections the outline declared will reach
+      users in a degraded or policy-violating state. The `before-agent-response` hook is
+      the correct boundary for editorial review: the draft is complete, the guardrail has
+      the full `BlogPost` in hand, and the post has not yet been committed as `READY`. A
+      flagged post lands in `FLAGGED` state — the draft is preserved for human inspection
+      but is not surfaced as ready for use. The guardrail is blocking in the sense that a
+      flagging result prevents the `READY` transition; the post is not discarded, only
+      held.
+    implementation: |
+      `EditorialGuardrail` is registered on `DraftActivity` via the activity's
+      guardrail-configuration block, bound to the `before-agent-response` hook. Three
+      rules are checked: (1) word-count constraint — `BlogPost.wordCount` is within ±20%
+      of `PostOutline.wordTarget` (the outline is read from `PostEntity` and passed to the
+      guardrail alongside the draft); (2) prohibited-topic check — none of the phrases in
+      `src/main/resources/editorial-policy/prohibited-phrases.txt` appears
+      (case-insensitive) in `BlogPost.introduction` or any `DraftSection.body`;
+      (3) section-coverage check — every `OutlineSection.heading` from the upstream
+      `PostOutline` has a matching `DraftSection.heading` in the `BlogPost`
+      (case-insensitive). On any failure, the guardrail returns `Guardrail.flag(
+      "editorial-flag: <rule> <reason>")` and calls `PostEntity.flag(reason)`;
+      `ContentWorkflow` writes `PostFlagged` and transitions to `FLAGGED`. On all three
+      passing, the guardrail returns `Guardrail.accept()`; `ContentWorkflow` writes
+      `PostApproved` and transitions to `READY`. The `EditorialReview` record carries
+      `passed`, `reason`, and `reviewedAt` regardless of outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Outline schema guardrail
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: H2
+    label: Editorial policy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

@@ -1,0 +1,105 @@
+schema_version: 1
+sample_id: task-insight-memory
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: E1
+    name: Record every task outcome as an eval event before persisting insight
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The memory store's value depends entirely on the quality of what goes
+      into it. A result that the evaluator rejects must never reach the
+      insight store — even if it looked plausible. Recording a typed eval
+      event per outcome gives operators a continuous quality signal (pass
+      rate, average quality score, rejection reasons) and makes the
+      verified-experience write path auditable: every insight in the store
+      has a corresponding EvalVerdict event that confirms it cleared the bar.
+    implementation: |
+      `EvaluatorAgent` runs as `evaluateStep` in `MemoryWorkflow`, immediately
+      after `executeStep` returns a `TaskResult`. The agent scores the result
+      against the task's acceptance criteria and returns `EvalVerdict{outcome,
+      qualityScore, notes}`. The workflow writes `TaskEvalVerdictRecorded` on
+      `TaskEntity` regardless of outcome. Only results with `outcome=VERIFIED`
+      AND `confidence >= task-insight-memory.executor.min-confidence` (default
+      0.70) proceed to `sanitizeStep` and `persistStep`. Rejected results
+      terminate in `failStep` with no write to `MemoryEntity`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub PII from insight candidates before persisting to the memory store
+    mechanism:
+      kind: sanitizer
+      hook: before-persist
+      flavor: pii
+    enforcement: non-blocking
+    rationale: |
+      Insights accumulated from task executions may embed personal identifiers
+      drawn from the original task descriptions — names, email addresses, phone
+      numbers. Because insights survive across sessions and are retrieved by
+      future agent calls, a single un-scrubbed insight can propagate PII into
+      many downstream executions. A deterministic sanitize pass before every
+      write to `MemoryEntity` prevents this accumulation without requiring
+      operators to audit individual task results.
+    implementation: |
+      `sanitizeStep` in `MemoryWorkflow` is a pure-function step (no LLM call)
+      that runs immediately after the eval verdict is `VERIFIED`. It applies
+      regex patterns for email addresses (`[\w.+-]+@[\w-]+\.[a-z]{2,}`), phone
+      numbers (`\+?[\d\s\-().]{7,}`), and name-shaped tokens against each entry
+      in `TaskResult.keyFindings`. Matches are replaced with `[REDACTED]`. The
+      redaction count is included in the `SanitizerApplied` internal signal.
+      The scrubbed text is what gets written as `InsightCandidate.sanitizedText`
+      in `InsightPersisted`. The raw `TaskResult` is never written to
+      `MemoryEntity`.
+    regulation_anchors: []
+
+  - id: P1
+    name: Watch accumulated memory for insight-distribution drift
+    mechanism:
+      kind: eval-periodic
+      hook: periodic-scan
+      flavor: drift-fairness-watch
+    enforcement: system-level
+    rationale: |
+      A memory store that accumulates insights exclusively from one task type
+      will systematically bias the `ExecutorAgent` toward that domain. Similarly,
+      a gradual drop in average confidence scores signals that the quality bar
+      is eroding over time. Neither of these conditions is detectable from a
+      single task's perspective; only a periodic view of the whole store reveals
+      them. Emitting a structured `DriftAssessmentRecorded` event when thresholds
+      are crossed makes the drift observable without auto-pruning the store and
+      discarding potentially valid insights.
+    implementation: |
+      `DriftWatcher` (TimedAction) fires every 5 minutes. It queries
+      `MemoryView.getAllInsights`, groups by `taskType`, and computes the
+      type-concentration ratio (count of dominant type / total) and the
+      moving-average `confidence` across all non-superseded insights. If the
+      concentration ratio exceeds 0.80 or the average confidence drops below
+      `task-insight-memory.drift.confidence-floor` (default 0.55), it calls
+      `MemoryEntity.recordDriftAssessment(DriftReason{concentrationRatio,
+      avgConfidence, dominantTaskType, triggeredThreshold})`. The assessment
+      is idempotent on the 5-minute window timestamp. The resulting
+      `DriftAssessmentRecorded` event surfaces in the App UI's memory timeline
+      with the triggering metrics, giving operators a concrete signal to act on.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-outcome eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: S1
+    label: PII sanitizer · insight candidates
+    mechanism: Sanitizer
+    implementation: before-persist
+    source: —
+  - id: P1
+    label: Drift watch · memory store
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —

@@ -1,0 +1,85 @@
+schema_version: 1
+sample_id: sba-loan-processor
+
+# ---- Purpose ----
+purpose:
+  primary_function: small-business-loan-underwriting-pipeline
+  sector: financial-services
+  decisions_surface: loan-approval-denial
+  user_type: loan-officer
+
+# ---- Data ----
+data:
+  inputs:
+    - applicant-submitted-loan-application
+    - business-financial-statements
+    - collateral-description
+    - in-process-credit-reference-data
+  data_classes:
+    pii: true                         # SSN, full name, DOB, address — sanitized before agent
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    special-category: true            # race, ethnicity, sex, age, marital status — masked before agent
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: human-final        # agent recommends; officer approves or denies
+  decision_subject: small-business-loan-application
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-by-officer-within-review-window
+  material_financial_impact: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-application
+  failure_modes:
+    - protected-attribute-leaking-into-rationale
+    - proxy-language-in-denial-rationale
+    - dscr-calculation-error
+    - phase-violation-tool-call
+    - hallucinated-financial-figure
+    - officer-review-skipped-on-crash
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true                 # officer approves or denies every decision
+  human_on_loop: true                 # fairness scorer flags decisions for officer attention
+  reviewer_role: loan-officer
+  officer_must_act_before_decision_effective: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+  supervisory_reporting: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_application: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  ecoa_compliance_review_required: true
+  fair_housing_act_review_required: TO_BE_COMPLETED_BY_DEPLOYER
+  cra_reporting_required: TO_BE_COMPLETED_BY_DEPLOYER
+  adverse_action_notice_required: true

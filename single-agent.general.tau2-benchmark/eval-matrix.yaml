@@ -1,0 +1,43 @@
+schema_version: 1
+sample_id: tau2-benchmark-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: E1
+    name: Score every task result for execution completeness
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      Benchmark infrastructure is only as trustworthy as its scoring. An agent that
+      returns a plausible-looking TaskResult — outcome PASS, non-empty finalAnswer —
+      but that skipped half the task's steps or produced empty step outputs cannot be
+      distinguished from a genuinely capable agent without deterministic post-result
+      verification. The performance monitor closes that gap: every result is scored on
+      four observable criteria immediately after it lands, flagging thin results for
+      human inspection without blocking the run or modifying the verdict. Over time the
+      aggregate score distribution reveals systematic capability gaps in ways that
+      per-run human review cannot.
+    implementation: |
+      `TaskScorer` runs inside `BenchmarkRunWorkflow.scoreStep`, fired immediately
+      after `ResultRecorded` lands in `BenchmarkRunEntity`. The scorer is deterministic
+      and rule-based (no LLM call — preserving the single-agent invariant): (1) checks
+      that `stepOutputs.size()` equals `task.steps().size()` (all steps attempted),
+      (2) checks that each `StepOutput.output` is non-empty, (3) checks that
+      `finalAnswer` is non-empty and matches `task.referenceAnswer()` after
+      case-insensitive trimming, and (4) checks that `latencyMs` is in the range
+      (0, 120000]. Each criterion met adds one point to a base of 1, yielding a 1–5
+      score. Emits `RunScored` with the score and a one-line rationale. The score is
+      surfaced on the App UI tab; runs with score ≤ 2 are flagged with a red card
+      border so reviewers know which results to inspect before drawing capability
+      conclusions.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Post-result execution completeness eval
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

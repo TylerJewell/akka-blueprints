@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: akka-router-pattern
+
+# ---- Purpose ----
+purpose:
+  primary_function: task-routing
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: automated-task-execution
+  user_type: internal-operator
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-task-requests
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: false
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-with-guardrail
+  decision_subject: system
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: operator-unblock-only
+  routing_decisions_made_by_ai: true
+  execution_decisions_made_by_ai: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-request
+  failure_modes:
+    - wrong-domain-routing
+    - prompt-injection-via-task-body
+    - cross-domain-output-confusion
+    - specialist-out-of-scope-execution
+    - guardrail-false-positive-blocking
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  reviewer_must_approve_every_outgoing: false
+  reviewer_must_unblock_guardrail_failures: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_request: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,160 @@
+schema_version: 1
+sample_id: medical-document-pipeline
+coordination_pattern: sequential-pipeline
+domain: healthcare
+
+controls:
+  - id: S1
+    name: Mask PHI health data fields before any extract tool runs
+    mechanism:
+      kind: sanitizer
+      hook: before-tool-call
+      flavor: special-category
+    enforcement: blocking
+    rationale: |
+      Medical documents contain health data — diagnoses, medications, procedure notes,
+      lab values — that is a special category under data-protection frameworks such as
+      HIPAA and GDPR Article 9. If the raw document text were passed to an LLM-backed
+      extract tool without prior masking, the model call would process identifiable health
+      information outside the deployer's controlled data environment. The before-tool-call
+      hook is the right enforcement point: the guardrail checks the `DocumentEntity.sanitized`
+      flag and rejects any EXTRACT-phase tool call that arrives before `DocumentSanitized`
+      has been recorded. The rejection is structured and auditable — the rejected call is
+      logged as `GuardrailRejected{reason: "phi-not-sanitized"}` on the entity, giving
+      compliance teams a verifiable record that the control fired.
+    implementation: |
+      `SanitizationGuardrail` is registered on `MedicalDocumentAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. For every call
+      to an EXTRACT-phase tool (`extractDemographics`, `extractDiagnoses`,
+      `extractMedications`, `extractVitals`), the guardrail reads `DocumentEntity.sanitized`
+      (looked up by `documentId` from the in-flight `TaskDef.metadata`). If `sanitized` is
+      `false`, the call is rejected before the tool body executes; the rejection reason
+      `"phi-not-sanitized"` is returned as a structured error to the agent loop and
+      `DocumentEntity.recordGuardrailRejection` is called. The upstream `sanitizeStep` in
+      `DocumentPipelineWorkflow` is responsible for running the deterministic masking logic
+      and emitting `DocumentSanitized` (which sets `sanitized = true`) before `extractStep`
+      starts. The two layers — workflow ordering and runtime guardrail — are independent: the
+      workflow ordering is the happy-path guarantee; the guardrail is the defence-in-depth
+      check for any path that bypasses the workflow.
+    regulation_anchors: []
+
+  - id: S2
+    name: Replace patient identifiers with stable tokens before the agent sees the text
+    mechanism:
+      kind: sanitizer
+      hook: before-tool-call
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Patient names, dates of birth, medical record numbers, addresses, and contact details
+      are direct identifiers. Passing them to an LLM — even a self-hosted one — creates a
+      secondary processing record that must be governed separately from the primary clinical
+      record. Tokenising these fields before the text enters the pipeline removes the direct
+      identifiers from every downstream LLM call, keeping the model's conversation log free
+      of personally identifiable information. The tokens (`[PATIENT_NAME]`, `[DOB]`,
+      `[MRN]`, `[ADDRESS]`, `[PHONE]`) are stable within a document run, so clinical logic
+      that cross-references demographics remains coherent, but the tokens carry no
+      re-identification risk in isolation.
+    implementation: |
+      The same `sanitizeStep` in `DocumentPipelineWorkflow` that runs the PHI masking (S1)
+      also runs PII tokenisation. The bundled `phi-patterns.json` contains regex patterns
+      covering patient-name patterns, ISO-8601 date variants for DOB, MRN alphanumeric
+      formats, address components, and phone-number formats. Each match is replaced with its
+      category token; the original value and token are stored in `MaskedDocument.tokens` on
+      `DocumentEntity` — not passed to `MedicalDocumentAgent`. `SanitizationGuardrail`
+      applies the same `sanitized` flag check for PII as for PHI: both conditions must be
+      satisfied before any EXTRACT-phase tool call proceeds.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require clinician approval of extracted fields before summary generation
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Automated field extraction from medical documents carries a non-trivial error rate
+      for ambiguous language, abbreviations, and handwriting artefacts. A clinical summary
+      built on unchecked extracted values could propagate a misread medication dosage or
+      an incorrectly attributed diagnosis into a chart note visible to other clinicians.
+      Interposing a mandatory clinician review between extraction and summarization ensures
+      that every value in the final summary is traceable to a human decision, not just
+      an LLM output. The gate is enforced at the workflow level: `reviewGateStep` parks
+      `DocumentPipelineWorkflow` after `FieldsExtracted` and the workflow does not advance
+      to `summarizeStep` until `ReviewSubmitted` is recorded on `DocumentEntity`. There is
+      no code path that skips this step; an unapproved document stays in `AWAITING_REVIEW`
+      until the timeout escalates it to `FAILED`.
+    implementation: |
+      After `extractStep` completes, `DocumentPipelineWorkflow.reviewGateStep` emits
+      `ReviewRequested` on `DocumentEntity` (transitioning to `AWAITING_REVIEW`) and pauses
+      the workflow using Akka's Workflow pause/resume pattern. The App UI detects
+      `AWAITING_REVIEW` via the SSE stream and renders the clinician review form in the
+      right pane: a table of extracted fields with current values, editable inline, plus
+      an **Approve** button and a **Submit corrections** button. The clinician's submission
+      calls `POST /api/documents/{id}/review` with `{ approvedFields, corrections,
+      reviewedBy }`. `DocumentEndpoint` calls `DocumentEntity.submitReview(validationResult)`
+      which emits `ReviewSubmitted{validationResult}` and wakes the workflow via the
+      resume callback. `SanitizationGuardrail` enforces the gate from the agent's side:
+      SUMMARIZE-phase tools require `status ∈ {REVIEW_SUBMITTED, SUMMARIZING}` AND
+      `validationResult.isPresent()` — the agent cannot write a summary using unreviewed
+      fields even if the workflow were to advance prematurely.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every clinical summary for field completeness and value provenance
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Even a summary that passes the clinician review gate can have gaps: a section might
+      cite a field that was corrected during review but still references the original
+      extracted value, a mandatory field (primary diagnosis, attending clinician token) might
+      be absent from the summary, or a section body might be too sparse to be clinically
+      useful. The on-decision evaluator surfaces these patterns immediately after each
+      summary is written without blocking the output — giving the reviewing clinician a
+      fast signal about which summaries warrant closer scrutiny before the document enters
+      the chart workflow. Healthcare environments benefit especially from a deterministic
+      scorer: the same summary always receives the same score, making the control auditable
+      and reproducible across regulatory reviews.
+    implementation: |
+      `ClinicalAccuracyScorer` runs inside `DocumentPipelineWorkflow.evalStep`, fired
+      immediately after `SummaryWritten` lands. The scorer is deterministic and rule-based
+      (no LLM call — preserving the single-agent sequential-pipeline invariant). Four
+      checks, one point per check satisfied, on a base of 1:
+      (1) Mandatory field coverage — every `fieldId` in `ExtractedFields.diagnoses` appears
+      in at least one `ClinicalSection.sourceFieldIds` list in the `ClinicalSummary`.
+      (2) Value provenance — every `ClinicalSection.sourceFieldIds[i]` is present in
+      `ValidationResult.approvedFields[j].fieldId` (no summary section cites an
+      unapproved or non-existent field).
+      (3) Section completeness — `patientContext`, `chiefComplaint`, `clinicalImpression`,
+      and `recommendations` are all non-empty strings of at least 10 characters.
+      (4) Section word count — no `ClinicalSection.body` exceeds 150 words or is shorter
+      than 10 words.
+      Emits `EvaluationScored{score: 1-5, rationale: String}`. Score ≤ 2 flags the card
+      border red in the App UI, signalling that the clinician should re-examine the summary
+      before submitting it to the chart.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PHI sanitizer (health data)
+    mechanism: Sanitizer
+    implementation: before-tool-call (special-category)
+    source: —
+  - id: S2
+    label: PII sanitizer (patient identifiers)
+    mechanism: Sanitizer
+    implementation: before-tool-call (pii)
+    source: —
+  - id: H1
+    label: Clinician approval gate
+    mechanism: HITL
+    implementation: application (workflow pause/resume)
+    source: —
+  - id: E1
+    label: Clinical accuracy eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

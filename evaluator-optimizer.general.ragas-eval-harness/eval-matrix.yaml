@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: ragas-eval-harness
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: E1
+    name: Record every cycle's RAGAS score set as a continuous-accuracy eval event
+    mechanism:
+      kind: eval-periodic
+      hook: on-decision-eval
+      flavor: continuous-accuracy
+    enforcement: non-blocking
+    rationale: |
+      The RAGAS evaluator's per-metric verdict is the highest-fidelity signal
+      this harness produces. Recording faithfulness, answer relevance, and
+      context precision as typed events — per attempt, per run — gives
+      operators a continuous accuracy stream they can aggregate into pass-rate
+      trends, per-metric degradation alerts, and corpus-coverage gaps without
+      instrumenting the workflow itself. Non-blocking enforcement means the
+      recording never delays the evaluation loop; if the sampler misses a
+      tick, it catches up on the next one via idempotent keying on
+      (runId, attemptNumber).
+    implementation: |
+      `ScoreSampler` (TimedAction) fires every 30 s. Queries
+      `EvalRunsView.getAllRuns`, finds attempts that have been scored but
+      do not yet have a matching `ScoreRecorded` event, and calls
+      `EvalRunEntity.recordEval(attemptNumber, verdict, faithfulness,
+      answerRelevance, contextPrecision, ceilingExceeded)`. The call is
+      idempotent on `(runId, attemptNumber)`. `EvalWorkflow` itself also
+      emits one `ScoreRecorded` event on the terminal transition (RunPassed
+      or RunFailedFinal) carrying the complete loop-level outcome.
+    regulation_anchors: []
+
+  - id: CI1
+    name: Block artifact promotion when rolling RAGAS pass rate falls below threshold
+    mechanism:
+      kind: ci-gate
+      hook: pre-deploy
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      Continuous evaluation without a promotion gate is advisory-only. This
+      control closes the loop: before the service artifact is promoted to the
+      next environment, a gate queries the last 100 completed evaluation runs
+      and computes the pass rate. If the rate is below the configured floor
+      (default 0.80), the gate returns a non-zero exit code and emits a
+      `CiGateFailed` record, blocking the promotion pipeline. The threshold
+      is tunable per deployment via `ragas-eval.ci.min-pass-rate` so teams
+      can enforce tighter bars in production while keeping a looser bar in
+      staging.
+    implementation: |
+      `EvalEndpoint` exposes `GET /api/ci/gate-status`, which queries
+      `EvalRunsView.getAllRuns`, sorts by `createdAt` descending, takes the
+      most recent 100 completed runs, and computes `passRate = passCount /
+      windowSize`. If `passRate < ragas-eval.ci.min-pass-rate`, the response
+      body sets `gatePassed: false` and the HTTP status is 200 (the CI
+      pipeline checks the JSON field, not the HTTP status, so it can log the
+      full body on failure). A CI script wraps the call and exits non-zero
+      on `gatePassed: false`. No entity mutation happens during the gate
+      check; it is a read-only query over `EvalRunsView`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Continuous RAGAS score recorder
+    mechanism: Eval · periodic
+    implementation: on-decision-eval
+    source: —
+  - id: CI1
+    label: Pass-rate CI gate
+    mechanism: CI gate
+    implementation: pre-deploy test-gate
+    source: —

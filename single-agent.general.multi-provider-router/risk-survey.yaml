@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: multi-provider-router
+
+# ---- Purpose ----
+purpose:
+  primary_function: general-purpose-prompt-routing
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: informational
+  user_type: developer-or-end-user
+
+# ---- Data ----
+data:
+  inputs:
+    - user-submitted-prompts
+    - provider-hint
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: false
+
+# ---- Decisions ----
+decisions:
+  authority_level: informational
+  decision_subject: user-supplied-prompt
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_verdict_before_action: false
+
+# ---- Failure ----
+failure:
+  blast_radius: single-call
+  failure_modes:
+    - provider-unavailable
+    - latency-spike
+    - response-truncation
+    - provider-quality-divergence
+    - prompt-injection-via-user-input
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  reviewer_must_read_verdict_before_action: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: multi-provider
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion-openai
+    - llm-completion-anthropic
+  rate_limit_per_call: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  prompt-content-policy-reviewed: TO_BE_COMPLETED_BY_DEPLOYER

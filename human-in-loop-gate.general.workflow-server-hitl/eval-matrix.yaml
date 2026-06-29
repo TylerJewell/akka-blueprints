@@ -1,0 +1,68 @@
+# Eval Matrix for the workflow-server-hitl Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: workflow-server-hitl
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Pause the workflow at a human approval gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      The workflow exposes arbitrary business logic as a REST-accessible pipeline.
+      Without a human gate, the completion step would run automatically on any input
+      the analysis agent accepts. The approval pause gives a person the authority to
+      inspect the analysis findings and decide whether the associated risk level
+      warrants proceeding. This is the defining characteristic of the
+      human-in-loop-gate pattern: no downstream action executes until a person acts.
+    implementation: >
+      JobWorkflow pauses in awaitApprovalStep, polling JobEntity status on a
+      5-second timer. POST /api/jobs/{id}/approve and POST /api/jobs/{id}/reject
+      transition the entity to APPROVED or REJECTED; the workflow resumes on the
+      next poll and routes to completeStep or terminates accordingly.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the completion tool unless the job is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      In the general workflow-server pattern, the completion step represents the
+      consequential action — the work that would have real-world effects in a
+      production deployment. A pre-tool guardrail ensures that even if the workflow
+      reaches completeStep through an unexpected path, the underlying tool cannot
+      execute unless the entity records an APPROVED status. This prevents the human
+      gate from being bypassed by workflow retries or state-machine edge cases.
+    implementation: >
+      before-tool-call guardrail on CompletionAgent re-reads JobEntity.status and
+      allows the simulated completion tool only when status is APPROVED. If status
+      is not APPROVED, the guardrail blocks the call and the workflow does not
+      advance to COMPLETED.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/reject before completion runs.
+  - id: G1
+    name: Guard completion tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block completion unless job status is APPROVED.

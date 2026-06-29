@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: sandboxed-code-agent
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Screen generated code before every sandbox invocation
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: code-safety-validator
+    enforcement: blocking
+    rationale: |
+      A code-execution agent has write access to a process, a file system, and a network
+      stack inside its sandbox. A single unscreened tool call is enough to exfiltrate host
+      secrets, escape the container via path traversal, or exhaust external quotas via
+      outbound network calls. The before-tool-call hook is the correct cut point: the code
+      string is available as a structured parameter before the sandbox ever receives it, so
+      pattern matching is deterministic and adds no LLM latency. Blocking the call at this
+      point forces the agent to revise its approach rather than executing first and auditing
+      after.
+    implementation: |
+      `CodeScreeningGuardrail` is registered on `CodeExecutionAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook for the
+      `execute_code` tool. On each candidate invocation it extracts the `code` parameter
+      and runs five pattern-match passes in order: (1) host-path traversal regexes
+      (`/etc/`, `/proc/`, `~/.ssh/`, `C:\\Windows`), (2) outbound socket creation to
+      non-localhost addresses, (3) environment-variable harvesting (`os.environ`,
+      `subprocess.*env`), (4) dynamic code execution (`eval(`, `exec(`, `__import__(`),
+      and (5) shell injection (`os.system`, `subprocess.Popen`, `subprocess.call`). On
+      any match, `Guardrail.reject(patternName)` is returned; the agent loop receives a
+      structured tool error and counts one iteration toward its budget of 4. On pass,
+      `Guardrail.pass()` is returned and the `execute_code` call proceeds to the sandbox.
+    regulation_anchors: []
+
+  - id: H1
+    name: Kill runaway sandbox processes automatically
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      Generated code can enter infinite loops, spawn recursive subprocesses, or
+      initiate long-running network operations that outlast the user's expected budget.
+      An automatic kill based on observed resource usage — not on the agent's self-report
+      — is the only reliable stop. A time-limited budget agreed at submission time gives
+      the halt a concrete, auditable trigger: the system records the measured value and
+      the configured limit, making every halt explainable.
+    implementation: |
+      `SafetyHaltMonitor` is a Consumer subscribed to `ExecutionStarted` events emitted
+      by `ExecutionEntity`. For each started execution it schedules a polling task via
+      `ScheduledExecutorService.scheduleAtFixedRate` at a 2-second interval. On each
+      tick it reads the sandbox back-end's process stats (Docker stats API, E2B resource
+      endpoint, or OS `ProcessHandle` CPU-time for the local case). When
+      `wallClockMs > wallClockBudgetSeconds * 1000` or `cpuMs > cpuBudgetSeconds * 1000`,
+      the monitor calls the back-end's `kill()` method, constructs a `HaltReason` record
+      naming the breached limit and the measured vs. budget values, and calls
+      `ExecutionEntity.halt(haltReason)`. The entity emits `ExecutionHalted` and
+      transitions to `HALTED`. The monitor cancels its scheduled task on receipt of any
+      terminal event (`ExecutionCompleted`, `ExecutionHalted`, `ExecutionFailed`).
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Code safety guardrail (before-tool-call)
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Automatic safety halt (budget breach)
+    mechanism: Halt
+    implementation: automatic-safety-halt
+    source: —

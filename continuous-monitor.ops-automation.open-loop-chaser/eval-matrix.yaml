@@ -1,0 +1,69 @@
+schema_version: 1
+sample_id: open-loop-chaser
+coordination_pattern: continuous-monitor
+domain: ops-automation
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      A system that ingests meeting notes, messages, and documents sweeps broadly
+      across content that routinely contains personal names, email addresses, phone
+      numbers, and internal identifiers. The extraction model has no legitimate need
+      to see any of that; its job is to recognise action-item patterns in text, not
+      to process personal data. Redaction runs inside a Consumer before the source
+      text enters any workflow, so the LLM receives sanitized text exclusively. This
+      is the primary control for PII leakage through the model boundary.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `SourceEventReceived` events on
+      `SourceEventQueue`. Applies a three-stage pipeline: regex stage (email
+      addresses, phone numbers, dates-of-birth in ISO form), heuristic NLP stage
+      (personal names via capitalisation + context heuristics, Slack-style @mentions,
+      account-like tokens), and a configurable deny-list for organisation-specific
+      identifiers. Emits `ActionItemSanitized` carrying `SanitizedSource{redactedText,
+      redactedAuthor, piiCategoriesFound}`. The piiCategoriesFound list is retained
+      for audit; only the redacted text reaches `ActionItemExtractorAgent` and
+      `NudgeComposerAgent`.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block nudge dispatch until owner is confirmed by a human
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: owner-verification
+    enforcement: blocking
+    rationale: |
+      The system extracts action items from broad-scope content and infers a
+      suggested owner from redacted text. That inference may be wrong, ambiguous, or
+      point to a redacted placeholder. Dispatching an automated nudge to an unverified
+      or incorrectly inferred recipient wastes attention, may reach the wrong person,
+      and in some contexts may constitute unsolicited contact. The guardrail enforces
+      that a human operator has explicitly confirmed the recipient via the
+      confirm-owner endpoint before the `sendNudge` tool is permitted to execute.
+      This makes automated outbound communication opt-in per item rather than
+      opt-out at the system level.
+    implementation: |
+      Wired on the `sendNudge(itemId, nudgeBody)` tool's `before-tool-call` hook
+      inside `NudgeWorkflow`. The guardStep reads `ActionItemEntity.getItem(itemId)`,
+      checks that `ownerConfirmation.isPresent()` and that `confirmedOwner` is a
+      non-empty, non-redacted string. If the check fails, the workflow ends immediately
+      with an `ExtractionFailed` event carrying `reason="guardrail:no-confirmed-owner"`
+      and the nudge is not dispatched. The block is logged with the item id for audit.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Owner-verified nudge guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

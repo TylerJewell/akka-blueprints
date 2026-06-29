@@ -1,0 +1,110 @@
+schema_version: 1
+sample_id: conditional-recruiting-router
+coordination_pattern: handoff-routing
+domain: hr-recruiting
+
+controls:
+  - id: S1
+    name: Redact candidate PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Candidate emails routinely include the sender's email address, phone
+      number, and home address — all gathered at the point of contact and
+      never needed by a classifier or scheduling agent to do their work.
+      Routing an email body containing raw contact details to an LLM
+      creates unnecessary exposure: the model may echo them in a reply
+      subject, log them in a trace, or surface them through a tool call
+      argument. Redaction runs inside a Consumer, before the email enters
+      the workflow, so no classifier or specialist ever sees unmasked
+      identifiers.
+    implementation: |
+      `CandidateSanitizer` Consumer subscribes to `InboxQueue` events.
+      For each `InboundEmailReceived` it runs a regex stage (RFC-5322
+      email patterns, E.164 phone patterns, postal-code-anchored address
+      patterns) against both subject and body, produces a
+      `SanitizedEmail` carrying the redacted text plus the
+      `piiCategoriesFound` list, and calls
+      `ApplicationEntity.registerIncoming` then `attachSanitized`. The
+      categories list is kept for audit; only the redacted text is passed
+      to `EmailClassifierAgent`, `InfoRequester`, `InterviewOrganizer`,
+      and `RoutingJudge`.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block scheduling and email-send tool calls that fail validation
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-validation
+    enforcement: blocking
+    rationale: |
+      `InterviewOrganizer` operates with broad autonomy over scheduling
+      and outbound email tools. A mis-formed tool call — a past-dated
+      interview slot, an interviewer ID that does not exist in the pool,
+      or a send operation that lacks the candidate's consent flag — can
+      create a calendar conflict, confuse a candidate with a phantom
+      invitation, or violate data-processing obligations. The
+      before-tool-call guardrail intercepts every `schedule_slot` and
+      `send_email` invocation and validates the arguments against a
+      rubric before the tool fires. A single violated rule is sufficient
+      to block the call and transition the application to `TOOL_BLOCKED`
+      for recruiter review.
+    implementation: |
+      `ToolCallGuardrail` is a typed Agent. `RecruitingWorkflow`'s
+      `toolGuardrailStep` invokes it with the tool name and serialised
+      argument map before delegating to `InterviewOrganizer`. The agent
+      returns `ToolCallVerdict { allowed, violations, rubricVersion }`.
+      On `allowed=false` the workflow emits `ToolCallBlocked` (terminal
+      `TOOL_BLOCKED`) and the recruiter can either override via
+      `POST /api/applications/{id}/unblock` or leave the application
+      blocked. The tool never fires when blocked; no calendar entry or
+      outbound email is created.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every routing decision inline
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The routing decision determines which specialist handles the
+      candidate — a mis-route sends an interview-coordination email to
+      the info-reply path or vice versa, degrading the candidate
+      experience and potentially mis-representing the hiring timeline.
+      An on-decision eval provides a continuous per-application quality
+      signal independent of the recruiter's manual checks. Sustained
+      low scores on `INFO_REQUEST` vs `INTERVIEW_REQUEST` confusion
+      would signal a prompt or model degradation that sporadic review
+      would miss.
+    implementation: |
+      `RoutingEvalScorer` Consumer subscribes to `ApplicationEntity`
+      events. On every `RoutingDecided` it calls `RoutingJudge` (typed
+      Agent) with the `SanitizedEmail` and the `RoutingDecision`. The
+      judge returns `RoutingScore { score: 1–5, rationale }`. The
+      Consumer then calls `ApplicationEntity.recordRoutingScore` which
+      emits `RoutingScored`. The score is non-blocking — a low score
+      does not change the workflow; it surfaces on the App UI tab's
+      eval-score chip and (in a deployed setting) would feed a
+      system-level alert on sustained degradation.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Before-tool-call scheduling guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: On-decision routing eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

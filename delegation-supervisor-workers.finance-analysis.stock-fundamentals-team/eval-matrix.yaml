@@ -1,0 +1,97 @@
+# Eval Matrix for the stock-fundamentals-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (finance-analysis domain) with no industry- or
+# jurisdiction-bound anchors in this baseline, so regulation_anchors is an empty list
+# across all controls.
+
+schema_version: 1
+sample_id: stock-fundamentals-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Block investment advice before the recommendation reaches the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: >
+      The synthesised stock recommendation is investment-adjacent output. A model that
+      produces direct buy, sell, or hold instructions without a disclaimer creates
+      regulatory exposure for the deployer. The output guardrail intercepts the
+      AnalysisCoordinator's synthesis result before it is committed to the entity, checks
+      for direct advice language, and blocks the report rather than surfacing a
+      non-compliant recommendation to the end user.
+    implementation: >
+      A before-agent-response guardrail on AnalysisCoordinator runs a deterministic
+      keyword vetter (buy/sell/invest instructions without disclaimer) plus an LLM judge
+      over the StockRecommendation in AnalysisWorkflow.guardrailStep. On failure the
+      workflow calls StockReportEntity.block and the report enters BLOCKED with a
+      failureReason describing the violation.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact non-public price-sensitive language before surfacing the recommendation
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: blocking
+    rationale: >
+      Fundamental analysis agents may inadvertently reproduce phrases that resemble
+      material non-public information or specific price targets stated as facts rather than
+      estimates. A sector-specific sanitizer catches these patterns — analyst target-price
+      assertions, insider-adjacent forward guidance phrases — before the recommendation
+      leaves the service. Deployers in regulated jurisdictions often face strict requirements
+      around what financial content can be published, and an automated sanitizer pass
+      reduces the chance of non-compliant output reaching an end user or downstream system.
+    implementation: >
+      A sector sanitizer step (AnalysisWorkflow.sanitizerStep) runs after the guardrail
+      on the StockRecommendation text. It applies a configurable pattern list (regex +
+      LLM classifier) for price-sensitive phrases. On a match that cannot be safely
+      redacted, the workflow calls StockReportEntity.block. On a clean pass or successful
+      redaction, the sanitizerVerdict field on the recommendation is set to "ok" and the
+      workflow proceeds to emitStep.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score each synthesis decision for factual accuracy
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The AnalysisCoordinator merges financial metrics, news sentiment, and ratio
+      analysis from three independent workers into one recommendation. That synthesis
+      step is where fabricated statistics, contradictory claims, and unsupported stances
+      most commonly appear. Sampling completed recommendations with a rubric judge
+      surfaces a factuality score visible to the end user, supporting trust calibration
+      without blocking delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries StockReportView for the oldest
+      COMPLETE report lacking an evalScore, runs a 1-5 factuality rubric judge over the
+      StockRecommendation content (checking that claims in the summary trace to the
+      attached financials/news/ratios), and calls StockReportEntity.recordEval(score,
+      rationale), emitting ReportEvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Output guardrail — no direct investment advice
+    mechanism: "guardrail · before-agent-response"
+    short: Block a recommendation that contains direct buy/sell instructions without a disclaimer.
+  - id: S1
+    name: Sector sanitizer — price-sensitive redaction
+    mechanism: "sanitizer · sector"
+    short: Strip non-public price-sensitive language before the recommendation is surfaced.
+  - id: E1
+    name: Synthesis factuality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's synthesis for factual accuracy.

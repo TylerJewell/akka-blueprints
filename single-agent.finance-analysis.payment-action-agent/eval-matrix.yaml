@@ -1,0 +1,113 @@
+schema_version: 1
+sample_id: antom-payment
+coordination_pattern: single-agent
+domain: finance-analysis
+
+controls:
+  - id: G1
+    name: Block unauthorized tool calls before the agent invokes any payment API
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: authorization-check
+    enforcement: blocking
+    rationale: |
+      Payment APIs are write-side operations with real financial consequences — or, in this
+      blueprint, with simulated consequences that a deployer will replace with live Antom
+      calls. Intercepting the agent's tool call intent before it leaves the agent loop
+      is the earliest and most reliable enforcement point. A post-execution check would
+      have already transferred funds. The guardrail checks currency permit-list membership,
+      payment-method compatibility with the merchant category, blocked-recipient registry
+      membership, and operator identity — four independent axes that a misconfigured or
+      adversarially prompted agent could violate independently. On any failure the call
+      is blocked and the agent receives a structured rejection naming the specific failed
+      check, which terminates the tool-call chain rather than allowing the agent to
+      rephrase and retry with a different API.
+    implementation: |
+      `AuthorizationGuardrail` is registered on `PaymentActionAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      planned tool call it (1) checks `currency` against the deployer-configured
+      permitted-currencies set, (2) checks `method` against the merchant-category
+      compatibility table, (3) checks `recipientId` against the blocked-recipient
+      registry (seeded in `src/main/resources/blocked-recipients.json`), and
+      (4) checks `submittedBy` against the authorized-operator list. On any failure
+      it returns `Guardrail.reject(AuthorizationFailure{check, reason})`. The agent
+      loop receives the rejection, logs the block, and stops — it does not reattempt
+      the same tool call. `PaymentEntity` transitions to `REJECTED` with the rejection
+      reason stored for the UI.
+    regulation_anchors: []
+
+  - id: H1
+    name: Pause execution for operator confirmation on high-value payments
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Autonomous payment initiation above a monetary threshold carries outsized blast
+      radius if the instruction is incorrect, fraudulent, or the result of prompt
+      manipulation. The HITL gate creates a mandatory human checkpoint between the
+      authorization check and the agent's first tool call — ensuring that no amount
+      above the threshold moves without a named operator recording an explicit decision.
+      The gate is implemented as a workflow pause rather than an advisory alert, which
+      means the agent physically cannot proceed until the resume signal arrives. This
+      is a stronger guarantee than a notification-based approach where the agent could
+      time out and proceed anyway.
+    implementation: |
+      `PaymentWorkflow.hitlGateStep` reads `instruction.amountMinorUnits` and compares
+      it to `HIGH_VALUE_THRESHOLD_MINOR_UNITS` (default 1 000 000, representing 10 000
+      USD-equivalent in cents). If the amount exceeds the threshold, the step calls
+      `PaymentEntity.requireApproval()` and then `workflow.pause()`, suspending the
+      workflow. `PaymentEntity` transitions to `AWAITING_APPROVAL` and projects the
+      state to `PaymentView`. `PaymentEndpoint` exposes `POST /api/payments/{id}/approve`
+      and `POST /api/payments/{id}/deny`; approve calls `workflow.resume(ApprovalGranted)`,
+      deny calls `workflow.resume(ApprovalDenied)`. The `executeStep` — and therefore
+      `PaymentActionAgent` — does not start until the gate passes. Sub-threshold payments
+      skip `hitlGateStep` and advance directly to `executeStep`.
+    regulation_anchors: []
+
+  - id: H2
+    name: Halt agent execution immediately on a fraud signal
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      Payment fraud signals (velocity breaches, blocked-recipient matches, anomalous
+      amounts detected by a downstream risk engine) carry an implicit instruction to
+      stop all related activity now — not after the current iteration completes, not
+      after the agent finishes its tool-call chain. Implementing the halt as a Consumer
+      that reacts to a `FraudSignalDetected` event ensures it fires regardless of which
+      workflow step is active, how many agent iterations remain, or whether the HITL
+      gate has already passed. The halt is recorded as a terminal event on the entity,
+      preserving the partial execution state and the fraud signal details for regulatory
+      audit without allowing any further payment tool calls.
+    implementation: |
+      `FraudSignalConsumer` subscribes to all `PaymentEntity` events. On `FraudSignalDetected`
+      it calls `PaymentEntity.halt(fraudSignal.signalType())`, which emits `PaymentHalted`
+      and transitions the entity to `HALTED`. The running `PaymentWorkflow` detects the
+      terminal state on its next tick and fails the current step, forwarding to the error
+      step which also ends in `HALTED`. The `PaymentActionAgent` instance id for this
+      payment is invalidated — no further task calls can be routed to it. The halt event
+      carries `FraudSignal{signalType, detail, detectedAt}` so the UI and any downstream
+      audit system can inspect exactly what triggered the stop. `AntomApiSimulator` seeds
+      a `FraudSignalDetected` event on 1 in every 7 payments (by `paymentId` hash mod 7 == 0)
+      so the halt path is exercised in local development without external fraud detection.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-tool-call authorization guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: High-value HITL confirmation gate
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: H2
+    label: Fraud-signal halt
+    mechanism: Halt
+    implementation: operator-regulator-stop
+    source: —

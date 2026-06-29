@@ -1,0 +1,58 @@
+# Eval Matrix for the doc-linter Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a developer-tooling sample (dev-code domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: doc-linter
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: single-agent
+  domain: dev-code
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Confine the lint tool's file reads to the sample-data root
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      The lint tool reads files by path. Without a guard, a crafted path could escape
+      the intended root and read arbitrary files. The guardrail fires before the tool's
+      file read.
+    implementation: >
+      A before-tool-call guardrail on MarkdownLintTool canonicalizes the requested path
+      and asserts it stays under the sample-data root. On violation it blocks the call;
+      LintEndpoint records LintEntity.markBlocked and the run surfaces as BLOCKED.
+    regulation_anchors: []
+
+  - id: A1
+    name: Documentation gate on error-severity findings
+    mechanism:
+      kind: ci-gate
+      flavor: documentation-gate
+    enforcement: build-gate
+    rationale: >
+      Docs that fail a lint check should not merge. Turning error-severity findings into
+      a pass/fail signal lets a merge step gate on documentation quality.
+    implementation: >
+      LintEntity.recordResult computes gate = FAIL when any Finding has ERROR severity,
+      else PASS. An integration test drives a known-bad and a known-good sample file and
+      asserts FAIL then PASS so the gate is readable by a merge step.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Path-scope guard
+    mechanism: "guardrail · before-tool-call"
+    short: Block file reads outside the sample-data root.
+  - id: A1
+    name: Documentation gate
+    mechanism: "ci-gate · documentation-gate"
+    short: FAIL when any finding is error-severity; PASS otherwise.

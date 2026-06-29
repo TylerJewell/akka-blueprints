@@ -1,0 +1,46 @@
+schema_version: 1
+sample_id: self-discover-planner
+coordination_pattern: planner-executor
+domain: general
+
+controls:
+  - id: E1
+    name: Evaluate plan quality before any module executes
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: blocking
+    rationale: |
+      In a self-composing planner, the plan itself is the primary risk surface:
+      a poorly ordered module sequence, a set of modules that does not cover
+      the task, or circular data-flow references between steps can cause the
+      Executor to produce incoherent intermediate outputs that compound with
+      each step. Catching these defects after the plan is composed — but before
+      any module runs — is far cheaper than unwinding a partial execution log.
+      A dedicated evaluator agent scores coverage, step coherence, and
+      dependency validity; a plan below threshold is returned to the Planner
+      with concrete feedback before the system commits any module-execution
+      events. This gate makes the decision to proceed with execution explicit
+      and auditable: PlanAccepted only ever follows a passing PlanEval.
+    implementation: |
+      `SolveWorkflow.evaluatePlanStep` calls `PlanEvaluatorAgent` (task
+      EVALUATE_PLAN) immediately after `SolvePlanned` is emitted and before
+      the first `executeModuleStep`. The evaluator returns `PlanEval { score,
+      verdict, feedback }`. On `PlanVerdict.PASS` the workflow emits
+      `PlanAccepted` on `SolveEntity` and advances to the module execution
+      loop. On `PlanVerdict.FAIL` the workflow emits `PlanRejected { feedback }`
+      and routes to `revisePlanStep`, which calls `PlannerAgent` with
+      REVISE_PLAN carrying the evaluator's feedback. The revision loop is
+      capped at two rejections; a third `FAIL` transitions to `failStep` with
+      `failureReason = "plan rejected after maximum revisions"`. The
+      `planRevisionCount` field on `SolveEntity` records how many revisions
+      occurred before the plan was accepted or the budget exhausted.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Plan-quality eval gate
+    mechanism: Eval-event
+    implementation: on-decision-eval (PlanEvaluatorAgent before execution)
+    source: —

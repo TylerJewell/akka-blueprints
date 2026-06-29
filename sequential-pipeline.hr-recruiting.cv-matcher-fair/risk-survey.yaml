@@ -1,0 +1,124 @@
+# Risk Survey for the cv-matcher-fair Akka sample.
+#
+# Pre-filled answers reflect the sample's surface. Deployer-specific answers are
+# TO_BE_COMPLETED_BY_DEPLOYER and must be filled in before this survey is used to
+# materialize a deployer Eval Matrix.
+
+archetype:
+  id: cv-matcher-fair-sample
+  display_name: Fair CV Matcher (Akka Sample)
+  one_line_description: >
+    A sequential pipeline that extracts a structured profile from a CV, strips
+    protected-class signals, scores fit against job postings, and releases the
+    matches for human-on-the-loop review.
+  scenario: |
+    A user submits raw CV text plus a list of job postings. An ExtractionAgent
+    produces a structured CvProfile. A deterministic sanitize step strips
+    special-category signals (name, photo reference, address, age, gender
+    markers), recording each as a RedactedSignal. A MatchingAgent then scores
+    the redacted profile against each posting, producing a ranked list. The
+    candidate is released for a human reviewer to monitor. A FairnessMonitor
+    periodically checks selection-rate parity across demographic slices.
+
+    Employment screening is a high-risk use under the EU AI Act (Annex III).
+    The sample wires a sanitizer, a periodic fairness eval, and a
+    human-on-the-loop oversight gate accordingly.
+
+  primary_regulations:
+    - eu-ai-act
+    - gdpr
+
+  explicitly_not_applicable:
+    - synthetic media generation
+    - clinical decision support
+    - judicial process
+    - predictive policing
+    - mass surveillance
+    - biometric identification
+    - autonomous lethal targeting
+
+answers:
+  # ---- Pre-filled by sample author ----
+
+  sector.primary: ["human resources", "recruiting or talent acquisition"]
+
+  decisions.types: ["candidate screening", "job-fit scoring"]
+  decisions.automated: false
+  decisions.categories: ["employment screening support"]
+  runtime.human_review_required: true
+
+  data.types:
+    - raw CV text submitted by or about candidates
+    - extracted profile (experience, skills, education, title)
+    - protected-class signals stripped during sanitization
+    - job postings
+
+  capability.direct_human_interaction: false
+  capability.synthetic_media: false
+  capability.content_generation: false
+  capability.emotion_recognition: false
+  capability.biometric_categorisation: false
+  capability.law_enforcement_authorization: false
+  capability.law_enforcement_context: false
+  capability.critical_infrastructure: false
+  capability.defense_context: false
+
+  model.gpai: true
+  model.foundation: true
+  model.systemic_risk: false
+
+  capabilities.synthetic_media_modalities: []
+  capabilities.predictive_policing: false
+  capabilities.mass_surveillance: false
+  capabilities.autonomous_lethal_targeting: false
+  capabilities.behavioral_manipulation: false
+  capabilities.clinical_decision_support: false
+  capabilities.judicial_process_use: false
+
+  decisions.employment_decision: true
+  decisions.consequential_domains: ["employment"]
+  decisions.affects_natural_persons: true
+  decisions.affects_protected_class: true
+
+  capabilities.audio_generation: false
+  capabilities.biometric_identification: false
+  capabilities.conversational_output: false
+  capabilities.criminal_prediction: false
+  capabilities.employment_decisions: true
+  capabilities.gpai_model: true
+  capabilities.legal_reasoning: false
+  capabilities.modalities: ["text"]
+  capabilities.user_facing_interaction: false
+  capabilities.video_generation: false
+
+  regulations.sectoral_product_law: ["none"]
+
+  users.minors: false
+  subjects.children: false
+
+  # ---- Sample-author defaults ----
+
+  third_party.topology: built on Akka
+  third_party.vendor_attested: no
+
+  # ---- Deployer-specific (replace with deployer's answer) ----
+
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  voluntary_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  geography.jurisdictions: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.actor_roles: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.risk_tier: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.supervisors: TO_BE_COMPLETED_BY_DEPLOYER
+  subjects.affected_persons: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.annual_revenue: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.employee_count: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.regulator_designations: TO_BE_COMPLETED_BY_DEPLOYER
+  organization.local_representatives: TO_BE_COMPLETED_BY_DEPLOYER
+  model.training_compute: TO_BE_COMPLETED_BY_DEPLOYER
+  incidents.regulator_routes: TO_BE_COMPLETED_BY_DEPLOYER
+  data.residency: TO_BE_COMPLETED_BY_DEPLOYER
+  data.retention_period_days: TO_BE_COMPLETED_BY_DEPLOYER
+  deployer.is_governmental_entity: TO_BE_COMPLETED_BY_DEPLOYER
+  governance.sandbox_participation: TO_BE_COMPLETED_BY_DEPLOYER
+  workforce.ai_literacy_training_current: TO_BE_COMPLETED_BY_DEPLOYER
+  system.integrations: TO_BE_COMPLETED_BY_DEPLOYER

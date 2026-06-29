@@ -1,0 +1,101 @@
+schema_version: 1
+sample_id: secops-triage
+coordination_pattern: single-agent
+domain: governance-risk
+
+controls:
+  - id: G1
+    name: Block remediation tool calls before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: remediation-action-interceptor
+    enforcement: blocking
+    rationale: |
+      Automated remediation actions — patch deployments, firewall-rule changes, service
+      restarts, credential rotations — can cause production outages if the triage verdict
+      misclassifies the urgency or if the recommended action targets the wrong asset.
+      A before-tool-call guardrail is the correct cut: the agent proposes the action in
+      its reasoning, but the action cannot execute until an analyst explicitly approves
+      it. The guardrail intercepts at the tool-call boundary, routes the proposed action
+      to an approval queue, and returns a structured block response to the agent loop —
+      preventing any automated change from reaching production infrastructure.
+    implementation: |
+      `RemediationGuardrail` is registered on `VulnerabilityTriageAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each tool
+      call it checks whether the tool name matches the known-remediation-tools set
+      (patch-deploy, firewall-rule-change, service-restart, credential-rotation). On a
+      match it creates an `ApprovalEntity` record, calls `FindingEntity.requestApproval()`
+      to transition the finding to `PENDING_APPROVAL`, and returns
+      `Guardrail.block("approval-required")` to pause the agent loop. Non-remediation
+      tool calls (context lookups, read-only queries) pass through unmodified.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require analyst sign-off before any remediation executes
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Even when the before-tool-call guardrail correctly identifies a remediation call,
+      the final decision to change a production system must remain with a human analyst.
+      Automated triage reduces the analyst's workload by pre-scoring and ranking findings,
+      but it cannot substitute for the contextual judgment that a practitioner applies
+      when approving a production change. The approval gate is structural — the workflow
+      cannot advance to the remediation step until `ApprovalEntity` transitions to
+      `GRANTED` — so there is no code path that bypasses it.
+    implementation: |
+      `TriageWorkflow.approvalGateStep` polls `ApprovalEntity` every 2 s up to a
+      30-minute step timeout. The analyst interacts via `POST /api/findings/{id}/approve`
+      or `POST /api/findings/{id}/reject` served by `FindingEndpoint`. On `GRANTED`,
+      `ApprovalEntity` emits `ApprovalGranted`, the poll exits, and the workflow advances
+      to `remediationStep`. On `REJECTED`, `FindingEntity` transitions to
+      `REMEDIATION_REJECTED` and the workflow terminates. The App UI renders approve and
+      reject buttons only when a finding is in `PENDING_APPROVAL` state.
+    regulation_anchors: []
+
+  - id: E1
+    name: Alert when severity-scoring distribution drifts from baseline
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      Severity-scoring drift is a specific risk in vulnerability triage: if environmental
+      changes (new asset inventory, shifted threat landscape, prompt-version changes)
+      cause the agent to systematically under-rate or over-rate findings, the security
+      posture degrades silently. An organization that receives a steady stream of
+      `LOW_ACCEPTED` verdicts when the baseline expected a mix including `CRITICAL_IMMEDIATE`
+      findings may be dangerously under-resourced on remediation. The periodic drift
+      evaluator surfaces this pattern without blocking individual verdicts, giving the
+      security team a fast signal to re-calibrate before the backlog grows.
+    implementation: |
+      `DriftEvaluator` runs inside `DriftCheckWorkflow.driftCheckStep`, triggered every
+      6 hours. It reads the last 50 rows from `FindingView` and computes the percentage
+      breakdown across `TriagePriority` values. It compares against the calibration
+      baseline, which is computed from the first 20 triaged findings and stored as
+      immutable state on the evaluator class. If `CRITICAL_IMMEDIATE` percentage deviates
+      by more than 15 percentage points from baseline, or if `LOW_ACCEPTED` exceeds 60%
+      of recent decisions, `DriftEvaluator` returns a `DriftAlert` that `DriftCheckWorkflow`
+      writes as a `DriftAlertRaised` event on the sentinel `FindingEntity("drift-monitor")`.
+      The evaluator is deterministic and rule-based — no LLM call. The drift alert is
+      surfaced as a banner on the App UI tab; it does not block any in-progress triage.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Remediation-action guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Analyst approval gate
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: E1
+    label: Severity-drift periodic eval
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —

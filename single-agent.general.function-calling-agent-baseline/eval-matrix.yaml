@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: function-calling-agent-baseline
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Validate tool calls before invocation
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-validator
+    enforcement: blocking
+    rationale: |
+      A function-calling agent proposes tool invocations based on its interpretation of
+      the user's query, and those proposals are not always accurate. An agent can name a
+      tool that is not in the enabled set for this run, omit a required parameter, or
+      pass a value that cannot be used by the tool (e.g., a string where a number is
+      required). Without a pre-invocation check, these bad calls reach the tool executor
+      and either produce garbage results or throw exceptions that corrupt the run. The
+      before-tool-call hook is the right cut point: intercept before the side effect,
+      return a structured rejection so the agent can correct, and keep the executor clean.
+    implementation: |
+      `ToolCallGuardrail` is registered on `FunctionCallingAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      candidate tool invocation it (1) checks the proposed tool name against the run's
+      `enabledTools` list from `RunRequest`, (2) verifies that every parameter declared
+      as required in `ToolDefinition.parameterTypes` is present in the call's argument
+      map, and (3) checks that parameters declared as "number" type parse as numbers.
+      On any failure it returns a structured rejection naming the failed check and the
+      offending field; the agent loop consumes one iteration and retries with corrected
+      arguments. Passing invocations are forwarded to `InProcessToolExecutor`.
+    regulation_anchors: []
+
+  - id: G2
+    name: Filter final answers before they reach the caller
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-content-filter
+    enforcement: blocking
+    rationale: |
+      Tool-calling agents often relay information obtained from tool results directly
+      into their final answer. If a tool result contains a credential-like token, an
+      internal system path, or other sensitive material, the agent may echo it verbatim.
+      The before-agent-response hook catches this before the answer leaves the agent's
+      loop, forcing a revision before the response is written to the entity log or
+      returned to the caller. Even in a general-domain baseline, establishing this
+      cut point is important because deployers will extend the tool set with real
+      external integrations whose responses are unpredictable.
+    implementation: |
+      `AnswerGuardrail` is registered on `FunctionCallingAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate final answer it (1) verifies the response is parseable as `AgentAnswer`,
+      (2) checks that the `answer` field is non-empty, and (3) scans the `answer` string
+      for credential-like patterns (a regex matching `Bearer [A-Za-z0-9._-]{20,}` and
+      similar token shapes). On any failure it returns a structured rejection; the agent
+      revises within the remaining iteration budget. The guardrail result (blocked or
+      not, block count) is surfaced in `AgentAnswer.guardrailSummary` and shown on the
+      UI card so the operator can see how often the filter fires.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Pre-invocation tool-call check
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: G2
+    label: Final-answer content filter
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

@@ -1,0 +1,67 @@
+schema_version: 1
+sample_id: it-helpdesk
+coordination_pattern: handoff-routing
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Block proposed ticket writes that violate IT policy
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: policy-rubric
+    enforcement: blocking
+    rationale: |
+      Ticket creation is a write action with real downstream consequences: it triggers
+      provisioning workflows, notifies team queues, and can grant access or change system
+      state. A specialist agent can produce a well-formed ProposedTicket whose content
+      is policy-violating — requesting open-ended admin rights, setting P1 priority
+      without a named approver, or duplicating an already-open incident. The
+      before-tool-call guardrail inspects the proposed write before it is executed,
+      so malformed tickets are held for technician review rather than filed silently.
+    implementation: |
+      `TicketGuardrail` is a typed Agent. `HelpdeskWorkflow.guardrailStep` invokes it
+      with the `SanitizedRequest` and the specialist's `ProposedTicket` (when present).
+      The agent returns `GuardrailVerdict { allowed, violations, rubricVersion }`. On
+      `allowed=false` the workflow emits `TicketBlocked` (terminal `TICKET_BLOCKED`) and
+      the technician can either unblock via `POST /api/requests/{id}/unblock` or leave
+      the request blocked. The guardrail step is skipped entirely when the specialist's
+      `Resolution.proposedTicket` is empty — only ticket-creating writes are gated.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip credentials from IT requests before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: secret
+    enforcement: blocking
+    rationale: |
+      IT help desk users routinely embed credentials directly in their request body — an
+      API key they are troubleshooting, a password they are trying to reset, a PEM
+      certificate block from a failing TLS setup. This raw material reaching an LLM
+      creates exfiltration and logging risk. Redaction happens inside a Consumer before
+      the request enters the workflow, so no model call ever receives live credentials.
+      The audit record preserves the categories found without retaining the secrets
+      themselves.
+    implementation: |
+      `SecretSanitizer` Consumer subscribes to `RequestQueue` events. For each
+      `InboundRequestReceived` it applies a multi-stage regex pipeline: named API key
+      prefixes (`sk-`, `ghp_`, `AKIA`), generic bearer token patterns, password-field
+      heuristics, PEM block detection, and length-threshold checks for hex and base64
+      blobs likely to be secrets. Every match is replaced with `[REDACTED-SECRET]`.
+      A `SanitizedRequest` is produced carrying the redacted text plus the list of
+      secret categories detected, and `RequestEntity.registerIncoming` /
+      `attachSanitized` are called before `HelpdeskWorkflow` is started.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-tool-call ticket guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: Credential redaction
+    mechanism: Sanitizer
+    implementation: secret
+    source: —

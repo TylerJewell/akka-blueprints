@@ -1,0 +1,111 @@
+schema_version: 1
+sample_id: hr-assistant
+coordination_pattern: single-agent
+domain: hr-recruiting
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      HR queries routinely contain employee identifiers, personal email addresses,
+      phone numbers, postal addresses, and account-like tokens such as personnel
+      file numbers. An employee asking about their PTO balance may paste their
+      employee ID or work email into the free-text field. None of those belong
+      in an LLM call body. Redaction runs as the first pass inside QuerySanitizer,
+      between the raw query submission and the agent invocation; the raw query
+      text is preserved on QueryEntity for audit and HR-team review but is never
+      the input seen by the model.
+    implementation: |
+      `QuerySanitizer` Consumer subscribes to `QuerySubmitted` events emitted by
+      `QueryEntity`. The first pass runs a pipeline of regex stages (well-known
+      PII formats: email, phone, government IDs, payment-card-like tokens), a
+      heuristic stage (person names, postal addresses), and an employee-ID-token
+      stage that matches patterns such as `EID-\d+` and `EMP\d{6}`. Outputs
+      `piiCategoriesFound`. The sanitized text then feeds the second pass (S2).
+      `QueryWorkflow.answerStep` passes `sanitized.redactedQueryText` as the
+      `HrPolicyAgent` task instruction; the raw payload remains accessible only
+      via `request.rawQueryText` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: S2
+    name: Redact special-category HR fields before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: blocking
+    rationale: |
+      HR conversations frequently involve health conditions, disability
+      accommodations, religious observance requests, union membership status,
+      and pregnancy or parental-status disclosures. These are special-category
+      personal data under GDPR Article 9 and analogous frameworks, subject to
+      heightened processing restrictions. Processing them through a third-party
+      LLM without explicit consent and a lawful basis exposes the deploying
+      organisation to regulatory liability. Stripping these fields before the
+      agent call eliminates the exposure while still allowing the agent to
+      answer the substantive HR policy question.
+    implementation: |
+      The second pass of `QuerySanitizer` runs immediately after the S1 PII pass,
+      on the already-PII-redacted text. It applies a keyword-and-context
+      pipeline covering: health-condition phrases (diagnosis names, medication
+      references, phrases containing "condition", "illness", "treatment"),
+      disability-status markers ("disability", "accommodation request",
+      "reasonable adjustment"), religious-observance phrases ("prayer", "religious
+      leave", "faith-based"), union-membership indicators ("union", "shop steward",
+      "collective agreement"), and pregnancy or parental-status references
+      ("pregnant", "maternity", "paternity", "parental leave eligibility" when
+      phrased as a personal disclosure rather than a policy question).
+      Matched spans are replaced with `[REDACTED-SPECIAL-CATEGORY:<type>]`.
+      The same pass scrubs any special-category fields present in the resolved
+      `EmployeeProfile` before attaching it to the context. Outputs
+      `specialCategoriesFound`. The assembled `SanitizedQueryContext` is what
+      `QueryWorkflow.answerStep` passes as the task attachment.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject malformed policy answers before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      An HR assistant surfacing a hallucinated policy citation or an empty
+      answer to an employee is worse than returning no answer — it erodes trust
+      in both the tool and the HR function. The before-agent-response hook is
+      the right cut point: validate the candidate answer while still inside the
+      agent's loop, force a retry when the structural contract is not met, and
+      only let answers with real policy references and non-empty text reach the
+      entity log and the employee-facing UI.
+    implementation: |
+      `PolicyAnswerGuardrail` is registered on `HrPolicyAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate response it (1) parses the response into `PolicyAnswer`,
+      (2) asserts `answerText` is non-empty, (3) asserts `applicabilityVerdict`
+      is one of `{APPLICABLE, NOT_APPLICABLE, PARTIALLY_APPLICABLE}`, and
+      (4) asserts every `citations[].policyId` is present in the seeded policy
+      corpus (loaded once at startup from `src/main/resources/sample-events/
+      policies.jsonl`). On any failure returns a structured rejection naming the
+      failed check; the agent loop consumes one of its 3 iterations and retries.
+      Passing responses flow through to `QueryWorkflow.answerStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: S2
+    label: Special-category field redaction before LLM
+    mechanism: Sanitizer
+    implementation: special-category
+    source: —
+  - id: G1
+    label: Policy-answer form guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

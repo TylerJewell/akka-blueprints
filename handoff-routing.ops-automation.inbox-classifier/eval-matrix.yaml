@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: inbox-zero-lite-email-classifier
+coordination_pattern: handoff-routing
+domain: ops-automation
+
+controls:
+  - id: S1
+    name: Redact PII from message bodies before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound email messages routinely carry the sender's email address, phone
+      numbers in signatures, national ID patterns in regulatory correspondence,
+      and account numbers in billing-related messages. Neither the classifier
+      nor the routing agent requires any of these identifiers to make a correct
+      label or routing decision. Stripping them inside a Consumer before the
+      workflow starts prevents credential or identity data from entering the
+      model's context window, where it could be echoed, memorised across
+      sessions, or inadvertently surfaced in a routed action.
+    implementation: |
+      `BodySanitizer` Consumer subscribes to `InboxQueue` events. For each
+      `InboundMessageReceived` it runs a regex stage covering well-known email
+      address patterns, E.164 and local phone formats, national ID patterns
+      (`[A-Z]{2}\d{6,9}`), and account number tokens (`ACCT-\w+`), plus a
+      heuristic stage for greeting-position names and address-shaped lines.
+      It produces a `SanitizedMessage` carrying the redacted subject + body and
+      a list of categories found. `MessageEntity.registerIncoming` records the
+      raw payload for audit; `attachSanitized` records the redacted version.
+      Only the redacted text is passed to `ClassifierAgent` and `RoutingAgent`.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block destructive routing actions that are not warranted by the classification
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: action-safety
+    enforcement: blocking
+    rationale: |
+      An email classifier operating autonomously over a live inbox can
+      irrecoverably damage legitimate business communication if it incorrectly
+      routes a message to `DELETE` or `MOVE_TO_SPAM`. Unlike a mis-filed
+      message (which can be retrieved), a deleted or spam-binned message from
+      a key sender may be permanently lost or cause a missed deadline. The
+      before-tool-call guardrail verifies that every destructive action is
+      consistent with the sanitized content and the classification label before
+      the action executes, providing a final safety check that cannot be
+      bypassed by prompt drift or model regression.
+    implementation: |
+      `ActionGuardrail` is a typed Agent. `RoutingWorkflow.guardrailStep`
+      invokes it only when `RoutingDecision.action` is `MOVE_TO_SPAM` or
+      `DELETE`. The agent receives the `SanitizedMessage`, `ClassificationDecision`,
+      and `RoutingDecision` and returns `GuardrailVerdict { allowed, violations,
+      rubricVersion }`. On `allowed=false` the workflow emits `ActionBlocked`
+      (terminal `BLOCKED`) and the message sits there until an operator
+      unblocks via `POST /api/messages/{id}/unblock`. Non-destructive actions
+      (`FLAG_URGENT`, `MOVE_TO_FOLDER`, `MARK_READ`, `FORWARD_TO_HUMAN`)
+      skip this step entirely and proceed directly to `ActionExecuted`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Before-action destructive-action guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

@@ -1,0 +1,42 @@
+schema_version: 1
+sample_id: wp-autotagger
+coordination_pattern: single-agent
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Validate tag-write tool calls before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: scope-and-schema-validator
+    enforcement: blocking
+    rationale: |
+      A tag-writing agent that can call the WordPress API without a gate can
+      apply tags to the wrong post, overflow the CMS's tag-count limit, or
+      inject malformed tag strings that break downstream SEO tooling. The
+      before-tool-call hook is precisely the right cut: validate that the tool
+      call is aimed at the correct post, that the tag list is well-formed, and
+      that the count is within the configured budget — before any write lands
+      in the CMS. Catching at the tool boundary also keeps the reject/retry
+      loop inside the agent task, invisible to the CMS and the end user.
+    implementation: |
+      `TagProposalGuardrail` is registered on `TagProposerAgent` via the
+      agent's guardrail-configuration block, bound to the `before-tool-call`
+      hook. On each candidate `applyTags` tool call it (1) asserts the
+      `postId` parameter matches the `jobId`'s resolved post ID — scope check,
+      (2) asserts the tag list is non-empty, (3) asserts the tag count does
+      not exceed `config.maxTags` as carried by the active `PostRequest`, and
+      (4) asserts every tag string contains only alphanumeric characters,
+      hyphens, and spaces (no angle brackets, no script tags, no bare URLs).
+      On any failure it returns a structured rejection naming the failed check;
+      the agent loop consumes one of its 3 iterations and revises the tool
+      call. Passing tool calls flow through to `WpApiStub.applyTags`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tag-write scope guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

@@ -1,0 +1,137 @@
+schema_version: 1
+sample_id: field-service-dispatcher
+coordination_pattern: planner-executor
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Vet every assignment proposal before the specialist executes it
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      Dispatching a technician to a job has real-world consequences — a technician
+      sent outside their shift window violates labor agreements, one assigned a job
+      requiring skills they lack creates safety risk, and an assignment that exceeds
+      remaining travel time leaves the job unserviced and the customer waiting. These
+      errors cannot be undone by a software retry. A deterministic guardrail wired
+      before the specialist executes each assignment stops the decision before any
+      downstream action is taken and forces the DispatcherAgent to revise rather than
+      proceed with a policy-violating assignment.
+    implementation: |
+      `AssignmentGuardrail.vet(AssignmentDecision)` is called by `ScheduleWorkflow`'s
+      `guardrailStep` between `proposeStep` and `dispatchStep`. The vetter checks
+      (a) that the specialist is ROUTE_OPTIMIZER or AVAILABILITY, (b) that the
+      technicianId referenced exists in the fixture roster
+      (`sample-data/technicians.jsonl`), (c) that the proposed assignment time falls
+      within the technician's declared `shiftStart`–`shiftEnd` window, (d) that the
+      technician's skills list includes the work order's `requiredSkill`. On reject,
+      the workflow records an `AssignmentBlocked` entry on the fairness ledger, then
+      loops back to `proposeStep` so the DispatcherAgent sees the blocker and tries
+      again.
+    regulation_anchors: []
+
+  - id: E1
+    name: Monitor technician assignment distribution for drift and fairness
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      In field service operations, systematic bias in technician assignment is both
+      a labor-relations risk and an operational efficiency problem. A single technician
+      consistently receiving a disproportionate share of assignments accumulates fatigue
+      and overtime costs; one consistently receiving fewer than peers suggests routing
+      logic that unfairly disadvantages certain zones or skill sets. Because individual
+      schedule decisions look locally reasonable, only a cross-schedule aggregate view
+      reveals the pattern. A periodic evaluator that watches assignment distribution
+      across completed schedules provides this visibility without interfering with
+      in-progress work.
+    implementation: |
+      `FairnessMonitor` (TimedAction) runs every 5 minutes. It queries
+      `ScheduleView.getAllSchedules` for recently completed schedules, aggregates
+      `AssignmentEntry` records by `technicianId`, and computes each technician's
+      share of total OK assignments. When any technician's share exceeds 1.5× the
+      fleet average — or when a technician has received zero assignments across the
+      last 3 completed scheduling cycles — the monitor calls
+      `ScheduleEntity.recordFairnessAlert`, which emits a `FairnessAlertRecorded`
+      event carrying the `technicianId`, `alertType`, and `detail`. These alerts
+      appear on the operator dashboard in the App UI tab and in the expanded fairness
+      ledger view for each schedule.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Let the operator pause new dispatches without killing in-flight assignments
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: blocking
+    rationale: |
+      Field service conditions change during the day — a sudden traffic incident,
+      a technician calling in sick, or an emergency priority override may require
+      the operator to stop new assignments from going out while they assess the
+      situation. A hard kill would abandon in-flight routing decisions mid-execution,
+      leaving the state of the schedule ledger inconsistent. A graceful pause lets
+      the current assignment step finish and records a clean terminal state before
+      stopping further dispatches, preserving both data integrity and the operator's
+      ability to resume from a known-good point.
+    implementation: |
+      `OperatorControlEntity` (single instance keyed by literal `"global"`) holds
+      the pause flag. The App UI tab shows the operator dashboard with Pause / Resume
+      buttons backed by `POST /api/control/pause` and `POST /api/control/resume`.
+      Every `ScheduleWorkflow` reads the flag in its `checkPauseStep` at the top of
+      each loop iteration. On `paused=true`, the workflow finishes the in-flight
+      assignment step, then emits `SchedulePausedOperator` and ends the schedule
+      in `PAUSED`. The operator pane reflects every `control-update` SSE event live.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub credential-shaped strings from every specialist result
+    mechanism:
+      kind: sanitizer
+      flavor: secret
+    enforcement: blocking
+    rationale: |
+      Technician fixture data and routing results can contain embedded strings from
+      integration layer stubs — legacy configuration references, connection strings,
+      or API tokens inadvertently included in fixture files. These strings would
+      otherwise land verbatim on the fairness ledger, flow into the DispatcherAgent's
+      next prompt, and appear in the SSE feed the UI renders. Because the dispatcher
+      loop is append-only, a credential that enters the ledger cannot be removed
+      retroactively without replaying state. Scrubbing unconditionally at the
+      sanitize step keeps credentials out of all downstream surfaces from the moment
+      of ingestion.
+    implementation: |
+      `CredentialScrubber.scrub(String)` runs in `ScheduleWorkflow`'s `sanitizeStep`
+      between the specialist call and `recordStep`. It applies a sequence of
+      labelled-replacement regexes (AWS access key, GitHub token, JWT, OpenAI key,
+      generic bearer token) plus a high-entropy fallback for tokens >= 32 characters
+      whose Shannon entropy exceeds 4.5 bits/char. Replacements are tagged:
+      `[REDACTED:aws-access-key]`, `[REDACTED:github-token]`, `[REDACTED:jwt]`, etc.
+      The scrubbed string is what lands on the `AssignmentEntry` event and what the
+      DispatcherAgent sees on the next prompt.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Assignment guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Fairness drift watch
+    mechanism: Eval-Periodic
+    implementation: drift-fairness-watch (FairnessMonitor TimedAction)
+    source: —
+  - id: HO1
+    label: Operator pause control
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring (OperatorControlEntity + dashboard)
+    source: —
+  - id: S1
+    label: Credential sanitizer
+    mechanism: Sanitizer
+    implementation: secret (regex + entropy redactor)
+    source: —

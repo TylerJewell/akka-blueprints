@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: lambda-error-diagnoser
+
+# ---- Purpose ----
+purpose:
+  primary_function: ops-automation
+  sector: ops-automation
+  decisions_surface: advisory-only
+  user_type: platform-engineer
+
+# ---- Data ----
+data:
+  inputs:
+    - lambda-error-logs
+    - cloudwatch-log-events
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    infrastructure-credentials: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  stack_traces_may_contain_sensitive_paths: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: advisory-only
+  decision_subject: infrastructure-incident
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+
+# ---- Failure ----
+failure:
+  blast_radius: ops-team-visibility
+  failure_modes:
+    - incorrect-root-cause-diagnosis
+    - missed-critical-error
+    - false-positive-incident-dismissal
+    - stale-fix-suggestion-for-updated-runtime
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: platform-engineer
+  reviewer_must_approve_every_outgoing: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    # The log source is simulated; replace LogPoller with a real CloudWatch Logs subscriber when deploying.
+  rate_limit_per_incident: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: false

@@ -1,0 +1,62 @@
+# Eval Matrix for the screenplay-writer Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (content-editorial domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: screenplay-writer
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: sequential-pipeline
+  domain: content-editorial
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: S1
+    name: Redact personal data from source threads before any agent reads them
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Source emails and newsgroup posts carry real names and postal or email
+      addresses. The pipeline must strip them at intake so no agent prompt ever
+      contains raw personal data.
+    implementation: >
+      ScreenplayWorkflow.sanitizeStep runs a deterministic PiiSanitizer (regex over
+      emails, postal addresses, and names captured from thread headers) over the raw
+      thread, records the redaction count, and calls ScreenplayEntity.recordSanitized.
+      Downstream agents only ever receive the sanitized text.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block screenplays that leak source personal data
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Creative output can reintroduce names or addresses the model inferred from
+      surrounding context even after intake redaction. A final check before the
+      formatted screenplay is stored prevents a leak from reaching the user.
+    implementation: >
+      A before-agent-response guardrail on ScreenplayFormatterAgent scans the
+      formatted text for residual personal data and sets Screenplay.containsPii and
+      piiFindings. On a hit, ScreenplayWorkflow.formatStep calls
+      ScreenplayEntity.recordBlocked and the job ends in BLOCKED.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: PII intake redaction
+    mechanism: "sanitizer · pii"
+    short: Strip names and addresses before any agent reads the thread.
+  - id: G1
+    name: Screenplay PII guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a finished screenplay that leaks source personal data.

@@ -1,0 +1,65 @@
+schema_version: 1
+sample_id: akka-router-pattern
+coordination_pattern: handoff-routing
+domain: general
+
+controls:
+  - id: G1
+    name: Block routed requests that fail the pre-invocation safety check
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: routing-safety
+    enforcement: blocking
+    rationale: |
+      In a classifier-then-specialist pattern, a malicious or malformed request can
+      pass the classifier's domain check while still carrying content that should not
+      reach any specialist — prompt-injection tokens, requests for unauthorized data
+      access, or payloads that deliberately straddle domains to confuse the specialist.
+      Checking the classified request immediately before the specialist is invoked
+      ensures that the guardrail decision has the routing context (which domain was
+      selected) available, and that no specialist ever begins work on a blocked payload.
+    implementation: |
+      `RoutingGuardrail` is a typed Agent. `RouterWorkflow.guardrailStep` runs after
+      `classifyStep` completes and before `routeStep` selects a specialist. The agent
+      receives the original `TaskRequest` plus the `ClassificationDecision` and returns
+      `GuardrailVerdict { verdict: GuardrailOutcome, violations: List<String>,
+      rubricVersion: String }`. On `verdict=DENIED` the workflow emits `RequestBlocked`
+      (terminal `BLOCKED`) and no specialist is invoked. The operator can re-route via
+      `POST /api/requests/{id}/unblock`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every classification decision inline
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The routing decision is the most consequential step of the pattern: an
+      incorrectly classified request reaches the wrong specialist, which produces
+      an irrelevant result and wastes the task budget. An on-decision eval gives a
+      continuous, per-request signal that surfaces in the UI as a score chip and,
+      in a deployed setting, feeds a system-level alert when the average drops below
+      a threshold. The score is metadata only — it does not hold up the execution path.
+    implementation: |
+      `RoutingEvalScorer` Consumer subscribes to `RequestEntity` events. On every
+      `ClassificationDecided` it calls `RoutingJudge` (typed Agent) with the
+      `TaskRequest` and the `ClassificationDecision`. The judge returns
+      `RoutingScore { score: 1–5, rationale }`. The Consumer then calls
+      `RequestEntity.recordRoutingScore` which emits `RoutingScored`. The score is
+      non-blocking — a low score does not change the workflow flow; it surfaces
+      on the App UI tab as a per-request score chip.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-invocation routing guardrail
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —
+  - id: E1
+    label: On-decision routing eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

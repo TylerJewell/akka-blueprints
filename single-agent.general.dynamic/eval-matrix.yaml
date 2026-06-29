@@ -1,0 +1,64 @@
+# Eval Matrix for the dynamic-route-agent Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain community sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list on
+# every control.
+
+schema_version: 1
+sample_id: dynamic-route-agent
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: single-agent
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Validate the per-request agent configuration before the model runs
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: scope-enforcement
+    enforcement: blocking
+    rationale: >
+      One generic agent is configured per request with route-specific instructions
+      and input. An unknown route, empty text, oversized text, or a TRANSLATE
+      request with no target language is an unsafe or meaningless configuration.
+      Catching it before the model runs avoids a wasted call and a confusing result.
+    implementation: >
+      RouteEndpoint runs a validateConfig check on the inbound SubmitRequest before
+      building the AgentSetup for DynamicAgent. A failing check records a
+      RequestBlocked event on RequestEntity with the reason and never calls the agent.
+    regulation_anchors: []
+
+  - id: G2
+    name: Check the agent output before it reaches the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The summarize and translate output is user-facing. Empty output,
+      runaway-length output, or a SUMMARIZE route that returned the input unchanged
+      would be a poor or unsafe response, so it is checked before being recorded as
+      the completed result.
+    implementation: >
+      RouteEndpoint runs a validateOutput check on the AgentResult returned by
+      DynamicAgent. On pass it records RequestCompleted on RequestEntity; on fail it
+      records RequestBlocked instead, so the bad output never becomes the request's
+      result.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Validate per-request config
+    mechanism: "guardrail · before-agent-invocation"
+    short: Block unknown route, empty/oversized text, or TRANSLATE with no target language before the model runs.
+  - id: G2
+    name: Check agent output
+    mechanism: "guardrail · before-agent-response"
+    short: Block empty, oversized, or unchanged output before it becomes the result.

@@ -1,0 +1,71 @@
+# Eval Matrix for the nl2sql-data-science Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (finance-analysis domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: nl2sql-data-science
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Intercept generated SQL before any execution attempt
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: >
+      The QueryCoordinator produces a SQL statement from a natural-language prompt. Without
+      a pre-execution check, a malformed or adversarially crafted prompt could generate
+      a destructive statement (DROP, DELETE, TRUNCATE, INSERT, UPDATE) that would corrupt
+      the modelled dataset before any human can intervene. The guardrail inspects the
+      SqlPlan immediately after translation — before DataRetriever or StatisticsModeler
+      are invoked — so no worker ever sees an unsafe statement.
+    implementation: >
+      guardrailStep in AnalysisWorkflow sits between translateStep and the parallel
+      retrieveStep/modelStep fan-out. It reads SqlPlan.safetyVerdict and performs a
+      deterministic keyword scan of SqlPlan.sql. On failure, the workflow calls
+      AnalysisJobEntity.blockJob and ends with JobBlocked, setting a failureReason that
+      identifies the rejected keyword. No LLM call is made during the guardrail; it is
+      purely deterministic to keep latency predictable.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score NL2SQL translation fidelity on completed jobs
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The quality of the entire analysis pipeline depends on how accurately the
+      QueryCoordinator translated the user's natural-language question into SQL. A
+      mistranslation — selecting the wrong table, omitting a WHERE clause, aggregating
+      over the wrong dimension — produces plausible-looking but incorrect results that
+      a downstream consumer may act on. Periodic eval scoring surfaces translation
+      drift before it becomes a systemic problem, without blocking job delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries AnalysisView for the oldest
+      COMPLETE job lacking an evalScore. It feeds the original question and the
+      SqlPlan.sql to a 1–5 rubric judge that assesses semantic fidelity, table accuracy,
+      and filter correctness. The result is written via AnalysisJobEntity.recordEval,
+      emitting TranslationEvalScored. The eval score and rationale appear on the App UI
+      row without affecting job status.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: SQL execution guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Block destructive SQL statements before any worker executes them.
+  - id: E1
+    name: NL2SQL fidelity eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score how accurately the coordinator translated the user's question to SQL.

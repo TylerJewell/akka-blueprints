@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: supplier-comms-monitor
+
+# ---- Purpose ----
+purpose:
+  primary_function: supply-chain-ops-automation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: draft-only
+  user_type: procurement-buyer
+
+# ---- Data ----
+data:
+  inputs:
+    - purchase-order-feed
+    - supplier-contact-records
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    commercial-confidential: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: draft-only
+  decision_subject: purchase-order
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-before-outreach-sent
+
+# ---- Failure ----
+failure:
+  blast_radius: single-supplier-relationship
+  failure_modes:
+    - unauthorized-external-supplier-email
+    - inaccurate-delivery-prediction
+    - material-commitment-without-buyer-approval
+    - missed-escalation-of-critical-delay
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: procurement-buyer
+  reviewer_must_approve_material_changes: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    # The simulated sendSupplierEmail tool is in-process; replace with real outbound when deploying.
+  rate_limit_per_po: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  supplier_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  export_control_considerations: TO_BE_COMPLETED_BY_DEPLOYER

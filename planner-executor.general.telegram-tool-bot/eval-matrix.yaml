@@ -1,0 +1,39 @@
+schema_version: 1
+sample_id: telegram-tool-bot
+coordination_pattern: planner-executor
+domain: general
+
+controls:
+  - id: G1
+    name: Vet every tool dispatch before the tool executor runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      A Telegram bot that dynamically selects from multiple integrations (web, contacts,
+      calendar, notes) is particularly exposed to prompt-injection attacks where an
+      attacker embeds instructions in web content or contact records to redirect the
+      router into calling a different tool, exfiltrating data, or writing oversized
+      payloads. The tool allowlist and per-tool content policy enforced at dispatch time
+      mean that even a successfully manipulated RouterAgent cannot invoke a tool or
+      payload shape that the system does not recognise. Blocking before execution is the
+      only point in the loop where a bad dispatch can be stopped without side effects.
+    implementation: |
+      `ToolGuardrail.vet(ToolDispatch)` is called by `SessionWorkflow`'s `guardrailStep`
+      between `proposeStep` and `dispatchStep`. The vetter checks (a) the tool allowlist
+      (`WEB`, `CONTACTS`, `CALENDAR`, `NOTES`), (b) per-tool content policy: CONTACTS
+      queries must not be bare wildcards, CALENDAR subtasks must not contain write verbs,
+      NOTES content must be under 2 KB, WEB subtasks must name only allow-listed hosts
+      (akka.io, doc.akka.io, github.com). On reject, the workflow records a
+      `ToolCallBlocked` entry on the tool ledger, then loops back to `proposeStep` so
+      the RouterAgent sees the blocker and revises.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool dispatch guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

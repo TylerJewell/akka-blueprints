@@ -1,0 +1,97 @@
+# Eval Matrix for the stock-analyst-regulated Akka sample.
+#
+# Finance-analysis domain. regulation_anchors are left empty: the sample
+# demonstrates the control mechanisms without binding to a specific instrument
+# or jurisdiction. A deployer anchors them via the risk survey.
+
+schema_version: 1
+sample_id: stock-analyst-regulated
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Enforce disclaimer and safety check on the recommendation
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      An investment recommendation is regulated financial advice. It must carry
+      a regulatory disclaimer and pass a safety check before it reaches a human
+      or downstream consumer.
+    implementation: >
+      before-agent-response guardrail on RecommendationAgent rejects any
+      Recommendation whose disclaimer field is empty or whose call/rationale
+      fails the safety check; the workflow records AnalysisFailed on rejection.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub fair-disclosure-sensitive phrasing from research text
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: blocking
+    rationale: >
+      Financial fair-disclosure rules forbid selective disclosure and the use
+      of material non-public information. Research and summary text is scrubbed
+      before the recommendation is produced.
+    implementation: >
+      AnalysisWorkflow sanitizeStep applies a sector sanitizer over the news,
+      filing, and summary text, removing material-non-public-information and
+      selective-disclosure phrasing; records Sanitized with the redaction notes.
+    regulation_anchors: []
+
+  - id: E1
+    name: Watch the recommendation distribution for drift
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: >
+      Model outputs in finance need ongoing accuracy and fairness monitoring; a
+      recommendation set that skews to one call signals drift worth flagging.
+    implementation: >
+      DriftMonitor TimedAction runs every 60s, queries AnalysisView, computes the
+      BUY/HOLD/SELL distribution, and calls AnalysisEntity.flagDrift on affected
+      analyses when one call dominates beyond the threshold.
+    regulation_anchors: []
+
+  - id: H1
+    name: Hold issued recommendations for live compliance review
+    mechanism:
+      kind: hotl
+      flavor: live-compliance-review
+    enforcement: system-level
+    rationale: >
+      Regulated advisory output should be observable by a compliance reviewer who
+      can intervene without halting the pipeline.
+    implementation: >
+      Recommendations enter ISSUED_PENDING_REVIEW; POST /api/analyses/{id}/clear
+      and /retract let a compliance reviewer move the analysis to CLEARED or
+      RETRACTED, recording the reviewer and note on AnalysisEntity.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Disclaimer + safety gate
+    mechanism: "guardrail · before-agent-response"
+    short: Block recommendations missing a disclaimer or failing safety.
+  - id: S1
+    name: Sector sanitizer
+    mechanism: "sanitizer · sector"
+    short: Scrub fair-disclosure-sensitive phrasing from research text.
+  - id: E1
+    name: Drift + fairness watch
+    mechanism: "eval-periodic · drift-fairness-watch"
+    short: Flag a skewed BUY/HOLD/SELL distribution.
+  - id: H1
+    name: Live compliance review
+    mechanism: "hotl · live-compliance-review"
+    short: Reviewer can clear or retract an issued recommendation live.

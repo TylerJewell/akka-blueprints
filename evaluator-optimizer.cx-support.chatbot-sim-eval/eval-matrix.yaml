@@ -1,0 +1,100 @@
+schema_version: 1
+sample_id: chatbot-sim-eval
+coordination_pattern: evaluator-optimizer
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Flag safe-content policy violations in assistant turns before transcript commit
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: non-blocking
+    rationale: |
+      A support chatbot can produce replies that make unsupported promises, reveal
+      internal policy details, or use language prohibited by the deployment's content
+      policy. In a simulation context the dialogue must still run to completion so the
+      evaluator can score the full transcript — blocking mid-turn would leave the
+      simulation in a partial state and make the evaluation meaningless. Flagging the
+      turn without blocking lets the evaluator's Policy Compliance dimension penalise
+      the violation accurately while preserving the end-to-end dialogue for audit.
+    implementation: |
+      Wired as the `guardrailStep` of `SimulationWorkflow`, immediately after
+      `chatbotStep` returns an `AssistantTurn`. A pure-function check scans the
+      turn text against a configurable safe-content pattern list. On a match,
+      `AssistantTurn.safeContentFlagged` is set to `true` and `flagDetail` is
+      populated with the matching pattern and the offending substring. The event
+      `AssistantTurnRecorded` is emitted with the flag set. The workflow continues
+      to `userReplyStep` without interruption. `EvaluatorAgent` receives the full
+      transcript including the flag so the Policy Compliance dimension can be scored
+      accurately.
+    regulation_anchors: []
+
+  - id: CI1
+    name: Block deployment when any simulation in the evaluation set fails
+    mechanism:
+      kind: ci-gate
+      hook: post-eval-set
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      Simulation-based evaluation produces a quality signal only if it can stop a
+      release. A chatbot that consistently fails resolution, tone, or accuracy
+      dimensions should not reach production. The CI gate endpoint aggregates the
+      verdict across a named set of simulations and returns a non-zero exit indicator
+      when any simulation is `FAILED_EVALUATION`, giving a pipeline the signal it
+      needs to halt the build. Pending simulations are also surfaced so the caller
+      can wait and retry rather than marking a partial run as green.
+    implementation: |
+      `SimulationEndpoint` exposes `GET /api/simulations/ci-gate?set=<comma-sep-ids>`.
+      The handler queries `SimulationsView.getAllSimulations`, filters to the requested
+      ids, and returns `{ passed: boolean, failed: [simulationId...], pending:
+      [simulationId...] }`. `passed` is `true` only when every id is in
+      `PASSED_EVALUATION`. Any `FAILED_EVALUATION` id causes `passed = false`; any
+      id still in `RUNNING` or `EVALUATING` is listed in `pending`. A CI step calls
+      this endpoint after submitting a scenario set and polls until `pending` is
+      empty, then checks `passed`.
+    regulation_anchors: []
+
+  - id: EP1
+    name: Record every simulation's evaluation verdict for continuous regression tracking
+    mechanism:
+      kind: eval-periodic
+      flavor: continuous-accuracy
+    enforcement: non-blocking
+    rationale: |
+      A single simulation verdict tells you whether that session passed or failed. A
+      stream of verdict events over time tells you whether the chatbot is getting
+      better or worse, whether certain persona keys have systematically lower scores,
+      and whether safe-content flags are trending up. Recording every verdict as a
+      typed `EvalRecorded` event gives operators a continuous quality signal without
+      requiring instrumentation of the workflow itself, and makes the quality history
+      queryable through the existing view infrastructure.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. It queries
+      `SimulationsView.getAllSimulations`, finds simulations in a terminal state that
+      do not yet have a matching `EvalRecorded` event, and calls
+      `SimulationEntity.recordEval(simulationId, outcome, overallScore, anyFlagged)`.
+      The call is idempotent on `simulationId`. The event payload carries
+      `{ simulationId, outcome, overallScore, anyFlagged, recordedAt }` and is
+      surfaced in the App UI's per-simulation timeline and in
+      `GET /api/simulations/{id}`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · safe-content flag
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: CI1
+    label: CI gate · evaluation set pass/fail
+    mechanism: CI gate
+    implementation: test-gate
+    source: —
+  - id: EP1
+    label: Per-simulation eval recorder
+    mechanism: Eval · periodic
+    implementation: continuous-accuracy
+    source: —

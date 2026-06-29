@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: context-preset-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: context-aware-agent-execution
+  sector: general
+  decisions_surface: execute-with-constraints
+  user_type: internal-operator-or-api-caller
+
+# ---- Data ----
+data:
+  inputs:
+    - caller-request-text
+    - preset-configuration
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: false
+
+# ---- Decisions ----
+decisions:
+  authority_level: execute-with-constraints
+  decision_subject: api-action-or-tool-call
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: TO_BE_COMPLETED_BY_DEPLOYER
+  reviewer_reads_every_verdict_before_action: false
+
+# ---- Failure ----
+failure:
+  blast_radius: single-request
+  failure_modes:
+    - privilege-escalation-via-tool-call
+    - misconfigured-preset-reaching-runtime
+    - model-over-reach-to-blocked-tool
+    - wrong-model-selected-for-environment
+    - instruction-addendum-injection
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: TO_BE_COMPLETED_BY_DEPLOYER
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  reviewer_must_read_verdict_before_action: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - simulated-admin-action
+    - simulated-diagnostic
+  rate_limit_per_request: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  request-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

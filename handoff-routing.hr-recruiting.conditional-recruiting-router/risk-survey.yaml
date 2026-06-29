@@ -1,0 +1,80 @@
+schema_version: 1
+sample_id: conditional-recruiting-router
+
+# ---- Purpose ----
+purpose:
+  primary_function: hr-recruiting
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: candidate-reply-and-calendar
+  user_type: recruiter
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-candidate-emails
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-with-guardrail
+  decision_subject: job-candidate
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible-before-send
+  routing_decisions_made_by_ai: true
+  scheduling_decisions_made_by_ai: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-candidate
+  failure_modes:
+    - wrong-route-classification
+    - inappropriate-reply-content
+    - pii-leakage-via-llm
+    - double-booking
+    - past-dated-slot
+    - invented-salary-figure
+    - consent-flag-missing
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: recruiter
+  reviewer_must_approve_every_outgoing: false
+  reviewer_must_unblock_guardrail_failures: true
+  audit_frequency: weekly
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - calendar-slot-write
+    - email-send
+  rate_limit_per_application: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  candidate_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

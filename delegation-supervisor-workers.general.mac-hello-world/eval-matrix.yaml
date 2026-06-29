@@ -1,0 +1,25 @@
+# Eval Matrix for the mac-hello-world Akka sample.
+#
+# This is the baseline (hello-world) cell of the delegation-supervisor-workers pattern.
+# It carries zero governance controls by design: its purpose is to demonstrate the
+# coordination pattern in its minimal, unadorned form. Deployers extending this sample
+# toward a production use case should add controls — at minimum a before-agent-response
+# guardrail — via their own eval-matrix entry.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a general-domain baseline sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: mac-hello-world
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls: []
+
+simplified_view: []

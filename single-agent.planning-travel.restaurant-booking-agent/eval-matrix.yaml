@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: skrestaurantbooking
+coordination_pattern: single-agent
+domain: planning-travel
+
+controls:
+  - id: H1
+    name: Require explicit user confirmation before committing the reservation
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      A restaurant booking writes a reservation on behalf of the user to an external
+      system and may trigger a payment hold or cover charge. The agent cannot infer
+      whether the extracted parameters — restaurant, date, time, party size — match
+      what the user actually intended from a freeform request. A confirmation gate
+      surfaces the full proposal before any external write fires, giving the user the
+      opportunity to catch parameter extraction errors (wrong restaurant, wrong date,
+      misread party size) without needing to know how the agent works internally.
+    implementation: |
+      After `BookingAgent` returns a `BookingProposal`, `BookingWorkflow.confirmStep`
+      emits `ConfirmationRequested` on `BookingEntity` and pauses. The workflow holds
+      the step open for up to 300 s waiting for a signal from `ConfirmationConsumer`.
+      The user confirms or declines via `POST /api/bookings/{id}/confirm` or
+      `POST /api/bookings/{id}/decline`, which routes through `ConfirmationConsumer`
+      into `BookingWorkflow.receiveConfirmation(decision)`. Only a `CONFIRMED` signal
+      advances to `commitStep`; a `DECLINED` signal or a step-timeout calls
+      `BookingEntity.fail(reason)` with no external write.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block invalid booking tool calls before the external write fires
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: parameter-validator
+    enforcement: blocking
+    rationale: |
+      The agent extracts reservation parameters from freeform natural-language text.
+      Extraction errors — a date inferred as yesterday, a party size of zero, a time
+      outside operating hours, a malformed contact email — would propagate silently to
+      the booking stub and either fail with an opaque error or, worse, create a
+      malformed reservation. The before-tool-call hook is the correct interception
+      point: it fires before the external API stub call, when the parameters are fully
+      resolved but the write has not yet occurred. A structured rejection tells the
+      agent exactly which field failed, enabling targeted correction rather than a
+      full re-attempt.
+    implementation: |
+      `ReservationGuardrail` is registered on `BookingAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      `createBooking` tool-call candidate it (1) verifies the reservation date is
+      strictly in the future, (2) verifies party size is between 1 and the
+      `RestaurantInfo.maxPartySize` loaded from the in-memory catalogue for the
+      given `restaurantId`, (3) verifies the requested `LocalTime` falls within
+      `RestaurantInfo.operatingHours`, and (4) verifies `contactEmail` matches
+      the RFC 5322 pattern. On any failure it returns `Guardrail.reject(<structured-error>)`
+      naming the failing field and the constraint; the agent loop consumes one of its
+      4 iterations and retries with corrected parameters. Passing tool calls proceed
+      to `BookingStub.createBooking`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: User confirmation before commit
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: G1
+    label: Booking parameter guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

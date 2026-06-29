@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: research-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: research-synthesis-automation
+  sector: research-intel
+  decisions_surface: assisted-action
+  user_type: knowledge-worker
+
+# ---- Data ----
+data:
+  inputs:
+    - free-text-research-queries
+    - web-fixture-excerpts
+    - document-fixture-excerpts
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: act-with-guardrails
+  decision_subject: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+
+# ---- Failure ----
+failure:
+  blast_radius: single-job-scope
+  failure_modes:
+    - uncited-claim-in-report
+    - replan-budget-exhausted
+    - stale-fixture-data
+    - stuck-job-no-progress
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: continuous
+  operator_pause_control: true
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - simulated-web-search
+    - simulated-document-retrieval
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER

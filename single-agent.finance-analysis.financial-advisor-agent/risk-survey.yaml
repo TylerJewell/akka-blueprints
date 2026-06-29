@@ -1,0 +1,81 @@
+schema_version: 1
+sample_id: financial-advisor-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: investment-advisory
+  sector: finance
+  decisions_surface: recommend-only
+  user_type: retail-investor-or-wealth-advisor
+
+# ---- Data ----
+data:
+  inputs:
+    - client-portfolio-snapshots
+    - client-investment-questions
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    financial-account-identifiers: true
+    tax-identifiers: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  regulated_identifiers_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: client-investment-portfolio
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_advisory_before_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-client-advisory
+  failure_modes:
+    - unauthorized-asset-class
+    - hallucinated-ticker
+    - weight-exceeds-bounds
+    - regulated-id-leakage
+    - suitability-mismatch
+    - risk-rating-miscalibration
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: human-advisor-or-client
+  reviewer_must_read_advisory_before_action: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_advisory: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  regulatory_framework: TO_BE_COMPLETED_BY_DEPLOYER
+  fiduciary_duty_assessment_complete: TO_BE_COMPLETED_BY_DEPLOYER

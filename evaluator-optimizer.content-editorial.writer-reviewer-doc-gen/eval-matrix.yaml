@@ -1,0 +1,71 @@
+schema_version: 1
+sample_id: writer-reviewer-doc-gen
+coordination_pattern: evaluator-optimizer
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Enforce per-document word ceiling before the reviewer runs
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      Document generation loops are sensitive to length violations because
+      an over-length draft that reaches the reviewer wastes a review cycle
+      and may receive stylistic feedback that obscures the deterministic
+      length failure. A pre-reviewer guardrail catches word-count violations
+      immediately after the Writer returns, routes structured feedback back
+      to the Writer, and ensures the Reviewer evaluates only drafts that
+      already satisfy the length constraint. This keeps the reviewer's
+      signal clean and prevents the loop from consuming attempts on a
+      dimension that the system can check without LLM involvement.
+    implementation: |
+      Wired as the `guardrailStep` of `DocumentWorkflow`, immediately after
+      `writeStep`. A pure-function check on `draft.wordCount() <=
+      document.wordCeiling`. On failure, emits
+      `DraftGuardrailVerdictRecorded` with `verdict.passed = false` and
+      `reasonCode = "OVER_CEILING"`, then transitions back to `writeStep`
+      with a fixed `ReviewNotes("Draft exceeds the configured word ceiling;
+      shorten and resubmit.")`. The Writer's next call sees the structured
+      feedback as the prior review notes. The cycle still counts toward
+      `maxAttempts`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every cycle's verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The reviewer's approve-or-revise decision is the primary quality
+      signal the document generation loop produces. Capturing it as a typed
+      event per attempt creates a continuous quality stream that operators
+      can use to track pass rates by attempt number, detect reviewer drift,
+      or identify topics where the writer consistently fails the rubric —
+      all without instrumenting the workflow itself or adding per-request
+      observability overhead.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `DocumentsView.getAllDocuments`, finds attempts that have been reviewed
+      but do not yet have a matching `EvalRecorded` event, and calls
+      `DocumentEntity.recordEval(attemptNumber, verdict, score,
+      ceilingExceeded)`. The call is idempotent on
+      `(documentId, attemptNumber)`. The workflow itself also emits one
+      `EvalRecorded` event on the terminal transition (DocumentApproved or
+      DocumentRejectedFinal) carrying the whole loop's outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · word ceiling
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Per-attempt eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

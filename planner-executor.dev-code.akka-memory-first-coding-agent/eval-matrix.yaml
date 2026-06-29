@@ -1,0 +1,94 @@
+schema_version: 1
+sample_id: akka-memory-first-coding-agent
+coordination_pattern: planner-executor
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Gate every file-write and code-execution operation before it runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The EditExecutorAgent applies patches to source files under the direction of an LLM
+      planner. Without a gate, a malformed or manipulated plan could write outside the
+      allowed workspace, delete arbitrary files, or inject executable content through
+      patch text. A deterministic guardrail placed between the plan step and the apply
+      step stops those edits before they touch the filesystem, preserving the integrity
+      of both the fixture codebase and the project's persisted memory blocks.
+    implementation: |
+      `EditGuardrail.vet(FileEdit)` is called by `EditWorkflow`'s `guardrailStep`
+      between `planStep` and `applyStep`. The vetter checks (a) that the `filePath`
+      resolves under `/workspace/`, (b) that `DELETE` operations target only paths
+      matching `src/test/**`, `build/**`, or `target/**`, and (c) that `patch` content
+      does not contain a shebang line paired with a world-writable `chmod` expression.
+      On rejection, the workflow records a `PatchBlocked` entry on the session via
+      `EditSessionEntity.recordBlock`, then returns to `planStep` so `EditPlannerAgent`
+      sees the blocker and can revise its plan.
+    regulation_anchors: []
+
+  - id: CI1
+    name: Run the project test suite after every patch and block promotion on failure
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      An LLM-generated code edit may pass the path-scope guardrail but still break
+      existing tests. Without a test gate, broken patches would accumulate in the
+      project's memory blocks and be fed back as context into subsequent planning
+      steps, compounding errors. Running the fixture test suite immediately after each
+      apply step and refusing to promote a failing patch keeps the project memory
+      consistent with a passing state.
+    implementation: |
+      `FixtureTestRunner.run(projectId)` is called by `EditWorkflow`'s `testGateStep`
+      after every `PatchApplied` event. It reads the pre-canned test-result fixture for
+      the project from `sample-data/test-results/<projectId>.json`. On `passed=false`,
+      the workflow emits `TestsFailed` on `EditSessionEntity` and transitions the
+      session to `TESTS_FAILED`; the patch is never promoted to `ProjectEntity`'s
+      memory blocks. On `passed=true`, the workflow emits `TestsPassed` and advances
+      to the next edit in the plan.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Let the operator stop new edits without aborting the in-flight apply
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      Code edits can have side effects that are not visible until after they are
+      applied. An operator reviewing live session output must be able to stop
+      further edits gracefully — without abandoning an in-progress apply that
+      might leave the workspace in a half-written state. The halt mechanism
+      provides a clean drain: the current apply completes, the test gate runs,
+      and then the workflow exits before dispatching the next patch.
+    implementation: |
+      `SystemControlEntity` (single instance keyed by literal `"global"`) holds the
+      halt flag. The App UI tab exposes a **Halt destructive edits** button and a
+      reason field, backed by `POST /api/control/halt`. Every `EditWorkflow` reads the
+      flag in its `checkHaltStep` at the top of each loop iteration before the
+      guardrail runs. On `halted=true`, the workflow finishes the in-flight apply and
+      test-gate steps, then emits `SessionHalted` via `EditSessionEntity.haltSession`
+      and ends the session in `HALTED`. The `control-update` SSE event carries the
+      halt state to the UI in real time.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Edit guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call (path scope + operation type + shebang check)
+    source: —
+  - id: CI1
+    label: Test gate
+    mechanism: CI-gate
+    implementation: test-gate (FixtureTestRunner after every PatchApplied)
+    source: —
+  - id: HO1
+    label: Operator halt
+    mechanism: Halt
+    implementation: operator-regulator-stop (SystemControlEntity + dashboard)
+    source: —

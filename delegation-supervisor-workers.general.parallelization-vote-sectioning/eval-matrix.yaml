@@ -1,0 +1,76 @@
+# Eval Matrix for the parallelization-vote-sectioning Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (general domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: parallelization-vote-sectioning
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Vet the aggregated output before it reaches the caller
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The aggregated output is the user-facing artifact regardless of whether the job
+      ran in sectioning or voting mode. Because multiple independent workers contribute
+      to the final answer, incoherence, conflicting assertions, or policy violations can
+      survive individual-worker correctness checks and only become visible at the
+      aggregation boundary. The guardrail runs at that boundary — after the Supervisor
+      has merged all worker results — so no flawed aggregation reaches the caller. A
+      failed guardrail transitions the job to BLOCKED, which is fully visible in the
+      App UI and surfaced as a failure reason on the job record.
+    implementation: >
+      A before-agent-response guardrail on ParallelSupervisor runs inside
+      ParallelWorkflow.guardrailStep immediately after aggregateStep returns an
+      AggregatedOutput. The step applies a deterministic coherence checker (cross-section
+      contradiction scan for SECTIONING, confidence-spread check for VOTING) and an LLM
+      judge that evaluates the aggregated answer against content policy. On failure, the
+      workflow calls JobEntity.block, emitting JobBlocked, and the job enters BLOCKED with
+      a failureReason. On pass, the workflow calls JobEntity.aggregate, emitting
+      JobAggregated, and the job enters AGGREGATED.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the supervisor aggregation decision for quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The supervisor's aggregation decision is the highest-stakes inference in this
+      system: it combines N independent worker outputs into one authoritative answer.
+      Errors at this step propagate directly to the caller. Sampling that decision with
+      a rubric judge — assessing answer completeness, section coverage (SECTIONING), or
+      vote coherence (VOTING) — surfaces a quality score that accumulates over time and
+      can reveal systematic weaknesses in the aggregation strategy without ever blocking
+      delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries JobView.getAllJobs, filters
+      client-side for the oldest AGGREGATED job lacking an evalScore, runs a 1-5 rubric
+      judge over the AggregatedOutput (checking answer coherence, section coverage or
+      vote spread, and overall completeness), then calls JobEntity.recordEval(score,
+      rationale), emitting EvalScored. The job's evalScore and evalRationale fields are
+      updated in the view and surfaced on the App UI without affecting delivery.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Aggregated output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block an incoherent or policy-violating aggregation before it reaches the caller.
+  - id: E1
+    name: Aggregation quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the supervisor's aggregation decision across worker outputs.

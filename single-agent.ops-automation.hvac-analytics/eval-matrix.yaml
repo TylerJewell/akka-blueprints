@@ -1,0 +1,48 @@
+schema_version: 1
+sample_id: hvac-analytics
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: E1
+    name: Score every answer for analytical quality after it is recorded
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      HVAC analytical answers can satisfy the structural contract (non-empty
+      assessment, well-formed JSON) yet still be operationally useless — data
+      points without significance notes, trend classifications that contradict
+      the numeric evidence, or recommended actions that name a symptom rather
+      than an intervention. A building engineer who acts on a low-quality answer
+      risks scheduling unnecessary maintenance or missing a real degradation
+      signal. The periodic evaluator surfaces these quality gaps without blocking
+      the answer, giving operators a per-query confidence signal and a rolling
+      accuracy trend that can trigger human review or model reconfiguration
+      when the score average falls below an acceptable threshold.
+    implementation: |
+      `AnswerQualityScorer` runs inside `QueryWorkflow.evalStep`, fired
+      immediately after `AnswerRecorded` lands. The scorer is deterministic
+      and rule-based (no LLM call — keeping the single-agent invariant
+      honest): checks that `dataPoints` is non-empty (an answer with no
+      supporting evidence scores 1 regardless of the assessment text), that
+      every `DataPoint.significance` is a non-empty string, that
+      `recommendedAction` begins with an actionable verb (verbs: "Inspect",
+      "Adjust", "Replace", "Schedule", "Verify", "Reduce", "Increase",
+      "Notify", "Check", "Restart"), and that `trend` is consistent with the
+      direction of the numeric values in `dataPoints` — specifically, that a
+      `DEGRADING` classification is not paired with all values inside normal
+      range, and that `IMPROVING` is not paired with all values outside range.
+      Emits `EvaluationScored` with a 1–5 score and a one-line rationale.
+      Scores are stored in `QueryView`; the UI surfaces the per-query chip
+      and a rolling average of the last 20 queries so operators can detect
+      accuracy drift over time.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Answer quality eval
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

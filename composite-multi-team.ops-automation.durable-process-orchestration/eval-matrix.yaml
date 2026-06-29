@@ -1,0 +1,147 @@
+# Eval Matrix for the sk-process Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community ops-automation sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list across
+# all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: sk-process
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: composite-multi-team
+  domain: ops-automation
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: HO1
+    name: Monitor running distributed processes through an operator dashboard
+    mechanism:
+      kind: hotl
+      hook: deployer-runtime-monitoring
+      flavor: deployer-runtime-monitoring
+    enforcement: non-blocking
+    rationale: |
+      Long-running distributed processes spread across several executor agents and a
+      durable orchestration workflow are not visible by default — a step can stall,
+      an executor can idle, or a retry loop can spin without a human noticing. An
+      operator dashboard that streams live job status, step-level progress, execution
+      times, and quality-signal scores makes the system's internal state legible
+      without requiring the operator to dig into logs or call entity commands
+      directly. It also exposes the pause and resume controls that the graceful-
+      degradation mechanism relies on.
+    implementation: |
+      `JobQueueEndpoint` exposes `/api/jobs/sse` and `/api/steps/sse`, which stream
+      every `JobEntity` and `StepEntity` state change in real time. The App UI's
+      operator dashboard consumes both streams via `EventSource` and renders a live
+      board grouped by `JobStatus`, with per-job step-progress bars, `StepSignal`
+      score chips from `StepEvalConsumer`, and the current executor id for any
+      `CLAIMED` step. The pause and resume buttons post to
+      `/api/jobs/{id}/pause` and `/api/jobs/{id}/resume`, which call
+      `JobEntity.pauseJob` / `JobEntity.resumeJob` and signal
+      `ProcessOrchestrationWorkflow` accordingly.
+    regulation_anchors: []
+
+  - id: H1
+    name: Support safe pause and graceful stop of long-running process workflows
+    mechanism:
+      kind: halt
+      hook: graceful-degradation
+      flavor: graceful-degradation
+    enforcement: blocking
+    rationale: |
+      A durable multi-step automation job can run for minutes and hold intermediate
+      outputs in flight across several executor workflows. Killing the service or
+      forcing a reset to recover from a bad state risks losing that partial work and
+      leaving the job entity in an inconsistent state. A safe pause mechanism lets
+      an operator checkpoint the workflow at a step boundary, drain any in-progress
+      executor steps to completion, and then stop cleanly — preserving all outputs
+      written so far and allowing the job to resume from exactly where it left off.
+    implementation: |
+      `ProcessOrchestrationWorkflow.executionStep` handles a PAUSE signal by
+      emitting `JobPaused` on `JobEntity` (status → `PAUSED`) and self-suspending.
+      `ExecutorWorkflow.pollStep` detects the parent job's `PAUSED` status via
+      `StepBoardView` and idles on a 10 s resume timer rather than claiming new
+      steps; any step already `CLAIMED` finishes normally. A RESUME signal emits
+      `JobResumed` (status → `EXECUTING`) and immediately re-enters the poll-until-
+      done loop from the same checkpoint — no steps are replanned and no completed
+      step output is lost. The endpoints `POST /api/jobs/{id}/pause` and
+      `POST /api/jobs/{id}/resume` enforce status preconditions: `409` unless the
+      job is in the expected state.
+    regulation_anchors: []
+
+  - id: G1
+    name: Vet the job summary before it is finalised
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: |
+      The `JobSummary` assembled at the end of the pipeline is the primary artifact
+      delivered to the operator — it is what gets referenced, archived, and acted on
+      downstream. A summary with an empty `resultRef`, a missing `keyOutputs` list,
+      or too-short an `overview` would be silently committed as a completed result
+      with no indication of the deficiency. An output gate on the coordinator's
+      FINALISE_JOB response catches these structural failures before the job is
+      marked `COMPLETED`, leaving it in `APPROVED` with the guardrail reason visible
+      so an operator can investigate or retry.
+    implementation: |
+      A before-agent-response guardrail registered on `ProcessCoordinator` inspects
+      the `JobSummary` produced by the FINALISE_JOB task. It refuses a summary
+      shorter than a minimum character count, one whose `keyOutputs` list is empty,
+      or one with a blank `resultRef`. On a refusal
+      `ProcessOrchestrationWorkflow.finaliseStep` calls
+      `JobEntity.recordFinaliseBlock(reason)` and ends with the job left `APPROVED`;
+      nothing is finalised and the guardrail reason is shown in the App UI.
+    regulation_anchors: []
+
+  - id: G2
+    name: Gate every write into the shared step workspace
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: |
+      Executor agents and quality-checker agents all write into one shared step
+      workspace through `StepTools`. An executor writing its result to the wrong step
+      id, a checker appending a note for a different job, or any agent writing to a
+      job that has already been finalised would corrupt the shared state in ways the
+      deterministic `QualityRule` would either miss or process incorrectly. Gating
+      every write at the tool-call level — before the command reaches the entity —
+      ensures the workspace stays scoped to each agent's assignment and to the job's
+      current lifecycle stage.
+    implementation: |
+      A before-tool-call guardrail registered on `StepExecutor` and `QualityChecker`
+      inspects each `StepTools` call. It refuses a write whose target `jobId` or
+      `stepId` is not the one the agent was assigned, a write to a job whose status
+      is `COMPLETED` or `FAILED`, or a payload over a size cap. A refused write
+      records the step with the guardrail reason and the agent returns without a
+      partial write; for a step write the `ExecutorWorkflow` releases the claim so
+      another executor can pick it up.
+    regulation_anchors: []
+
+simplified_view:
+  - id: HO1
+    label: Runtime process monitoring dashboard
+    mechanism: Human on the loop
+    implementation: deployer-runtime-monitoring
+    source: —
+  - id: H1
+    label: Graceful pause / resume of durable workflows
+    mechanism: Halt
+    implementation: graceful-degradation
+    source: —
+  - id: G1
+    label: Job-summary output guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: G2
+    label: Step-workspace write guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

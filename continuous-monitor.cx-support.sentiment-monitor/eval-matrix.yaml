@@ -1,0 +1,69 @@
+schema_version: 1
+sample_id: sentiment-monitor
+coordination_pattern: continuous-monitor
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block alert dispatch to unauthorized Slack channels
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: channel-scope-enforcement
+    enforcement: blocking
+    rationale: |
+      The alert dispatch path touches real Slack channels. A misconfigured agent, a prompt
+      injection in a Linear comment, or a future change that wires a broader mention list
+      could cause channel spam or unintended @here mentions across the workspace. The
+      guardrail is the last check before the tool call leaves the process — it validates
+      both the target channel against an explicit allowlist and the mention scope against
+      a permitted maximum. No alert should reach a channel the deployer did not explicitly
+      authorize.
+    implementation: |
+      `AlertDispatchWorkflow.validateChannelStep` reads `sentiment.alert.allowed-channels`
+      from application.conf and checks `mentionList` for `@channel` / `@here`. If
+      `channelId` is absent from the list, the step returns a structured rejection with
+      code `CHANNEL_NOT_ALLOWED` and records the attempt on `IssueThreadEntity` via a
+      `GuardrailRejected` event. If the mention scope is exceeded, it returns
+      `MENTION_SCOPE_EXCEEDED`. Both rejections are non-crashing — the workflow terminates
+      the dispatch step cleanly. The guardrail is enforced at the Workflow step level; the
+      `TrendAnalysisAgent` never calls the tool directly.
+    regulation_anchors: []
+
+  - id: E1
+    name: Detect sentiment-classifier drift on a periodic sample
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      Sentiment models are among the most domain-sensitive classifiers in production: a
+      model update, a shift in the vocabulary of Linear comments (new product launches,
+      industry jargon), or an underrepresented commenter demographic can quietly move score
+      distributions without any obvious system error. The periodic drift watch compares the
+      classifier's recent outputs against a small ground-truth label set and surfaces a
+      verdict before the degraded scores can propagate into false-positive or
+      false-negative alerts. This is particularly important here because the alert
+      threshold (`consecutiveNegativeCount`) amplifies any systematic scoring bias.
+    implementation: |
+      `SentimentEvalRunner` TimedAction fires every 60 minutes. It reads up to 10 entries
+      from `src/main/resources/sample-events/ground-truth-labels.jsonl`, pairs each with
+      the `SentimentScoringAgent`-produced score stored on `IssueThreadEntity`, and invokes
+      `EvalJudge` with a `List<LabeledScore>`. `EvalJudge` returns a `DriftEvalResult`
+      with a mean absolute error and a `NO_DRIFT | MINOR_DRIFT | SIGNIFICANT_DRIFT`
+      verdict. The result is emitted as `DriftEvalRecorded` on `SentimentEvalEntity` and
+      surfaces on the UI's Eval Matrix tab. The mechanism is non-blocking — a drift signal
+      triggers a visual warning, not an automatic shutdown.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Slack channel scope guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Sentiment drift watch
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —

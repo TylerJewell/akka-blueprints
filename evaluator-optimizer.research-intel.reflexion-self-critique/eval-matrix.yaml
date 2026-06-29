@@ -1,0 +1,103 @@
+schema_version: 1
+sample_id: reflexion-self-critique
+coordination_pattern: evaluator-optimizer
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Enforce citation floor before the reflexion agent runs
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      Research synthesis that reaches an end user with too few citations cannot
+      be fact-checked or attributed. An answer below the citation floor is a
+      structurally incomplete output — sending it to the reflexion agent risks
+      receiving subjective style feedback that obscures the fundamental sourcing
+      gap. A deterministic pre-reflexion check catches the shortfall, routes
+      structured feedback back to the actor, and keeps the reflexion agent
+      focused on coverage and accuracy rather than basic citation hygiene.
+    implementation: |
+      Wired as the `guardrailStep` of `ReflexionWorkflow`, immediately after
+      `answerStep`. A pure-function check on `answer.citationCount() >=
+      query.citationFloor`. On failure, emits
+      `AttemptCitationGuardrailRecorded` with `verdict.passed = false`,
+      `reasonCode = "UNDER_CITED"`, and a detail string naming the shortfall
+      ("found M citations; minimum is N"). The workflow then transitions back
+      to `answerStep` with a structured `ReflexionNote` carrying a
+      `reinforcementParagraph` and a single `focusBullet` describing the
+      requirement. The actor's next call sees this note as verbal memory.
+      The cycle still counts toward `maxAttempts`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every cycle's reflexion verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The reflexion agent's pass-or-retry verdict is the highest-information
+      quality signal the loop produces. Recording it as a typed event per
+      attempt gives operators a continuous quality stream — pass rate by attempt
+      number, average score across topics, frequency of citation shortfalls —
+      without instrumenting the workflow itself. The verbal reinforcement note
+      is preserved alongside the verdict, so quality reviewers can audit not
+      only the outcome but the reasoning that conditioned each retry.
+    implementation: |
+      `ReflexionSampler` (TimedAction) fires every 30 s. Queries
+      `QueriesView.getAllQueries`, finds attempts that have been reflected upon
+      but do not yet have a matching `ReflexionRecorded` event, and calls
+      `QueryEntity.recordReflexionEval(attemptNumber, verdict, score,
+      citationShortfall)`. The call is idempotent on `(queryId, attemptNumber)`.
+      The workflow itself also emits one `ReflexionRecorded` event on the
+      terminal transition (QueryResolved or QueryExhausted) carrying the
+      whole loop's outcome.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the loop gracefully at the retry ceiling
+    mechanism:
+      kind: halt
+      flavor: graceful-degradation
+    enforcement: system-level
+    rationale: |
+      A research synthesis loop that cannot converge — because the rubric is
+      too strict, the topic is outside the corpus, or the model is returning
+      structurally poor outputs — must stop at a bounded point and surface
+      its best result for human review. Hanging in an infinite retry would
+      exhaust tokens, delay users, and leave no auditable record. The halt
+      mechanism ends the loop at a configurable ceiling, preserves every
+      attempt and every reflexion note on the entity, and surfaces the
+      best-scoring answer so an operator can decide whether to resubmit with
+      a relaxed rubric or escalate to a human researcher.
+    implementation: |
+      `ReflexionWorkflow` reads `reflexion.max-attempts` (default 4) at start.
+      Before scheduling the next `answerStep`, it checks
+      `attemptCount < maxAttempts`. If the ceiling is hit, the workflow
+      transitions to `exhaustStep`, which emits `QueryExhausted` with the
+      highest-scoring attempt's text as the best-of and a structured
+      `exhaustionReason` ("max attempts reached" plus the count).
+      `defaultStepRecovery(maxRetries(2).failoverTo(exhaustStep))` ensures
+      any unrecoverable agent failure also lands in the same terminal state
+      rather than hanging.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · citation floor
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Per-attempt reflexion recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: HT1
+    label: Halt at retry ceiling
+    mechanism: Halt
+    implementation: graceful-degradation
+    source: —

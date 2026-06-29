@@ -1,0 +1,66 @@
+# Eval Matrix for the surprise-trip-planner Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires
+# regulation_anchors on each control. This is a community sample (planning-travel
+# domain) with no industry- or jurisdiction-bound anchors, so regulation_anchors
+# is an empty list across all controls. Treat the requirement as relaxed for
+# non-anchored samples.
+
+schema_version: 1
+sample_id: surprise-trip-planner
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: planning-travel
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Constrain worker tool calls to their granted scope
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: scope-enforcement
+    enforcement: blocking
+    rationale: >
+      Worker agents call simulated external search and booking tools. A worker
+      must not call a tool outside the scope granted for its subtask (a logistics
+      worker must not trigger a booking commit; an activities worker must not
+      query payment APIs). The guard blocks out-of-scope calls before they run.
+    implementation: >
+      A before-tool-call guardrail on DestinationAgent, LogisticsAgent, and
+      ActivitiesAgent checks the requested tool against the per-worker allowed
+      scope. Blocked calls emit a ToolCallBlocked event on TripEntity and the
+      worker falls back to its safe default so the trip still completes.
+    regulation_anchors: []
+
+  - id: G2
+    name: Ground assembled travel facts before they reach the traveler
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The assembled itinerary states travel facts (visa requirements, price
+      bands) the traveler will act on. Ungrounded or hallucinated facts erode
+      trust and can mislead. The guard checks claimed facts against canned
+      reference data before the itinerary is persisted.
+    implementation: >
+      A before-agent-response guardrail on TripSupervisorAgent compares visa and
+      price-band claims in the assembled Itinerary against
+      src/main/resources/reference-facts/. Unsupported claims are stripped or
+      flagged, and the adjustment is recorded in the Trip.groundingNotes field.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Worker tool-scope guard
+    mechanism: "guardrail · before-tool-call"
+    short: Block worker tool calls outside their granted scope.
+  - id: G2
+    name: Travel-fact grounding
+    mechanism: "guardrail · before-agent-response"
+    short: Ground visa and price claims before the traveler sees them.

@@ -1,0 +1,104 @@
+schema_version: 1
+sample_id: seo-rubric-critic
+coordination_pattern: evaluator-optimizer
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Enforce per-article word-count ceiling before the rubric scores
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      An article evaluation loop that scores an over-length revision is measuring
+      a dimension the deployer has already decided to reject. Sending the draft to
+      the rubric agent wastes a scoring round and allows the agent to return
+      improvement feedback that addresses style or keyword coverage while ignoring
+      the primary structural violation. A deterministic word-count check upstream
+      of the rubric catches the violation immediately, returns a structured
+      feedback note to the Optimizer, and keeps the rubric agent focused on
+      content quality rather than length policing.
+    implementation: |
+      Wired as the `guardrailStep` of `AuditWorkflow`, immediately after
+      `reviseStep` (and also run against the initial draft before the first
+      `scoreStep`). A pure-function check on
+      `draft.wordCount() <= article.wordCountCeiling`. On failure, emits
+      `RoundGuardrailVerdictRecorded` with `verdict.passed = false` and
+      `reasonCode = "OVER_WORD_CEILING"`, then transitions back to `reviseStep`
+      with a fixed `RubricFeedback("Draft exceeds the configured word-count
+      ceiling; shorten and resubmit.")`. The revision still counts toward
+      `maxRounds`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every round's rubric score as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The rubric agent's pass/fail verdict and composite score are the
+      highest-information signals the evaluation loop produces. Recording them as
+      typed events per round gives content operators a continuous quality stream —
+      pass rate at round 1 vs. round 3, drift in average composite score across
+      article topics, frequency of word-ceiling violations — without
+      instrumenting the workflow itself or querying agent internals. This data is
+      the foundation for rubric calibration: if the first-round pass rate falls
+      below an acceptable level, a deployer can lower the acceptance threshold or
+      expand the checklist rather than guessing.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `ArticlesView.getAllArticles`, finds rounds that have been scored by the
+      rubric agent but do not yet have a matching `EvalRecorded` event, and calls
+      `ArticleEntity.recordEval(roundNumber, verdict, compositeScore,
+      wordCeilingExceeded)`. The call is idempotent on `(articleId, roundNumber)`.
+      The workflow itself also emits one `EvalRecorded` event on the terminal
+      transition (ArticleApproved or ArticleFailedFinal) carrying the full loop's
+      outcome — round count, final score, and whether the halt mechanism fired.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the revision loop gracefully at the round ceiling
+    mechanism:
+      kind: halt
+      flavor: graceful-degradation
+    enforcement: system-level
+    rationale: |
+      An article revision loop driven by a rubric agent can oscillate indefinitely
+      if the rubric sets a threshold the optimizer cannot reach for the given
+      article or keyword. Allowing unbounded looping wastes model calls, delays
+      the user, and produces no observable outcome. The halt mechanism ends the
+      loop at a configured ceiling, preserves every draft and every rubric score
+      on the entity so content editors can inspect the full revision history, and
+      surfaces a structured rejection reason that names how many rounds ran and
+      what the highest score achieved was.
+    implementation: |
+      `AuditWorkflow` reads `seo-rubric-critic.audit.max-rounds` (default 4) at
+      start. Before scheduling the next `reviseStep`, it checks
+      `roundCount < maxRounds`. If the ceiling is hit, the workflow transitions
+      to `failStep`, which emits `ArticleFailedFinal` with the highest
+      composite-score draft's text as the best-of, the round count, and a
+      structured `rejectionReason` ("max rounds reached (N); best score M/100").
+      `defaultStepRecovery(maxRetries(2).failoverTo(failStep))` ensures any
+      unrecoverable agent failure also lands in the same terminal state rather
+      than hanging the workflow.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · word-count ceiling
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Per-round rubric score recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: HT1
+    label: Halt at round ceiling
+    mechanism: Halt
+    implementation: graceful-degradation
+    source: —

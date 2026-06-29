@@ -1,0 +1,40 @@
+schema_version: 1
+sample_id: agent-metrics-monitor
+coordination_pattern: continuous-monitor
+domain: governance-risk
+
+controls:
+  - id: E1
+    name: Periodically evaluate narrative health summaries for accuracy and grounding
+    mechanism:
+      kind: eval-periodic
+      hook: post-output
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      The system's only AI output visible to human reviewers is the `HealthSummary`
+      paragraph produced by `SummaryNarratorAgent`. In a governance and risk context,
+      a summary that overstates severity can trigger unnecessary escalations; one that
+      understates it can leave a CRITICAL agent unaddressed. A periodic LLM-judge
+      audit — grounded against the raw `AnomalyResult` data the summary was based on
+      — provides a continuous quality signal independent of the per-batch narrative
+      loop. Score drift over time signals prompt decay, model drift, or data
+      distribution shift before it affects decisions.
+    implementation: |
+      `EvalRunner` TimedAction fires every 30 minutes. It queries `MetricsView` for
+      agents whose `latestSummary` has no associated `latestEvalScore`, selects up to
+      5 by oldest `lastUpdatedAt`, and calls `SummaryEvalAgent` for each — passing
+      the `HealthSummary` and the `AnomalyResult` set the narrative was generated
+      from. `SummaryEvalAgent` scores on three axes (accuracy, grounding, clarity)
+      averaged to an integer 1–5. The score and a one-sentence rationale are written
+      back via `AgentMetricsEntity.recordEval`, emitting an `EvalScored` event that
+      the `MetricsView` projection picks up and the App UI tab renders as a score
+      chip alongside the summary excerpt.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Narrative summary eval
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

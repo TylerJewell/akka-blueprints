@@ -1,0 +1,40 @@
+schema_version: 1
+sample_id: memory-bank
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Memory entries are the distillation of what a user or system chooses to
+      persist across interactions. That makes them a concentrated target for
+      PII: facts about meeting times, contact details, personal preferences,
+      and account references are exactly what agents are asked to remember.
+      If the raw content reaches the LLM unfiltered, identifiers are indexed
+      into the model's context window and may surface in recall results sent to
+      other callers. Redaction runs in a Consumer between the raw submission and
+      the agent invocation; the raw content is preserved on the entity for audit
+      but is never the input seen by the model.
+    implementation: |
+      `MemorySanitizer` Consumer subscribes to `MemoryEntrySubmitted` events
+      emitted by `MemoryEntity`. It runs a pipeline of regex stages (well-known
+      formats: email, phone, SSN-like, payment-card-like), a heuristic stage
+      (person names, postal addresses), and an account-id-token stage. Outputs a
+      `SanitizedContent` carrying the redacted text plus the list of categories
+      found. Calls `MemoryEntity.attachSanitized(sanitized)`.
+      `MemoryWorkflow.storeStep` then passes `sanitized.redactedContent` as the
+      `MemoryAgent` task instructions; the raw payload remains accessible only
+      via `request.rawContent` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

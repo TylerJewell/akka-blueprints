@@ -1,0 +1,91 @@
+schema_version: 1
+sample_id: invoice-processing
+coordination_pattern: sequential-pipeline
+domain: finance-analysis
+
+controls:
+  - id: S1
+    name: Strip vendor PII from extracted invoice data before persisting to the entity
+    mechanism:
+      kind: sanitizer
+      hook: before-posting
+      flavor: pii
+    enforcement: system-level
+    rationale: |
+      Invoice documents routinely embed vendor contact data — individual names,
+      email addresses, and phone numbers — that have no downstream use once the
+      GL account posting is complete. Persisting this data verbatim in the entity
+      log and the view creates a retention liability: every downstream consumer
+      (audit trails, SSE streams, read-model queries) becomes a PII carrier. The
+      right cut is at the extract→validate boundary, where the typed
+      ExtractedInvoice is still an in-process object: scrub the contact fields
+      to "[REDACTED]" before any write to the entity, so the event log and
+      every projection built from it are free of vendor PII from the first write.
+      The sanitizer records only the field names it redacted, not the original
+      values — giving the audit trail observability without re-introducing the
+      data it just removed.
+    implementation: |
+      `VendorPiiSanitizer` is a plain deterministic class (no Akka primitive, no
+      LLM call). It runs inside `InvoicePipelineWorkflow.extractStep`, immediately
+      after `InvoiceAgent` returns an `ExtractedInvoice` and before the entity
+      write. The sanitizer rebuilds `InvoiceHeader` with `vendorEmail` and
+      `vendorPhone` replaced by `"[REDACTED]"`, then returns the modified
+      `ExtractedInvoice` alongside a `SanitizationReport{redactedFields,
+      sanitizedAt}`. The workflow writes two events in sequence:
+      `SanitizationApplied{redactedFields, sanitizedAt}` (the audit record) and
+      `ExtractionCompleted{sanitizedExtract}` (the sanitized data). `PhaseGuardrail`
+      does not gate the sanitizer — it gates agent tool calls. The sanitizer is
+      unconditional: it fires on every invoice regardless of vendor class or
+      document origin.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require explicit reviewer approval before posting high-value invoices
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Invoice posting is a financial commitment: once a journal entry is confirmed,
+      reversing it requires an explicit correcting entry and creates an audit
+      trail gap. For invoices above a configurable amount threshold, an automated
+      pipeline cannot be the sole decision-maker — the business risk of an
+      incorrect posting (duplicate payment, wrong GL assignment, fabricated line
+      items) justifies pausing the workflow until a designated reviewer explicitly
+      approves the posting. The gate is amount-based rather than vendor-based
+      because amount is the objective correlate of financial exposure; a reviewer
+      spotting a mismatched PO or an inflated line total is the primary defence
+      that automated GL-account lookup cannot provide. Invoices below the
+      threshold proceed without interruption, keeping the happy path fully
+      automated.
+    implementation: |
+      `InvoicePipelineWorkflow.approvalStep` reads `ValidatedInvoice.totalAmount`
+      and compares it against the configured `invoice.approval-threshold-amount`
+      (default 10 000.00). For invoices at or below the threshold, the step is a
+      no-op and the workflow advances immediately to `postStep`. For invoices
+      above the threshold, the step emits `ApprovalRequested{totalAmount}` on
+      `InvoiceEntity`, transitions status to `APPROVAL_REQUESTED`, and suspends
+      via a 48-hour workflow timer. The `InvoiceEndpoint` exposes
+      `POST /api/invoices/{id}/approve` and `POST /api/invoices/{id}/deny`;
+      each call writes the corresponding event (`ApprovalGranted` /
+      `ApprovalDenied`) on the entity. On the next workflow poll, `approvalStep`
+      reads the entity: `ApprovalGranted` causes the step to return a pass-through
+      effect and the workflow continues to `postStep`; `ApprovalDenied` causes
+      the step to call `InvoiceEntity.deny()` and end the workflow with status
+      `DENIED`. A 48-hour timer expiry emits `InvoiceFailed{reason:
+      "approval-timeout"}`. The App UI renders an Approve / Deny button pair on
+      the selected invoice card when the entity is in `APPROVAL_REQUESTED` state.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Vendor PII sanitizer
+    mechanism: Sanitizer
+    implementation: before-posting (extract→validate boundary)
+    source: —
+  - id: H1
+    label: High-value invoice approval gate
+    mechanism: HITL
+    implementation: workflow approval pause
+    source: —

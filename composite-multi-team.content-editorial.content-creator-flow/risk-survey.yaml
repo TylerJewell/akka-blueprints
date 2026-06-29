@@ -1,0 +1,63 @@
+schema_version: 1
+sample_id: content-creator-flow
+
+purpose:
+  primary_function: Generate a research report, blog post, and LinkedIn post from a single topic
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: draft-only
+  user_type: marketing or editorial staff
+
+data:
+  inputs:
+    - topic prompts
+    - generated draft content
+    - brand-review verdicts
+    - quality scores
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+decisions:
+  authority_level: draft-only
+  decision_subject: marketing content for publication
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+
+failure:
+  blast_radius: single-tenant
+  failure_modes:
+    - off-brand content drafted
+    - low-quality content drafted
+    - factual error in research report
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls: []
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+compliance:
+  capabilities:
+    content-generation: true
+    synthetic-media: true
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,106 @@
+schema_version: 1
+sample_id: travel-support-router
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Redact passenger PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound travel-support requests routinely carry passenger names, passport
+      numbers, loyalty-program account identifiers, booking references, and
+      payment-card digits. None of those identifiers are needed by the router
+      or the specialist agents to classify and resolve the request. Redacting
+      them inside a Consumer before the request enters the workflow ensures
+      that a mis-routed or adversarially-crafted request cannot exfiltrate
+      travel-document or financial data through an LLM completion.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `RequestQueue` events. For each
+      `InboundRequestReceived` it runs a regex stage (passport-number patterns
+      `[A-Z]{1,2}\d{6,9}`, loyalty-account patterns `[A-Z]{2,3}\d{6,12}`,
+      booking-reference patterns `[A-Z]{2}\d{6}`, Luhn-aware payment-card
+      match, greeting-position name heuristic) to subject and body, builds a
+      `SanitizedRequest` carrying the redacted text and the `piiCategoriesFound`
+      list, and calls `RequestEntity.registerIncoming` then `attachSanitized`.
+      Only the redacted text reaches any agent; the categories list is kept for
+      the audit surface in the App UI.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block booking/cancellation tool calls that violate travel-policy rules
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: travel-policy-rubric
+    enforcement: blocking
+    rationale: |
+      Travel specialist agents propose booking mutations — seat changes,
+      cancellations, rental extensions — that have real-world cost and
+      contractual consequences. A specialist that is mis-routed or receives
+      an unusual request can generate a well-formed but policy-violating
+      tool call: initiating a non-refundable cancellation outside the 24-hour
+      change window, booking a fare class above the passenger's entitlement,
+      or bypassing the mandatory travel-insurance offer. The before-tool-call
+      guardrail intercepts each proposed action before it executes and blocks
+      any that violate the rubric, preventing irreversible mutations.
+    implementation: |
+      `BookingGuardrail` is a typed Agent. `TravelWorkflow.guardrailStep`
+      invokes it with the `SanitizedRequest` and a plain-text description of
+      the proposed booking action extracted from the specialist's draft
+      `Resolution`. The agent returns `GuardrailVerdict { allowed, violations,
+      rubricVersion }`. On `allowed=false` the workflow emits `ResolutionBlocked`
+      (terminal `BLOCKED`) and an operator can override via
+      `POST /api/requests/{id}/unblock`. On `allowed=true` the workflow emits
+      `GuardrailVerdictAttached` and proceeds to the confirmation gate.
+    regulation_anchors: []
+
+  - id: H1
+    name: Pause booking mutations for explicit passenger confirmation
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Even when a specialist's proposed booking change passes the policy
+      guardrail, the change should not execute without the passenger's
+      knowledge. A passenger who submitted a vague rebooking request may
+      not have expected the specific flight or fare the specialist selected.
+      An application-level HITL gate presents a plain-language summary of
+      the proposed change and waits for an explicit `CONFIRM` or `REJECT`
+      before any mutation is committed. A `REJECT` terminates the workflow
+      in `PASSENGER_REJECTED` with no side effects — the passenger's refusal
+      is preserved as an audit record.
+    implementation: |
+      `ConfirmationGate` is a typed Agent. `TravelWorkflow.confirmStep`
+      invokes it with the `SanitizedRequest` and the specialist's `Resolution`
+      draft after the guardrail has cleared. The agent returns a
+      `ConfirmationRequest { summary, deadline }` — a plain-language
+      sentence describing the proposed change and a deadline by which the
+      passenger must respond. The workflow emits `ConfirmationRequested` and
+      pauses. The passenger responds via `POST /api/requests/{id}/confirm`
+      with `{ "outcome": "CONFIRM" | "REJECT" }`. On `CONFIRM` the workflow
+      emits `PassengerConfirmed` and proceeds to publish. On `REJECT` the
+      workflow emits `PassengerRejected` (terminal `PASSENGER_REJECTED`)
+      with no booking mutation applied.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Passenger PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Before-tool-call booking guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Passenger confirmation gate
+    mechanism: HITL
+    implementation: application
+    source: —

@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: whatsapp-fintech-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: financial-query-and-transaction-agent
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: autonomous-below-threshold-hitl-above
+  user_type: retail-banking-customer
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-whatsapp-messages
+    - customer-account-context
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous
+  decision_subject: financial-transaction-or-query
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: TO_BE_COMPLETED_BY_DEPLOYER
+  hitl_threshold_usd: 500
+  above_threshold_requires_operator_approval: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-customer-account
+  failure_modes:
+    - wrong-account-transfer
+    - pii-leakage-via-llm
+    - guardrail-bypass-attempt
+    - hitl-approval-delay
+    - intent-misclassification
+    - duplicate-transaction-on-retry
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: financial-operations-operator
+  hitl_applies_above_threshold_usd: 500
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - balance-lookup
+    - transaction-history-lookup
+    - fund-transfer
+  rate_limit_per_customer: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  psd2_or_equivalent_compliance: TO_BE_COMPLETED_BY_DEPLOYER
+  aml_kyc_checks_upstream: TO_BE_COMPLETED_BY_DEPLOYER

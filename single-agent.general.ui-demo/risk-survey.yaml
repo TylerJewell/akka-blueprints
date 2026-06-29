@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: ui-demo
+
+# ---- Purpose ----
+purpose:
+  primary_function: general-copilot-assistant
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-only
+  user_type: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Data ----
+data:
+  inputs:
+    - user-prompts
+    - conversation-history
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER   # depends on what users type into prompts
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: false   # no sanitizer in this baseline; deployer must add if needed
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: user-prompt-response
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_verdict_before_action: false  # automated response path
+
+# ---- Failure ----
+failure:
+  blast_radius: single-session-turn
+  failure_modes:
+    - hallucinated-citation
+    - blank-answer
+    - over-length-response
+    - citation-index-mismatch
+    - stale-session-history
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: TO_BE_COMPLETED_BY_DEPLOYER
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  reviewer_must_read_verdict_before_action: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_turn: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  session-data-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

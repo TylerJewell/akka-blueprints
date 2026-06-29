@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: podcast-summarizer
+
+# ---- Purpose ----
+purpose:
+  primary_function: podcast-transcript-summarization-pipeline
+  sector: content-editorial
+  decisions_surface: recommend-only
+  user_type: editor-or-content-producer
+
+# ---- Data ----
+data:
+  inputs:
+    - user-supplied-episode-title
+    - user-supplied-transcript-text
+    - in-process-quote-corpus
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: episode-summary
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  editor_reviews_every_summary_before_publishing: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-episode-summary
+  failure_modes:
+    - fabricated-quote
+    - missing-cluster-coverage
+    - phase-violation
+    - quote-thin-section
+    - misordered-tool-call
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reader_role: editor-or-content-producer
+  editor_must_review_summary_before_publishing: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_episode: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  transcript-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  speaker-consent-for-summarization: TO_BE_COMPLETED_BY_DEPLOYER

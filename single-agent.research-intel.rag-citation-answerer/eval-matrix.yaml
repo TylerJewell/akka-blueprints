@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: rag-citation-answerer
+coordination_pattern: single-agent
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Reject answers that cite undelivered chunks
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: citation-grounding-validator
+    enforcement: blocking
+    rationale: |
+      A RAG system's core promise is that every claim in the answer is grounded
+      in a retrieved source. When an agent cites a chunkId that was not among the
+      chunks passed to its task, it is fabricating a source reference — the worst
+      failure mode for a research tool because users may act on citations they
+      cannot verify. The before-agent-response hook is the correct enforcement
+      point: the citation set the model received is known at response time, so a
+      grounding check is deterministic and requires no external lookup. Catching
+      hallucinated citations before they leave the agent loop means they never
+      reach the query entity, the view, or the user.
+    implementation: |
+      `CitationGuardrail` is registered on `CitationAnswererAgent` via the
+      agent's guardrail-configuration block, bound to the
+      `before-agent-response` hook. On each candidate response it (1) parses
+      the response into `CitedAnswer`; (2) extracts the set of `chunkId` values
+      from `citations[]` and compares them against the chunkIds present in the
+      "chunks.json" attachment that was passed to the task; (3) asserts that
+      every `citations[].excerpt` is non-empty; (4) asserts that `confidence`
+      is one of `{HIGH, MEDIUM, LOW}`. On any failure it returns a structured
+      `Guardrail.reject(...)` naming the failing check, consuming one iteration
+      from the agent's 3-iteration budget and forcing a retry. Passing responses
+      flow through to `AnswerWorkflow.answerStep`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip PII from documents before indexing
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Research corpora — policy briefs, public-health reports, procurement
+      guidance — frequently contain incidental PII: author contacts, named
+      individuals in case studies, government-identifier examples, and mailing
+      addresses in headers. Storing that PII in the chunk index means every
+      retrieval path becomes a potential PII leak: a question about an unrelated
+      topic might return a chunk that happens to contain a person's email. By
+      sanitizing the raw text before chunking, the system guarantees that no PII
+      token can appear in any retrieved excerpt or any citation the agent
+      produces. The raw document text is preserved on DocumentEntity for audit
+      but is never the source material that enters the vector store.
+    implementation: |
+      `DocumentSanitizer` Consumer subscribes to `DocumentUploaded` events
+      emitted by `DocumentEntity`. It runs a regex+heuristic redaction pipeline
+      (emails, phone numbers, SSN-like patterns, payment-card-like tokens,
+      postal addresses, person-name heuristics, account-id-like tokens) over
+      `upload.rawText`, producing a `SanitizedText` record that carries the
+      redacted string and the list of PII categories found. It calls
+      `DocumentEntity.attachSanitized(sanitized)`. `ChunkIndexer` then
+      subscribes to the resulting `DocumentSanitized` event and indexes only
+      `sanitized.redactedText` — the raw text never enters `ChunkStore`. The
+      `upload.rawText` field remains accessible via `GET /api/documents/{id}`
+      for audit purposes only, never surfaced in the UI or in retrieval results.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Citation-grounding guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: PII redaction before indexing
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

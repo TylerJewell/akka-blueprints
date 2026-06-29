@@ -1,0 +1,82 @@
+# Eval Matrix for the consulting Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (research-intel domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an
+# empty list across all controls. Treat the requirement as relaxed for non-anchored
+# samples.
+
+schema_version: 1
+sample_id: consulting
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: research-intel
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Guard client-facing deliverables before they are persisted
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      A research brief or consulting recommendation is shown to a client. A
+      before-agent-response guardrail checks the deliverable for adequate length,
+      a present disclaimer, and the absence of unsupported guarantees before it is
+      written to the engagement.
+    implementation: >
+      before-agent-response guardrail on JuniorResearcher and SeniorConsultant
+      inspects the typed deliverable; if it fails the bar the agent response is
+      blocked and the workflow records a failed delivery rather than persisting it.
+    regulation_anchors: []
+
+  - id: H1
+    name: Compliance review of senior recommendations
+    mechanism:
+      kind: hotl
+      flavor: live-compliance-review
+    enforcement: non-blocking
+    rationale: >
+      Escalated, high-stakes engagements (regulatory, M&A) warrant a compliance
+      reviewer reading the senior consultant's output. The review is non-blocking:
+      the recommendation is already delivered, and the reviewer annotates it after.
+    implementation: >
+      After RecommendationDelivered, the UI exposes a compliance-review form;
+      POST /api/engagements/{id}/compliance calls EngagementEntity.recordCompliance,
+      moving the engagement to COMPLIANCE_REVIEWED or FLAGGED without gating delivery.
+    regulation_anchors: []
+
+  - id: E1
+    name: Quality eval on the routing decision
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The coordinator's choice to delegate or hand off is the key decision in the
+      pattern. An automated eval scores whether the chosen route matched the brief's
+      stakes, surfacing routing quality without blocking the engagement.
+    implementation: >
+      RoutingEvalConsumer subscribes to EngagementEntity events; on EngagementRouted
+      it compares the chosen route against the complexity score, records an eval score
+      via EngagementEntity.recordEval, and the UI shows it beside the routing rationale.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Deliverable guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block client-facing output that fails the quality bar.
+  - id: H1
+    name: Compliance review
+    mechanism: "hotl · live-compliance-review"
+    short: Non-blocking compliance review of senior recommendations.
+  - id: E1
+    name: Routing eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Score every delegate-vs-handoff decision.

@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: gitty
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Reject non-compliant drafts before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: tone-and-content-validator
+    enforcement: blocking
+    rationale: |
+      Draft replies go directly onto public OSS issue trackers and pull-request
+      threads, which means a single off-tone or off-topic response is visible to
+      the entire community before the maintainer can intervene. Catching the
+      problem inside the agent's loop — before the draft reaches the workflow or
+      the HITL queue — prevents any non-compliant text from landing in the entity
+      log. The guardrail also enforces a length ceiling so the UI's copy flow is
+      predictable and the GitHub comment stays readable.
+    implementation: |
+      `ToneGuardrail` is registered on `ReplyDrafterAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate `DraftReply` it (1) checks that the draft text references
+      at least one concrete element from the fetched thread (title substring, issue
+      number, or a commenter's keyword), (2) scans the draft text for phrases on
+      a curated blocklist (confrontational and dismissive phrases), (3) asserts the
+      draft does not exceed 800 characters, and (4) asserts the `tone` field is
+      one of `{helpful, closing, asking-for-info, acknowledging}`. On any failure
+      it returns a structured rejection naming the specific check; the agent loop
+      consumes one iteration and retries. Passing drafts flow through to
+      `DraftWorkflow.pendingReviewStep`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require maintainer approval before a draft is considered final
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: non-blocking
+    rationale: |
+      Even a tone-clean, on-topic draft may not reflect what a particular
+      maintainer wants to say in a specific thread. OSS maintainers carry
+      institutional context about a contributor's history, an ongoing design
+      debate, or a community norm that no system prompt can fully encode. Placing
+      the maintainer in the approval path ensures that a human reads and endorses
+      the draft before it leaves the system — without blocking the rest of the
+      pipeline, since the draft is already queued and visible while the maintainer
+      decides.
+    implementation: |
+      `DraftWorkflow.pendingReviewStep` has no step timeout — it waits indefinitely
+      for a maintainer signal. `DraftEndpoint` exposes `POST /api/drafts/{id}/approve`
+      (with an optional `editedText` field the maintainer may have changed in the UI)
+      and `POST /api/drafts/{id}/discard`. These calls invoke `DraftWorkflow.approveDraft`
+      or `DraftWorkflow.discardDraft`, which advance the workflow and write
+      `DraftApproved{action}` or `DraftDiscarded{action}` to `DraftEntity`. The
+      approved text (original or edited) is persisted on the entity for the deployer
+      to post to GitHub outside this system.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tone & content guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: H1
+    label: Maintainer approval gate
+    mechanism: HITL
+    implementation: application
+    source: —

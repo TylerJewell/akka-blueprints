@@ -1,0 +1,69 @@
+# Eval Matrix for the traced-manager-search Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (research-intel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: traced-manager-search
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: research-intel
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Block URL fetches that fall outside the configured allow-list
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: deterministic-policy
+    enforcement: blocking
+    rationale: >
+      The SearchAgent issues real HTTP requests to external URLs on behalf of the manager's
+      query. Without pre-call filtering, a compromised or manipulated search result could
+      direct the agent to fetch internal endpoints, credential-bearing URLs, or domains
+      carrying malicious content. A before-tool-call guardrail enforcing a strict allow-list
+      stops the fetch before it leaves the process, keeping the blast radius of a prompt-
+      injection attack limited to domains the operator explicitly permits.
+    implementation: >
+      A before-tool-call guardrail runs inside SearchAgent's tool dispatch. It reads the
+      allow-list from application.conf (akka.javasdk.agent.search-agent.url-allowlist) at
+      startup. For each proposed URL, the guardrail extracts the scheme+host and checks set
+      membership; any non-matching URL causes RunWorkflow to call RunEntity.blockTool,
+      transitioning the run to BLOCKED_TOOL and recording the offending URL. The step never
+      reaches the HTTP client.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the manager synthesis decision for answer quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The ManagerAgent's synthesis step merges search results and a trace report into a
+      user-facing answer. Because the search data is retrieved live, answer quality can vary
+      with result freshness and page content. Sampling the synthesis decision with a rubric
+      judge surfaces a quality score alongside each answer in the UI, giving operators a
+      running view of output quality without blocking answer delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries RunView for the oldest TRACED run
+      lacking an evalScore, runs a 1–5 rubric judge over the SynthesisedAnswer content and
+      RunTrace efficiency (tokens per page, steps with high latency), and calls
+      RunEntity.recordEval(score, rationale), emitting RunEvalScored. The score appears in
+      the App UI row beside the answer.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: URL allow-list guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Block any search-agent fetch to a URL outside the operator allow-list.
+  - id: E1
+    name: Answer quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the manager's synthesised answer and trace efficiency.

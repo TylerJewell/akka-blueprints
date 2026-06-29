@@ -1,0 +1,79 @@
+# Eval Matrix for the dual-llm-pdf-extract Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (ops-automation domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: dual-llm-pdf-extract
+coordination_pattern: debate-multi-perspective
+domain: ops-automation
+
+matrix_cell:
+  coordination_pattern: debate-multi-perspective
+  domain: ops-automation
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: S1
+    name: Redact PII from the PDF text before any extractor reads it
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: system-level
+    rationale: |
+      PDFs submitted for extraction commonly carry personal data that is
+      incidental to the structured fields being extracted — names in headers,
+      email addresses in footers, phone numbers in contact blocks, government
+      identifiers in forms. Neither the Claude nor the Gemini extractor needs
+      this personal data to identify the fields the operator cares about, and
+      passing raw PII into two separate model inference calls doubles the
+      exposure surface. Redacting at intake keeps personal data out of every
+      agent prompt and out of the persisted extraction record.
+    implementation: |
+      The deterministic `PiiSanitizer` runs in `ExtractionWorkflow.sanitizeStep`
+      before either `ClaudeExtractor` or `GeminiExtractor` is dispatched. It
+      replaces emails, phone numbers, government identifiers, and capitalised
+      name patterns with typed placeholders and returns a redaction count. Only
+      the redacted text is persisted on `ExtractionEntity` (via
+      `DocumentSanitized`); the raw text lives in the workflow's transient state
+      and is never stored.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score cross-model agreement on every completed extraction
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The defining risk of a dual-LLM extraction pipeline is systematic
+      divergence between the two model families — Claude and Gemini may
+      consistently disagree on particular field types (dates, currency amounts,
+      named entities) in ways that the reconciler masks. Periodic agreement
+      scoring turns field-level disagreement into a measurable, time-series
+      signal that operators can monitor without slowing live extraction traffic.
+      A persistent low agreement score on a specific field is a prompt to
+      retrain or replace the weaker extractor for that field type.
+    implementation: |
+      `AgreementSampler` (TimedAction) fires every 5 minutes. It picks the
+      oldest RECONCILED extraction without an `agreementScore`, calls `EvalJudge`
+      with the two `RawExtraction` results and the `MergedExtraction` against a
+      1–5 rubric, and emits an `AgreementScored` event with the score, a
+      one-sentence rationale, and a list of high-disagreement field names. The
+      score surfaces on the App UI tab beside each extraction row.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII sanitizer
+    mechanism: Sanitizer
+    implementation: pii redaction at intake
+    source: —
+  - id: E1
+    label: Cross-model agreement sampler
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

@@ -1,0 +1,86 @@
+schema_version: 1
+sample_id: secops-triage
+
+# ---- Purpose ----
+purpose:
+  primary_function: security-vulnerability-triage
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-and-gate
+  user_type: security-analyst
+
+# ---- Data ----
+data:
+  inputs:
+    - vulnerability-findings
+    - asset-inventory
+    - threat-intelligence-signals
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    security-finding-data: true
+    asset-configuration-data: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  enrichment_sources_are_internal: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-and-gate
+  decision_subject: security-vulnerability
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+  reviewer_approves_remediation_before_execution: true
+  low_medium_decisions_autonomous: true
+  high_critical_decisions_require_approval: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-finding-to-production-system
+  failure_modes:
+    - severity-underestimation
+    - false-positive-triage
+    - guardrail-bypass-attempt
+    - drift-undetected
+    - approval-timeout-leaves-finding-unresolved
+    - enrichment-data-staleness
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: true
+  reviewer_role: security-analyst
+  approval_required_for: [CRITICAL_IMMEDIATE, HIGH_SCHEDULED]
+  autonomous_for: [MEDIUM_MONITORED, LOW_ACCEPTED]
+  drift_alert_recipient: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: daily
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_finding: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+  drift_check_interval_hours: 6
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  security-data-classification: TO_BE_COMPLETED_BY_DEPLOYER
+  asset-inventory-data-sensitivity: TO_BE_COMPLETED_BY_DEPLOYER
+  change-management-policy-applies: TO_BE_COMPLETED_BY_DEPLOYER

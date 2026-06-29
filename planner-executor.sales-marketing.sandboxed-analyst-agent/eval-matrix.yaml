@@ -1,0 +1,98 @@
+schema_version: 1
+sample_id: sandboxed-analyst-agent
+coordination_pattern: planner-executor
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Vet every proposed analysis script before it enters the sandbox
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The AnalystAgent generates Python scripts that are submitted directly to a
+      sandboxed execution environment. Sales call datasets frequently contain PII
+      and commercially sensitive revenue data. A script that imports networking
+      libraries, writes outside /workspace/, or invokes subprocess can exfiltrate
+      data, corrupt fixtures, or escape the sandbox entirely. A deterministic
+      guardrail wired to the script-submission hook stops the script before it
+      executes and forces the AnalystAgent to produce a policy-compliant revision.
+    implementation: |
+      `ScriptGuardrail.vet(StepDecision)` is called by `AnalysisWorkflow`'s
+      `guardrailStep` between `proposeStep` and `executeStep`. The vetter checks
+      for forbidden imports (`requests`, `urllib`, `socket`, `subprocess`),
+      forbidden builtins (`eval`, `exec`), shell-escape patterns (`os.system`,
+      `os.popen`, `shell=True`), and write operations on paths outside
+      `/workspace/`. On rejection, the workflow records a `StepBlocked` entry on
+      the progress ledger, then loops back to `proposeStep` so the AnalystAgent
+      sees the blocker and revises the script.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the workflow automatically when sandbox output signals an escape attempt
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      The script guardrail catches obvious policy violations at proposal time. The
+      automatic halt is the second line of defence: a script may pass the static
+      check but produce runtime output that reveals a sandbox escape, an unexpected
+      filesystem state, or an injected instruction. Because sales call data is
+      commercially sensitive, the cost of letting a compromised execution continue
+      outweighs the cost of terminating the job and requiring a human review.
+    implementation: |
+      `SafetyEvaluator.evaluate(ProgressEntry)` runs in `AnalysisWorkflow`'s
+      `autoHaltEvalStep` after every recorded execution step. It flags UNSAFE on
+      stdout containing sandbox-escape keywords (`__import__('os')`,
+      `os.getcwd() == '/'`), on "Permission denied" combined with "subprocess", and
+      on explicit prompt-injection markers ("ignore previous instructions",
+      "<system>"). On UNSAFE, the workflow transitions to `haltedStep`, emits
+      `JobHaltedAutomatic`, and ends the job in `HALTED`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub PII from every sandbox execution result before it reaches the analyst
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Sales call datasets routinely contain customer contact information — phone
+      numbers, email addresses, and names appear in transcript headers, CRM export
+      columns, and inline call notes. If this material reaches the AnalystAgent's
+      next prompt unredacted, it can appear in the generated AnalysisReport, in SSE
+      feed events, and in logged progress ledger entries, creating a PII-exposure
+      liability that is difficult to remediate after the fact. The sanitizer makes
+      the redaction unconditional and deterministic at the point where execution
+      output is first observed.
+    implementation: |
+      `PiiScrubber.scrub(String)` runs in `AnalysisWorkflow`'s `sanitizeStep`
+      between the sandbox call and `recordStep`. It applies labelled-replacement
+      patterns for E.164 phone numbers (`+1XXXXXXXXXX` and variants), NANP
+      formatted numbers (`NXX-NXX-XXXX`), RFC 5322 email addresses, and
+      name-header column values extracted from the dataset's header row (columns
+      named `first_name`, `last_name`, `contact_name`, `rep_name`). Replacements
+      are tagged: `[REDACTED:phone]`, `[REDACTED:email]`, `[REDACTED:name]`. The
+      scrubbed string is what lands on the `ProgressEntry` event and what the
+      AnalystAgent sees on the next prompt.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Script execution guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call (static script policy vetter)
+    source: —
+  - id: HT1
+    label: Automatic safety halt
+    mechanism: Halt
+    implementation: automatic-safety-halt (post-execution stdout evaluator)
+    source: —
+  - id: S1
+    label: PII sanitizer
+    mechanism: Sanitizer
+    implementation: pii (phone, email, name redactor on execution output)
+    source: —

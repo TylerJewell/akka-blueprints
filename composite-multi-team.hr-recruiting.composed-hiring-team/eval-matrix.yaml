@@ -1,0 +1,142 @@
+# Eval Matrix for the composed-hiring-workflow Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community hr-recruiting sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list across
+# all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: composed-hiring-workflow
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: composite-multi-team
+  domain: hr-recruiting
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Gate every nested workflow boundary before invocation
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: before-agent-invocation
+    enforcement: blocking
+    rationale: |
+      The hiring pipeline nests two sub-workflows — `CandidateWorkflow` for
+      screening and `CvImprovementLoop` for CV improvement — under a top-level
+      `HiringTeamWorkflow`. Each nested workflow boundary is a side-effecting
+      transition: if the outer pipeline invokes a nested workflow out of order,
+      with an incomplete upstream result (e.g., no `HiringBrief` before screening
+      begins), or against an application already in a terminal state, the nested
+      pipeline may run against stale or missing data. A guardrail at each boundary
+      prevents the nested workflow from starting unless the preconditions are sound,
+      so the pipeline composition remains consistent even when individual steps are
+      retried or replayed.
+    implementation: |
+      A before-agent-invocation guardrail is registered on `Screener`, `CvCoach`,
+      and `Interviewer`. Before each agent in those classes is invoked, the guardrail
+      checks that the `applicationId` matches the one the agent was assigned, that
+      the target application is not yet in a terminal status (`OFFER_EXTENDED` or
+      `DECLINED`), and that the payload does not exceed a size cap. A refused
+      invocation records the block reason on `ApplicationEntity` and the agent
+      returns without writing to the workspace; for a screener or interviewer the
+      outer workflow treats the refusal as a failed dimension and records it
+      accordingly.
+    regulation_anchors: []
+
+  - id: G2
+    name: Vet the offer letter before it is extended to the candidate
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: |
+      The `OfferLetter` produced by `HiringManager` at the end of the pipeline is
+      a candidate-facing document that carries compensation, role, and employment
+      terms. An incomplete or non-compliant letter — one with an empty offer
+      reference, prohibited compensation language, or a body shorter than a
+      minimum threshold — could expose the organisation to legal or reputational
+      risk if extended. Vetting the letter before it is persisted ensures only
+      well-formed, policy-compliant offers leave the system.
+    implementation: |
+      A before-agent-response guardrail is registered on `HiringManager` for the
+      `DRAFT_OFFER` task. It inspects the `OfferLetter` returned by the agent:
+      it refuses a letter with an empty `offerReference`, one whose `offerText` is
+      shorter than a minimum length, or one containing a prohibited phrase list
+      (e.g., discriminatory language, unlawful exclusions). On refusal,
+      `HiringTeamWorkflow.offerStep` calls
+      `ApplicationEntity.recordOfferBlock(reason)` and ends with the application
+      left `OFFER_PENDING`; the refusal reason is shown in the App UI.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every hiring stage result as it lands
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Each stage of the hiring pipeline produces an evaluable result — a screening
+      report, an improved CV draft, a panel verdict. Scoring those results as they
+      land provides a running quality signal without holding up the pipeline, and
+      surfaces weak stages (a screening report with an overall FAIL, a CV draft
+      with no changes applied, a panel with any DECLINE axis) alongside the
+      application in the UI for recruiter review.
+    implementation: |
+      `StageEvalConsumer` subscribes to `ApplicationEntity` events and fires on
+      `ScreeningCompleted`, `CvImproved`, and `InterviewCompleted`. For each it
+      runs `StageEvaluator` — a deterministic pure function, not an LLM call — that
+      returns a `StageEval{stage, score, flags, evaluatedAt}`. Example flags: a
+      screening report with overallOutcome FAIL, a CV draft with an empty
+      `changesApplied` list, an interview panel with any DECLINE outcome. The eval
+      is recorded on the application via `ApplicationEntity.recordStageEval` and
+      shown in the App UI; it never gates the workflow.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Allow post-hire compliance review of extended offers
+    mechanism:
+      kind: hotl
+      flavor: live-compliance-review
+    enforcement: non-blocking
+    rationale: |
+      Hiring decisions carry legal exposure that can surface after the offer is
+      extended — a compliance officer reviewing completed offers for equal-opportunity
+      or policy adherence concerns the in-line panel was not asked to address. This
+      reviewer is on the loop, not in it: the offer is extended without waiting for
+      post-hire sign-off, and the compliance review is recorded against it for audit
+      and remediation rather than gating the extension.
+    implementation: |
+      `POST /api/applications/{id}/post-hire-review` accepts a `PostHireReview`
+      (`reviewedBy`, `outcome` of `CLEARED` or `FLAGGED`, `comments`) only when the
+      application status is `OFFER_EXTENDED`; otherwise it returns `409`.
+      `ApplicationEntity.recordPostHireReview` emits `PostHireReviewRecorded` and
+      stores the review without changing the `OFFER_EXTENDED` status. The App UI
+      shows a post-hire review box on every extended-offer card and the recorded
+      outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Nested-workflow boundary guardrail
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —
+  - id: G2
+    label: Offer-letter output guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Per-stage hiring quality eval
+    mechanism: Eval event
+    implementation: on-decision-eval
+    source: —
+  - id: HO1
+    label: Post-hire compliance review
+    mechanism: Human on the loop
+    implementation: live-compliance-review
+    source: —

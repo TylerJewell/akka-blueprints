@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: mcp-github-bot
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Block disallowed or halted tool calls before GitHub is contacted
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-validator
+    enforcement: blocking
+    rationale: |
+      A natural-language agent with write access to a GitHub repository can create
+      issues, add comments, or invoke tools far outside what the user intended.
+      Because the damage is external and immediate — a created issue or posted comment
+      cannot be quietly undone — the guardrail must intercept tool calls before they
+      reach the MCP server, not after. Two classes of risk are addressed in a single
+      check: an unexpected tool name (agent hallucinated a tool outside the permitted
+      set) and a legitimate write tool called while an operator halt is active. Both
+      paths return a structured rejection that the agent can relay to the user instead
+      of silently failing.
+    implementation: |
+      `ToolCallGuardrail` is registered on `GitHubBotAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      pending tool call it (1) checks the tool name against `PERMITTED_TOOLS`
+      (`list_repos`, `get_issue`, `list_issues`, `create_issue`, `add_comment`);
+      if the name is absent, returns `Guardrail.reject` with code
+      `tool-not-permitted`. (2) If the tool is write-class (`create_issue`,
+      `add_comment`), reads `HaltFlagEntity` (id `"global"`) via
+      `componentClient.forEventSourcedEntity(HaltFlagEntity.class, "global")
+      .call(HaltFlagEntity::getFlag)`; if `writeHalted == true`, returns
+      `Guardrail.reject` with code `write-halted`. Passing calls return
+      `Guardrail.allow()`. The rejection payload carries `toolName` and
+      `blockingReason` so `GitHubBotAgent` can include them in its
+      natural-language response to the user.
+    regulation_anchors: []
+
+  - id: H1
+    name: Halt all write operations via a runtime operator flag
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      GitHub write access — issue creation, comment posting — can produce externally
+      visible and hard-to-retract side effects. An incident responder or automated
+      monitor needs a path to stop all write activity across every in-flight session
+      without redeploying or restarting the service. A singleton entity flag that the
+      guardrail reads on every write dispatch provides that path: flipping the flag
+      takes effect on the next write-class tool call, with no TTL, no cache to
+      invalidate, and no agent restart needed. The flag is surfaced on the UI so its
+      state is always visible to the operator.
+    implementation: |
+      `HaltFlagEntity` (singleton, id `"global"`) is an `EventSourcedEntity` whose
+      state is `HaltFlag{writeHalted: boolean, haltedBy: Optional<String>,
+      haltedAt: Optional<Instant>}`. `BotSessionEndpoint` exposes `POST /api/halt/enable`
+      and `POST /api/halt/disable` that call `enableHalt(operator)` and
+      `disableHalt(operator)` respectively. `ToolCallGuardrail` reads the current flag
+      via `componentClient` on every write-class tool call. The App UI's halt-flag
+      toggle calls these endpoints and reflects the current state from `GET /api/halt`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Pre-tool allowlist + halt check
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Operator write-halt flag
+    mechanism: Halt
+    implementation: operator-regulator-stop
+    source: —

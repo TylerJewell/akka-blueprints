@@ -1,0 +1,79 @@
+# Eval Matrix for the book-writer-fanout Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community content-editorial sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list across
+# all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: book-writer-fanout
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: composite-multi-team
+  domain: content-editorial
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Guard the web-search tool against off-topic and injection queries
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      ChapterAgent calls a web-search tool while drafting. An unconstrained query lets a
+      drifting or prompt-injected agent fetch off-topic or adversarial content into the
+      manuscript. The guard runs before the tool executes.
+    implementation: >
+      before-tool-call guard inside WebSearchEndpoint: it loads the book topic from
+      BooksView and refuses (403) any query that shares no salient term with the topic or
+      matches an injection denylist before returning canned results.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score each chapter before consolidation
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      A weak chapter should be visible and held out before it pollutes the final book.
+      An automated score on every drafted chapter surfaces quality to the workflow and UI.
+    implementation: >
+      ChapterEvalConsumer subscribes to ChapterEntity ChapterDrafted events, computes a
+      quality score (length, topic-term coverage, structure), and calls
+      ChapterEntity.recordEvaluation; chapters below threshold 0.5 are rejected and redrafted.
+    regulation_anchors: []
+
+  - id: A1
+    name: Gate book completion on manuscript completeness
+    mechanism:
+      kind: ci-gate
+      flavor: documentation-gate
+    enforcement: build-gate
+    rationale: >
+      The manuscript is the deliverable. A book must not be marked done while a planned
+      chapter is missing or empty. The same completeness check guards the build before deploy.
+    implementation: >
+      BookWritingWorkflow.consolidateStep asserts every planned ChapterEntity is
+      DRAFTED/APPROVED with non-empty markdown before recording BookCompleted; on a failed
+      check it records BookFailed. An integration test drives the full flow and asserts the
+      same completeness invariant.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Guard web-search tool
+    mechanism: "guardrail · before-tool-call"
+    short: Refuse off-topic or injection queries before the tool runs.
+  - id: E1
+    name: Per-chapter quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Score every drafted chapter; hold weak ones out.
+  - id: A1
+    name: Manuscript completeness gate
+    mechanism: "ci-gate · documentation-gate"
+    short: Block COMPLETED until every chapter is present and non-empty.

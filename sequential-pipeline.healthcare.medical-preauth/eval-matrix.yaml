@@ -1,0 +1,136 @@
+schema_version: 1
+sample_id: medical-preauth
+coordination_pattern: sequential-pipeline
+domain: healthcare
+
+controls:
+  - id: S1
+    name: Strip PHI from every outbound tool call before the LLM receives it
+    mechanism:
+      kind: sanitizer
+      hook: before-tool-call
+      flavor: sector
+    enforcement: blocking
+    rationale: |
+      Prior-authorization workflows handle member identifiers, dates of birth,
+      clinical notes, and other protected health information submitted as part of
+      the request. Sending those identifiers to an external LLM without
+      sanitization creates a HIPAA disclosure risk: the LLM provider logs prompt
+      content, and raw PHI in logs constitutes an impermissible disclosure. The
+      before-tool-call hook is the mandatory interception point because it runs
+      before any payload leaves the service boundary — not after, and not on
+      the way back. Replacing each PHI field with a request-scoped hash
+      preserves the cross-call linkage the agent needs (the same hash appears in
+      every call in the same request) without exposing the underlying identifier.
+      Every field removed is recorded in a SanitizationApplied event so the
+      audit trail is complete and verifiable without reading the LLM provider's
+      logs.
+    implementation: |
+      `PhiSanitizer` is registered on `PreAuthAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. It
+      scans every outbound tool call payload for fields named `memberId`,
+      `dateOfBirth`, `patientName`, or `ssn`, and for values matching a
+      nine-digit SSN pattern or a date value adjacent to a name field in the
+      JSON structure. Each detected value is replaced with
+      `sha256(rawValue + requestId).substring(0, 12)` — a stable,
+      request-scoped token that keeps tool calls consistent within a single
+      request without exposing the source identifier. `PreAuthEntity.recordSanitization`
+      is called for each field, writing `SanitizationApplied{field, hashedToken,
+      tool, sanitizedAt}` to the event log. If the sanitizer cannot parse the
+      payload (binary attachment, malformed JSON), it blocks the call entirely
+      and returns `Guardrail.reject("sanitization-parse-failure")`. The phase-gate
+      logic in the same class also enforces the per-phase accept matrix described
+      in the S1 + phase-gate combined hook.
+    regulation_anchors: []
+
+  - id: H1
+    name: Hold every denial determination for human reviewer acknowledgement before finalizing
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      A prior-authorization denial has direct patient-care consequences: it
+      delays or prevents a prescribed treatment until the denial is appealed or
+      reversed. Fully automating the denial path — allowing the system to emit
+      a final DENIED determination without any human checkpoint — removes the
+      safeguard that payers and regulators expect for adverse coverage decisions.
+      The human-in-the-loop hold does not ask the reviewer to re-adjudicate the
+      clinical question from scratch; it asks them to confirm that the system's
+      determination and rationale are coherent and complete before the outcome
+      is recorded as final. This is consistent with the principle that AI-driven
+      adverse decisions in high-stakes domains require a human sign-off that is
+      visible in the audit log.
+    implementation: |
+      `PreAuthWorkflow.humanHoldStep` runs immediately after `evalStep` whenever
+      `Determination.outcome() == DENIED`. The step emits `HumanApprovalRequested{
+      requestedAt}` on `PreAuthEntity` and transitions status to
+      `PENDING_HUMAN_REVIEW`. The step's `stepTimeout` is PT72H (72 hours). The
+      workflow then waits for an external signal: a `POST
+      /api/auth-requests/{id}/acknowledge` call from a reviewer, which writes
+      `HumanApprovalReceived{reviewerNotes, receivedAt}` and resumes the workflow
+      to finalize at `EVALUATED`. If no acknowledgement arrives within 72 hours,
+      the timeout fires, the step writes `EscalationRequired{reason:
+      "no-reviewer-response-within-72h"}`, and the entity transitions to
+      `ESCALATED`. `APPROVED` and `PENDING_ADDITIONAL_INFO` determinations
+      bypass `humanHoldStep` entirely. The UI's App UI tab shows a
+      `PENDING_HUMAN_REVIEW` card in a distinct amber state pill with an
+      **Acknowledge denial** button that posts to the acknowledge endpoint.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every determination for clinical evidence completeness and policy citation adequacy
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A prior-authorization determination can be structurally well-formed —
+      valid outcome enum, non-empty rationale — while still citing a policy
+      article that was never matched in the review phase, omitting a covered
+      procedure code from the outcome, or producing a denial rationale so brief
+      it would not survive an appeal. These gaps do not block the determination
+      from landing; they surface as quality signals that a reviewer or auditor
+      can act on. An on-decision evaluator running immediately after each
+      determination provides a consistent, machine-readable quality signal on
+      every request — one that does not depend on random sampling or periodic
+      audits. A score of 1 or 2 is an immediate flag for human inspection,
+      regardless of whether the outcome was approval or denial.
+    implementation: |
+      `ClinicalCompletenessScorer` runs inside `PreAuthWorkflow.evalStep`,
+      fired immediately after `DeterminationWritten` lands. The scorer is
+      deterministic and rule-based (no LLM call). Four checks, one point per
+      check satisfied, on a base of 1:
+      (1) **Procedure code coverage** — every entry in
+      `Determination.coveredProcedureCodes` equals the procedure code recorded
+      on the validated request (`ValidationResult.procedureCheck.procedureCode`).
+      (2) **Policy citation** — `Determination.citedArticleIds` is non-empty
+      AND every cited id appears in `PolicyReview.matchedArticles[].articleId`.
+      (3) **Rationale adequacy** — `rationale.split("\\s+").length` meets the
+      threshold: ≥ 40 words for `DENIED`, ≥ 15 words for `APPROVED` or
+      `PENDING_ADDITIONAL_INFO`.
+      (4) **Outcome validity** — `outcome` is non-null and is one of
+      `{APPROVED, DENIED, PENDING_ADDITIONAL_INFO}`.
+      Emits `EvaluationScored{score: 1-5, rationale: String}` with a rationale
+      sentence naming the largest gap. The score is surfaced on the App UI tab;
+      determinations with score ≤ 2 have their card border highlighted red and
+      are flagged for human inspection.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PHI sanitizer (sector guardrail)
+    mechanism: Sanitizer
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Denial human-review hold
+    mechanism: HITL
+    implementation: application-level hold
+    source: —
+  - id: E1
+    label: Clinical completeness eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

@@ -1,0 +1,100 @@
+# Eval Matrix for the moderated-group-chat Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain sample with no industry- or jurisdiction-bound
+# anchors, so regulation_anchors is intentionally an empty list across all controls. Treat
+# the requirement as relaxed for non-anchored samples.
+#
+# G1 and HT1 are the pattern-specific controls drawn from the corpus entry
+# (semantic-kernel.demos.assistants-group-chat). A1 is the standard operational control
+# every deployable governed service carries.
+
+schema_version: 1
+sample_id: moderated-group-chat
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: moderation-turn-taking
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Check every assistant turn before committing it to the shared transcript
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-content-check
+    enforcement: blocking
+    rationale: >
+      In a moderated group chat, the shared transcript is the authoritative record of the
+      conversation. A turn that violates persona constraints, goes off-topic, or carries
+      harmful content must never enter that record. Checking each assistant's response before
+      it is appended — rather than after — means the transcript stays clean and downstream
+      participants never see a turn that should have been rejected. A rejected turn fails the
+      workflow step and routes to the error step, ending the session as ESCALATED rather than
+      silently propagating a bad message.
+    implementation: >
+      A before-agent-response guardrail on ResearcherAssistant and CriticAssistant inspects
+      the returned ChatTurn and rejects any turn where flagged is true or where the message
+      is empty. A guardrail on OrchestratorAgent rejects any OrchestratorDecision whose
+      verdict is CONCLUDE without a non-empty summary field. A rejected response causes the
+      workflow step to fail, triggering defaultStepRecovery, which routes to the error step
+      and concludes the session as ESCALATED.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Bound runaway chat sessions and allow operator stop of new sessions
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: >
+      An unbounded group chat loop risks consuming model capacity indefinitely and accumulating
+      a transcript that becomes unmanageable to audit. The twenty-turn cap in ChatSessionWorkflow
+      provides an automatic bound: when the Orchestrator has not concluded by turn twenty the
+      workflow concludes with MAX_TURNS_REACHED rather than continuing. The operator halt
+      switch adds a separate safety lever — when a misbehaving assistant or unexpected topic
+      is detected, an operator can stop new sessions from starting without interrupting
+      sessions already in flight.
+    implementation: >
+      ChatSessionWorkflow's orchestrateStep checks the current turn count after each CONTINUE
+      decision and routes to concludeStep(MAX_TURNS_REACHED) if the count exceeds twenty.
+      SystemControl (a KeyValueEntity) holds a halted boolean. ChatEndpoint exposes POST
+      /api/system/halt and /api/system/resume; SessionRequestConsumer reads
+      SystemControl.isHalted before starting a workflow and skips the start while halted.
+    regulation_anchors: []
+
+  - id: A1
+    name: Test-gate the turn-taking loop before deployment
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: >
+      The turn-taking loop and the twenty-turn cap together decide when every session ends.
+      A regression in the loop routing — for example, a CONTINUE verdict that never advances
+      the turn counter, or a concludeStep that does not write the termination reason — could
+      leave sessions running indefinitely or produce corrupt state. Tests must pass before
+      any deploy to catch these regressions before they reach a running service.
+    implementation: >
+      The Maven test phase plus an integration test driving a consensus scenario (Orchestrator
+      returns CONCLUDE before turn twenty, session ends with CONSENSUS and a non-empty summary)
+      and a max-turns scenario (Orchestrator keeps returning CONTINUE, session ends with
+      MAX_TURNS_REACHED at turn twenty) against the in-memory testkit.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Pre-commit turn check
+    mechanism: "guardrail · before-agent-response"
+    short: Reject any assistant turn or orchestrator decision that violates content or schema rules before it enters the transcript.
+  - id: HT1
+    name: Turn cap + operator halt
+    mechanism: "halt · automatic-safety-halt"
+    short: Twenty-turn cap bounds runaway sessions; operator can stop new sessions from starting.
+  - id: A1
+    name: Test gate
+    mechanism: "ci-gate · test-gate"
+    short: Consensus and max-turns tests must pass before deploy.

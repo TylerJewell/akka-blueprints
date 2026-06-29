@@ -1,0 +1,42 @@
+schema_version: 1
+sample_id: kb-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: E1
+    name: Score every answer for groundedness against retrieved passages
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A retrieval-augmented agent that introduces facts not present in the
+      retrieved passages is indistinguishable from a hallucinating one — the
+      retrieval step gives the appearance of groundedness even when the model
+      ignores what was found. An on-decision evaluator catches this gap by
+      comparing the answer's sentences against the actual passage excerpts:
+      a low score signals that the model drifted from the retrieved evidence.
+      The check is non-blocking so the answer still reaches the user, but the
+      score gives the reader an explicit signal about which answers deserve
+      additional verification before acting on them.
+    implementation: |
+      `GroundednessScorer` runs inside `QueryWorkflow.evalStep`, fired
+      immediately after `AnswerRecorded` lands. The scorer is deterministic
+      and rule-based (no LLM call — keeping the single-agent invariant
+      honest): it tokenises each sentence in `KbAnswer.answer`, checks
+      unigram overlap against each `Passage.excerpt` in the attached list,
+      validates that every `Citation.passageId` exists in the retrieved
+      passage set, and awards full marks for a correctly declared NOT_FOUND
+      response when the passage list was empty. Scores 1–5 are computed per
+      the rubric documented in `GroundednessScorer.java`. The result is
+      emitted as `GroundednessScored` on `QueryEntity` and surfaced on the
+      App UI tab; answers with score ≤ 2 are flagged with a red border.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: On-decision groundedness eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

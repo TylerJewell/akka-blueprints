@@ -1,0 +1,103 @@
+schema_version: 1
+sample_id: earth-engine-geospatial
+coordination_pattern: single-agent
+domain: research-intel
+
+controls:
+  - id: S1
+    name: Reject out-of-bounds spatial queries before dataset assembly
+    mechanism:
+      kind: sanitizer
+      flavor: coordinate-bounds
+    enforcement: blocking
+    rationale: |
+      Geospatial queries over arbitrarily large regions produce datasets that are
+      both computationally expensive to assemble and analytically meaningless at
+      the resolution the agent operates on. A query covering half a continent will
+      average away the local signals the agent is trained to interpret. The bounds
+      check runs inside the DatasetFetcher Consumer before any indicator data is
+      touched; an oversized or geometrically invalid bounding box (south-west
+      coordinates not south-west of north-east) terminates the analysis immediately
+      with a clear reason rather than letting a low-quality dataset reach the model.
+    implementation: |
+      `DatasetFetcher` Consumer receives every `QuerySubmitted` event from
+      `AnalysisEntity`. On receipt it computes the bounding-box area using the
+      haversine formula (degrees to km²). If area > 500 000 km², or if
+      `swLat >= neLat`, or if `swLon >= neLon`, the Consumer calls
+      `AnalysisEntity.fail(reason)` and returns without assembling any data.
+      The entity transitions from `SUBMITTED` to `FAILED` without the workflow
+      ever starting and without any LLM call being made. The computed area is
+      also stored on the `DatasetSnapshot` for valid queries so the UI can
+      display it to the researcher.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject malformed analysis reports before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A geospatial report that references a non-existent indicator id or carries
+      an out-of-range anomaly confidence value is worse than no report: it looks
+      authoritative while being structurally broken. Catching the malformed
+      response inside the agent loop — before it propagates to the entity and the
+      UI — means the researcher only ever sees reports that pass the four structural
+      invariants. This is especially important in a single-agent system where there
+      is no second model to cross-check the output.
+    implementation: |
+      `ReportGuardrail` is registered on `GeospatialAnalystAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On
+      each candidate response it (1) parses the response into `AnalysisReport`,
+      (2) asserts every `findings[].indicatorId` is present in the submitted
+      `List<Indicator>`, (3) asserts every `anomalyConfidence` is in `[0.0, 1.0]`,
+      and (4) asserts that every submitted indicator has at least one corresponding
+      finding. On any failure it returns a structured rejection naming the failed
+      check; the agent loop consumes one of its 3 iterations and retries. Passing
+      responses flow through to `analysisStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every report for evidence quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A structurally valid report can still be evidence-thin: a finding that flags
+      an anomaly but cites no layer statistic, or a recommendation that describes
+      an observation rather than a next action, or a set of anomalyConfidence values
+      uniformly set to zero while anomalyDetected is true. These patterns indicate
+      the model produced a plausible-looking output without grounding it in the
+      dataset. An on-decision evaluator scores every report before it reaches the
+      researcher, so low-quality outputs are visible at a glance rather than
+      discovered during review.
+    implementation: |
+      `EvaluationScorer` runs inside `AnalysisWorkflow.evalStep`, fired immediately
+      after `ReportRecorded` lands. The scorer is deterministic and rule-based (no
+      LLM call — keeping the single-agent invariant honest): checks that every
+      `Finding.datasetLayer` and `Finding.statistic` are non-empty strings, that
+      every `recommendation` begins with an actionable verb, and that
+      `anomalyConfidence` is non-zero on any finding where `anomalyDetected` is
+      true. A report that fails all three checks scores 1; one that passes all three
+      scores 5. The score is emitted as `EvaluationScored` and surfaced on the App
+      UI tab; reports with score ≤ 2 are flagged for researcher inspection.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Coordinate-bounds check before dataset assembly
+    mechanism: Sanitizer
+    implementation: coordinate-bounds
+    source: —
+  - id: G1
+    label: Report-structure guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision evidence-quality eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

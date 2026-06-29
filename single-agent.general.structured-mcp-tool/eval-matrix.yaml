@@ -1,0 +1,45 @@
+schema_version: 1
+sample_id: structured-mcp-tool
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Reject schema-invalid MCP tool responses before the agent reasons over them
+    mechanism:
+      kind: guardrail
+      hook: after-tool-call
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      When an agent's only data source is a tool call, a malformed tool response
+      can propagate silently into the agent's reasoning and produce a confidently
+      wrong summary. The after-tool-call hook is the correct intervention point:
+      it runs between the MCP server's raw response and the agent's processing step,
+      so a payload that fails schema validation (missing fields, temperature outside
+      physical bounds, unrecognised condition enum) is caught before the model ever
+      treats it as ground truth. Blocking enforcement means a bad payload is never
+      absorbed into the agent's context — the agent retries the tool call within its
+      iteration budget, and if all retries fail the query fails cleanly with a
+      structured error rather than a hallucinated weather narrative.
+    implementation: |
+      `McpToolResultGuardrail` is registered on `WeatherQueryAgent` via the agent's
+      guardrail-configuration block, bound to the `after-tool-call` hook. On each
+      `get_weather_info` response it (1) asserts all six required fields are present
+      (`location`, `temperatureCelsius`, `humidityPercent`, `windSpeedKph`,
+      `condition`, `observedAt`), (2) asserts `temperatureCelsius` is in [−90, 60],
+      (3) asserts `humidityPercent` is in [0, 100], and (4) asserts `condition`
+      is one of `{CLEAR, PARTLY_CLOUDY, OVERCAST, RAIN, THUNDERSTORM, SNOW, FOG}`.
+      On any failure it returns a structured rejection whose error code names the
+      failed check (e.g., `temperature-out-of-range`, `missing-required-field`,
+      `unknown-condition-enum`); the agent loop consumes one of its 3 iterations and
+      retries `get_weather_info`. Passing payloads flow through to `WeatherQueryAgent`'s
+      reasoning step, where the agent constructs `WeatherSummary`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: MCP tool-response schema guardrail
+    mechanism: Guardrail
+    implementation: after-tool-call
+    source: —

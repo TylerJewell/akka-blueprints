@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: agent-benchmark-harness
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: E1
+    name: Record a periodic accuracy snapshot for every completed benchmark run
+    mechanism:
+      kind: eval-periodic
+      hook: on-run-complete
+      flavor: continuous-accuracy
+    enforcement: non-blocking
+    rationale: |
+      A benchmark harness exists to track quality over time, not just to
+      produce a point-in-time verdict. Without a durable, timestamped
+      accuracy record, drift between runs is invisible — a model that
+      degrades gradually will pass each individual gate while the trend
+      is clearly negative. Recording an AccuracySnapshotRecorded event per
+      completed run, surfaced via the AccuracySampler TimedAction, gives
+      operators a continuous quality stream from which pass rate trend,
+      per-category degradation, and inter-run variance are all computable
+      without re-running any task.
+    implementation: |
+      AccuracySampler (TimedAction) fires every 15 minutes. It queries
+      RunsView.getAllRuns, finds completed runs (PASSED or FAILED) that do
+      not yet have a matching AccuracySnapshotRecorded event on RunEntity,
+      and calls RunEntity.recordAccuracySnapshot(runId, passRate, passCount,
+      failCount). The call is idempotent on runId. The workflow itself also
+      emits one AccuracySnapshotRecorded event on the terminal transition
+      (RunSummaryEvent) carrying the whole run's aggregate, so the snapshot
+      is available immediately without waiting for the next sampler tick.
+    regulation_anchors: []
+
+  - id: CI1
+    name: Gate downstream deployment actions on the most recent benchmark pass rate
+    mechanism:
+      kind: ci-gate
+      hook: pre-deploy-check
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      The benchmark harness is only useful if its verdict can actually block
+      a deployment. Without a machine-readable gate endpoint, operators must
+      manually inspect results before promoting a build — a step that is
+      routinely skipped under time pressure. Exposing GET /api/ci-gate with a
+      stable response contract allows any CI system to poll the harness and
+      abort the pipeline on a failing run, with zero integration overhead
+      beyond an HTTP GET. The conservative default (gated=true when no
+      completed run exists) ensures a pipeline that has never been benchmarked
+      cannot silently promote through the gate.
+    implementation: |
+      BenchmarkEndpoint exposes GET /api/ci-gate. The handler reads the most
+      recent completed run (PASSED or FAILED) from RunsView. If passRate is
+      at or above benchmark.passing-threshold (default 0.80), it returns
+      {gated: false, runId, passRate, threshold}. If passRate is below
+      threshold, or no completed run exists in RunsView, it returns
+      {gated: true, runId: null|<id>, passRate: null|<rate>, threshold,
+      reason: "..."}. The endpoint is read-only and adds no state to the
+      system; it is the canonical authority for the gate decision and must
+      not be bypassed by the caller.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Periodic accuracy snapshot recorder
+    mechanism: Eval · periodic
+    implementation: on-run-complete (AccuracySampler every 15 min)
+    source: —
+  - id: CI1
+    label: CI deployment gate
+    mechanism: CI gate · test-gate
+    implementation: GET /api/ci-gate (build-gate, caller-enforced)
+    source: —

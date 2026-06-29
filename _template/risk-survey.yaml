@@ -1,0 +1,58 @@
+schema_version: 1
+sample_id: <kebab-name>
+
+# Pre-fill every field that the blueprint's nature determines. Mark fields
+# the *deployer* must answer with the literal string TO_BE_COMPLETED_BY_DEPLOYER
+# so the generated UI's Risk Survey tab fades them out.
+
+purpose:
+  primary_function: TODO
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: TODO    # advisory-only / draft-only / autonomous-with-rollback / etc.
+  user_type: TODO
+
+data:
+  inputs: []                 # TODO list
+  data_classes:
+    pii: TODO                # true / false / TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+decisions:
+  authority_level: TODO       # recommend-only / draft-only / etc.
+  decision_subject: TODO
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: TODO
+
+failure:
+  blast_radius: TODO          # single-user / single-customer / single-tenant / cross-tenant
+  failure_modes: []           # TODO list
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+oversight:
+  human_in_loop: TODO         # true / false
+  human_on_loop: TODO
+  reviewer_role: TODO
+  audit_frequency: TODO       # daily / weekly / monthly / quarterly
+
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls: []
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER

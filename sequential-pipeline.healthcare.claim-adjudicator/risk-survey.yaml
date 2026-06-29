@@ -1,0 +1,81 @@
+schema_version: 1
+sample_id: claim-adjudication-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: insurance-claim-adjudication
+  sector: healthcare
+  decisions_surface: binding
+  user_type: claims-processor-or-reviewer
+
+# ---- Data ----
+data:
+  inputs:
+    - member-claim-submission
+    - payer-policy-rule-corpus
+    - procedure-code-registry
+  data_classes:
+    pii: true
+    phi: true
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: binding
+  decision_subject: insurance-claim
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-with-appeal
+  denial_requires_human_review: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-claim
+  failure_modes:
+    - incorrect-denial
+    - incorrect-approval
+    - phi-leak-to-tool-log
+    - phase-violation
+    - evidence-thin-adjudication
+    - review-timeout-escalation
+    - hallucinated-policy-rule
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: true
+  reviewer_role: claims-reviewer-or-medical-director
+  denial_review_required: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_claim: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  phi-handling-agreement-in-place: TO_BE_COMPLETED_BY_DEPLOYER
+  hipaa_covered_entity_or_ba: TO_BE_COMPLETED_BY_DEPLOYER

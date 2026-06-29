@@ -1,0 +1,51 @@
+schema_version: 1
+sample_id: steered-renewal-agent
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Enforce renewal policy before the agent returns a decision
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-rule-validator
+    enforcement: blocking
+    rationale: |
+      A library renewal agent operating in automated cx-support has no human
+      reviewer between the LLM decision and the action taken on the patron's
+      account. An agent that approves a renewal for a patron above the fine
+      threshold, or extends a loan that has exhausted its maximum renewal count,
+      causes a direct policy violation that downstream systems may act on before
+      any correction is possible. The before-agent-response hook is the right
+      cut: it intercepts every candidate decision while still inside the agent
+      loop, where a forced retry can produce a compliant outcome without any
+      external state being written. A post-hoc check after the decision lands in
+      the entity log would require a compensating workflow and patron
+      notification — an order of magnitude more operational burden for the same
+      safety goal.
+    implementation: |
+      `PolicyEnforcer` is registered on `RenewalAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate `RenewalDecision` it runs four checks in order: (1)
+      if `patron.outstandingFinesCents > FINE_THRESHOLD_CENTS`, the outcome must
+      be DENIED — any APPROVED or EXTENDED candidate is rejected with error code
+      `fine-threshold-exceeded`; (2) if
+      `loan.priorRenewalCount >= loan.maxRenewalsAllowed`, the outcome must be
+      DENIED — any APPROVED or EXTENDED candidate is rejected with error code
+      `max-renewals-reached`; (3) `decision.newDueDate`, when present, must be
+      strictly after `Instant.now()` and no more than `MAX_RENEWAL_WINDOW_DAYS`
+      days in the future — violations are rejected with `invalid-due-date`; (4)
+      the `outcome` field must deserialise to one of `{APPROVED, DENIED,
+      EXTENDED}` — unrecognised values are rejected with `unknown-outcome`. A
+      passing decision flows through to `RenewalWorkflow.decideStep`'s success
+      path, which calls `LoanEntity.recordDecision`. The patron's account is
+      never updated with a policy-violating decision.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Renewal policy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

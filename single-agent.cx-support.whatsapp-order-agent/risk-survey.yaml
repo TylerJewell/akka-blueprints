@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: whatsapp-order-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: conversational-order-management
+  sector: retail-cx
+  decisions_surface: autonomous-write
+  user_type: customer-via-whatsapp
+
+# ---- Data ----
+data:
+  inputs:
+    - customer-whatsapp-messages
+    - product-catalog
+    - order-history
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-write
+  decision_subject: product-order
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+  high_value_orders_require_hitl_approval: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-order
+  failure_modes:
+    - incorrect-sku-interpretation
+    - quantity-overshoot
+    - unauthorized-order-modification
+    - pii-leakage-via-llm
+    - hitl-timeout-without-operator
+    - guardrail-bypass-via-prompt-injection
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  hitl_threshold_currency_units: 500.0
+  reviewer_role: cx-operator
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - order-create
+    - order-modify
+    - order-cancel
+    - product-lookup
+  rate_limit_per_session: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  whatsapp-business-api-terms-accepted: TO_BE_COMPLETED_BY_DEPLOYER

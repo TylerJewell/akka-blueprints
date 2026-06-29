@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: rag-knowledge-agent
+
+purpose:
+  primary_function: Answer user questions grounded in a fixed document set, with citations and a refusal path when the documents do not support an answer.
+  sector: customer support / self-service knowledge
+  decisions_surface: advisory-only
+  user_type: end-user asking product questions
+
+data:
+  inputs:
+    - user questions
+    - bundled knowledge documents
+    - retrieved passage citations
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+decisions:
+  authority_level: recommend-only
+  decision_subject: the asking user
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+
+failure:
+  blast_radius: single-user
+  failure_modes:
+    - ungrounded or hallucinated answer
+    - over-refusal of answerable questions
+    - stale or incomplete document set
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: support-knowledge owner reviewing low-faithfulness answers
+  audit_frequency: weekly
+
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - in-process document retrieval (cosine search)
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+    content-generation: true
+    synthetic_media: false
+  model:
+    gpai: true
+    foundation: true
+  subjects:
+    children: false
+  users:
+    minors: TO_BE_COMPLETED_BY_DEPLOYER
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  incident_notification_route: TO_BE_COMPLETED_BY_DEPLOYER

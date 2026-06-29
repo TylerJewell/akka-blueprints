@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: document-forge-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: document-generation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: autonomous
+  user_type: content-author-or-editor
+
+# ---- Data ----
+data:
+  inputs:
+    - user-prompts
+    - style-templates
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  path_validated_before_write: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous
+  decision_subject: generated-document-content
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_output_before_use: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Failure ----
+failure:
+  blast_radius: single-document
+  failure_modes:
+    - path-traversal-attempt
+    - disallowed-content-generation
+    - placeholder-polluted-output
+    - oversized-output
+    - hallucinated-references
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: TO_BE_COMPLETED_BY_DEPLOYER
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - write-document-tool
+  rate_limit_per_forge: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  generated-content-permitted-for-use-case: TO_BE_COMPLETED_BY_DEPLOYER

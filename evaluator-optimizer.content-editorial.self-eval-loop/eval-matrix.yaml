@@ -1,0 +1,96 @@
+schema_version: 1
+sample_id: self-eval-loop
+coordination_pattern: evaluator-optimizer
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Enforce per-post character ceiling before the critic runs
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      The blueprint's whole loop is gated on a length constraint. A draft that
+      blows past the ceiling is by definition a failed attempt — sending it
+      to the critic wastes a cycle and risks the critic giving subjective
+      feedback that masks the deterministic violation. A deterministic
+      pre-critic guardrail catches the violation, returns structured
+      feedback to the Poet, and keeps the critic focused on style.
+    implementation: |
+      Wired as the `guardrailStep` of `RefinementWorkflow`, immediately
+      after `draftStep`. A pure-function check on
+      `draft.characterCount() <= post.characterCeiling`. On failure, emits
+      `AttemptGuardrailVerdictRecorded` with `verdict.passed = false` and
+      `reasonCode = "OVER_CEILING"`, then transitions back to `draftStep`
+      with a fixed `CritiqueNotes("Draft exceeds the configured character
+      ceiling; trim and resubmit.")`. The Poet's next call sees the
+      structured feedback as the prior critique. The cycle still counts
+      toward `maxAttempts`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every cycle's verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The critic's accept-or-revise verdict is the highest-information
+      signal the loop produces. Recording it as a typed event per attempt
+      gives operators a continuous quality stream — pass rate per attempt
+      number, drift in average score, frequency of over-ceiling drafts —
+      without instrumenting the workflow itself.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `PostsView.getAllPosts`, finds attempts that have been critiqued but
+      do not yet have a matching `EvalRecorded` event, and calls
+      `PostEntity.recordEval(attemptNumber, verdict, score,
+      ceilingExceeded)`. The call is idempotent on `(postId, attemptNumber)`.
+      The workflow itself also emits one `EvalRecorded` event on the
+      terminal transition (PostAccepted or PostRejectedFinal) carrying the
+      whole loop's outcome.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the loop gracefully at the retry ceiling
+    mechanism:
+      kind: halt
+      flavor: graceful-degradation
+    enforcement: system-level
+    rationale: |
+      Iterative loops can run forever or fail-fast badly. Neither is
+      acceptable for a system that has to surface results to a UI and
+      preserve evidence for audit. The halt mechanism ends the loop at a
+      configured ceiling, preserves every attempt and every critique on
+      the entity, and surfaces a structured rejection reason so an
+      operator can see why the loop stopped.
+    implementation: |
+      `RefinementWorkflow` reads `self-eval-loop.refinement.max-attempts`
+      (default 4) at start. Before scheduling the next `draftStep`, it
+      checks `attemptCount < maxAttempts`. If the ceiling is hit, the
+      workflow transitions to `rejectStep`, which emits
+      `PostRejectedFinal` with the highest-scoring attempt's text as the
+      best-of and a structured `rejectionReason` ("max attempts reached"
+      plus the count). `defaultStepRecovery(maxRetries(2).failoverTo(
+      rejectStep))` ensures any unrecoverable agent failure also lands in
+      the same terminal state rather than hanging.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · character ceiling
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Per-attempt eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: HT1
+    label: Halt at retry ceiling
+    mechanism: Halt
+    implementation: graceful-degradation
+    source: —

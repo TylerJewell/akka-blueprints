@@ -1,0 +1,81 @@
+schema_version: 1
+sample_id: social-amplifier
+coordination_pattern: sequential-pipeline
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Reject drafted content that violates brand-policy rules before it is recorded
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Public-facing social posts carry the brand's identity and are permanent once published.
+      A drafted post that exceeds a platform's character limit, uses a brand-forbidden word,
+      omits a required hashtag, or adopts an informal tone on a professional platform can reach
+      audiences immediately, with reputational and compliance consequences that are difficult to
+      reverse. Checking the agent's response before the workflow records it means that only
+      brand-approved content ever transitions `DraftStarted → DraftsProduced`; every rejected
+      draft is recorded as a `BrandCheckFailed` event for audit. The agent's iteration budget
+      gives it room to self-correct after a rejection without halting the pipeline.
+    implementation: |
+      `BrandPolicyGuardrail` is registered on `AmplifierAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook for the DRAFT
+      task. The guardrail receives the full `DraftSet` and applies four deterministic rules
+      to each `Draft` in sequence: (1) `draft.characterCount <= platformCharLimit(platform)`
+      (limits loaded from `brand-policy/platform-char-limits.json`), (2) no token in
+      `draft.text` appears in the brand-forbidden list (`brand-policy/forbidden-words.txt`),
+      (3) at least one entry in `draft.hashtags` matches a required brand hashtag
+      (`brand-policy/required-hashtags.txt`), (4) drafts targeting LINKEDIN or BLUESKY contain
+      no informal-tone markers. On a violation the guardrail returns
+      `Guardrail.reject("brand-policy-violation: <rule>: <detail>")`, calls
+      `AmplificationEntity.recordBrandCheckFailed(draftId, platform, rule, reason)`, and
+      increments `Draft.brandCheckAttempts`. On all-pass, the full `DraftSet` is forwarded to
+      the workflow, which records `DraftsProduced`.
+    regulation_anchors: []
+
+  - id: G2
+    name: Block publish tool calls until brand-approved drafts are recorded on the entity
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      Publishing to a social platform is a write side-effect with external visibility. The
+      sequential pipeline's dependency contract says publish tools must not fire until the
+      DRAFT phase has produced brand-approved content. If the `before-agent-response` guardrail
+      is the first line of defence, this `before-tool-call` hook is the second: it checks the
+      entity's status independently of the response-level check, so neither hook silently covers
+      for the other. A publish tool called while `AmplificationEntity.status` is still `DRAFTING`
+      — whether from a misordered tool call or an agent reasoning error — is rejected before
+      the stub or real platform API is reached. Every blocked call is recorded as a
+      `PublishToolBlocked` event, giving the audit log an independent signal of attempted
+      out-of-order execution.
+    implementation: |
+      `BrandPolicyGuardrail` is registered on `AmplifierAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On every tool call
+      the guardrail checks whether the candidate tool is a publish tool (`publishToLinkedIn`,
+      `publishToX`, or `publishToBluesky`). If so, it reads the current
+      `AmplificationEntity.status` by the `amplificationId` carried in the in-flight
+      `TaskDef.metadata` and applies the accept matrix: publish tools require
+      `status ∈ {DRAFTED, PUBLISHING}` AND `draftSet.isPresent()`. On reject, the guardrail
+      returns `Guardrail.reject("publish-gated: <tool> requires DraftsProduced, saw <status>")`
+      and calls `AmplificationEntity.recordPublishToolBlocked(platform, tool, reason)`.
+      Non-publish tool calls (parse tools, draft tools) are passed through immediately without
+      the status check.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Brand-policy content guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: G2
+    label: Publish-intent gate guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

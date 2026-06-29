@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: nurse-handover
+
+# ---- Purpose ----
+purpose:
+  primary_function: clinical-handover-documentation
+  sector: healthcare
+  decisions_surface: recommend-only
+  user_type: clinical-staff
+
+# ---- Data ----
+data:
+  inputs:
+    - end-of-shift-reports
+    - ward-checklists
+  data_classes:
+    pii: true
+    phi: true
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  phi_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: clinical-shift-handover
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_summary_before_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-handover
+  failure_modes:
+    - phi-leakage-via-llm
+    - missed-patient
+    - urgency-miscalibration
+    - unsigned-handover-acted-upon
+    - hallucinated-patient-status
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: incoming-clinical-staff
+  reviewer_must_signoff_before_sealing: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_handover: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  hipaa_baa_with_llm_provider: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  phi-minimum-necessary-documented: TO_BE_COMPLETED_BY_DEPLOYER

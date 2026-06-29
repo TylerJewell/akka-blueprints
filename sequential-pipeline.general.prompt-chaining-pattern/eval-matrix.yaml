@@ -1,0 +1,86 @@
+schema_version: 1
+sample_id: prompt-chaining-workflow
+coordination_pattern: sequential-pipeline
+domain: general
+
+controls:
+  - id: G1
+    name: Validate composite output meets structural requirements before committing
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      In a prompt-chaining pipeline, each intermediate step produces a typed
+      artifact (Outline, Draft) that is passed directly as context to the next
+      step. By the time the final step (REFINE) returns, three independent LLM
+      calls have contributed to the composite result. The before-agent-response
+      hook is the right enforcement point: the guardrail evaluates the full
+      RefinedDocument as a unit after the last step completes — checking section
+      count, total word count, and bibliography presence — and rejects the
+      response before it is written to DraftEntity or surfaced to the caller.
+      This prevents a structurally incomplete document from becoming the entity's
+      committed state, giving the workflow a clean retry opportunity without
+      needing to roll back upstream steps.
+    implementation: |
+      `OutputGuardrail` is registered on `DraftingAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      The guardrail fires after the agent returns a `RefinedDocument` from the
+      `REFINE_DOCUMENT` task. Three checks are applied: (1) `sections.size() >= 2`,
+      (2) sum of word counts across all `RefinedSection.body` fields >= 150, and
+      (3) `bibliography.size() >= 1`. On any failure, the guardrail returns
+      `Guardrail.reject("quality-violation: <check> failed — <detail>")`, which
+      causes `DraftingWorkflow.refineStep` to retry (up to 2 retries) with the
+      rejection reason appended to the next task's instruction context. On every
+      rejection, `DraftEntity.recordGuardrailRejection(check, reason)` is called
+      so the rejection is visible in the UI's rejection-log strip and in the audit
+      log. On accept, the `RefinedDocument` proceeds to `DraftEntity.recordRefinement`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every refined document for structural completeness and citation provenance
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Even a document that passes the response guardrail can have subtler
+      quality gaps: an outline section with no matching draft, a draft section
+      not incorporated into the refinement, or a bibliography entry that the
+      agent invented rather than drawing from the gathered citations. An
+      on-decision evaluator surfaces these patterns immediately after the
+      document is committed, giving the reader a concise quality signal without
+      blocking the pipeline. Because the guardrail and the evaluator check
+      different properties — structural minimums versus cross-step coverage and
+      provenance — removing either one opens a gap the other does not cover.
+    implementation: |
+      `QualityScorer` runs inside `DraftingWorkflow.evalStep`, fired immediately
+      after `RefinementApplied` lands on `DraftEntity`. The scorer is deterministic
+      and rule-based (no LLM call — keeping the single-agent sequential-pipeline
+      invariant honest). Four checks, one point per check satisfied, on a base of 1:
+      (1) Outline coverage — every `Outline.section.sectionId` has a matching
+      `SectionDraft.sectionId` in the recorded `Draft`.
+      (2) Draft coverage — every `SectionDraft.sectionId` appears as a
+      `RefinedSection.sectionId` in the `RefinedDocument`.
+      (3) Citation provenance — every `Citation` in `RefinedDocument.bibliography`
+      has a matching `Citation.citationId` in `Draft.citations` (no hallucinated
+      references).
+      (4) Structural parity — `refinedDocument.sections.size() == outline.sections.size()`
+      (no silent expansion or collapse across the chain).
+      Emits `QualityScored{score: 1-5, rationale: String}` with a rationale sentence
+      naming the largest gap. The score is surfaced on the App UI tab; documents with
+      score <= 2 are flagged for human inspection before use.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output quality guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Document completeness eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

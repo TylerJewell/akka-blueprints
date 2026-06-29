@@ -1,0 +1,68 @@
+schema_version: 1
+sample_id: self-correcting-rag
+coordination_pattern: evaluator-optimizer
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Gate the final answer against a hallucination check before surfacing it
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      A RAG pipeline that surfaces an answer without verifying it against the
+      retained documents creates a direct path from retrieval noise to user-visible
+      misinformation. The hallucination grader runs immediately after generation,
+      before the answer leaves the workflow, and forces re-generation when the
+      answer contains claims unsupported by the retained documents. This keeps the
+      answer grounded in the actual evidence the retriever returned, not in the
+      generator's parametric knowledge.
+    implementation: |
+      Wired as the `hallucinationCheckStep` of `RagWorkflow`, immediately after
+      `generateStep`. `HallucinationGraderAgent` receives the `GeneratedAnswer`
+      and the list of retained documents; it returns a `HallucinationVerdict` with
+      `result` set to `GROUNDED` or `HALLUCINATED`. On `HALLUCINATED`, the workflow
+      routes back to `generateStep` for up to `maxGenerationAttempts` (default 2).
+      If the ceiling is hit, the workflow emits `QueryFailedHallucination` and
+      terminates. On `GROUNDED`, the workflow emits `QueryAnswered` and exposes the
+      answer to the caller via `RagEndpoint`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every grading step's verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Document relevance grading and hallucination grading are the two highest-signal
+      quality checkpoints in a RAG pipeline. Recording each grading step's verdict,
+      score, and document count as a typed event gives operators a continuous quality
+      stream — pass rates per retrieval pass, hallucination frequency per query class,
+      rewrite effectiveness — without instrumenting the workflow internals or the
+      agents directly.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries `QueryView.getAllQueries`,
+      finds grading steps (relevance and hallucination) that completed since the last
+      tick and do not yet have a matching `EvalRecorded` event, and calls
+      `QueryEntity.recordEval(passNumber, stepKind, verdict, score, docCount)`. The
+      call is idempotent on `(queryId, passNumber, stepKind)`. The workflow also
+      emits one `EvalRecorded` event on terminal transitions (`QueryAnswered`,
+      `QueryFailedNoRelevantDocs`, `QueryFailedHallucination`) carrying the
+      loop-level outcome. Events surface in the App UI's per-pass timeline and in
+      `/api/queries/{id}`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Hallucination guardrail · output check
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: E1
+    label: Per-step grading eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

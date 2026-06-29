@@ -1,0 +1,100 @@
+schema_version: 1
+sample_id: mr-reviewer
+coordination_pattern: evaluator-optimizer
+domain: dev-code
+
+controls:
+  - id: S1
+    name: Scan and block diffs containing credential patterns before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: secret
+    enforcement: system-level
+    rationale: |
+      A merge request diff is an unusually high-risk LLM input surface: developers
+      routinely push API keys, private-key blocks, or high-entropy tokens in
+      configuration files or test fixtures before noticing. Sending such material to
+      an LLM exposes it to a third-party API call, where it may be logged, cached,
+      or used for training. The sanitizer addresses this at the workflow's entry
+      point — before any network call is made — so the exposure window is zero
+      regardless of model-provider configuration.
+    implementation: |
+      Wired as the `sanitizerStep` of `ReviewWorkflow`, immediately after
+      `startStep`. A pure-function scan of `MrWebhook.diffText` against four
+      pattern families: PEM header patterns (`BEGIN PRIVATE KEY`, `BEGIN RSA
+      PRIVATE KEY`), assignment-style tokens (`api_key=`, `secret=`, `password=`
+      followed by a non-whitespace value), AWS access-key prefixes (`AKIA`,
+      `ASIA`), and high-entropy base64 or hex strings of 32 or more characters.
+      On any match, emits `SanitizerVerdictRecorded` with `reasonCode =
+      "SECRET_DETECTED"` and a detail string naming the first matching pattern,
+      transitions `MrEntity` to `SANITIZER_BLOCKED`, and ends the workflow without
+      calling any agent.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block review commentary that reproduces secrets before posting to the gate
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      Even when the inbound diff passes the sanitizer, the reviewer agent may quote
+      a sensitive value verbatim in its commentary — for example, in a finding that
+      reads "this key `AKIAXXXXXX...` should be rotated." Posting such commentary
+      to GitLab would expose the value in the repository's public comment thread.
+      The output guardrail applies the same pattern scan to the generated commentary
+      text before it reaches the gate agent or the GitLab comment API, ensuring
+      secrets never leave the Akka service boundary in generated text.
+    implementation: |
+      Wired as the `guardrailStep` of `ReviewWorkflow`, immediately after the
+      `reviewStep` returns a `ReviewResult`. A pure-function check applies the
+      sanitizer's pattern set to `ReviewResult.commentary`. On a match, emits
+      `ReviewGuardrailVerdictRecorded` with `reasonCode =
+      "COMMENTARY_REPRODUCES_SECRET"`, then transitions back to `reviewStep` with
+      a structured `GateFeedback("Review commentary reproduces a detected secret;
+      rewrite the finding without quoting the sensitive token.")`. The reviewer's
+      next call sees the structured feedback as its refinement input. The blocked
+      commentary is recorded on the `ReviewPass` for audit but never forwarded to
+      `GateAgent` or to any outbound API.
+    regulation_anchors: []
+
+  - id: CG1
+    name: Publish a machine-readable CI pass/fail signal on workflow completion
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      The primary consumer of this review service is a CI pipeline, not a human.
+      Without a machine-readable terminal signal, the pipeline must poll the
+      review commentary and interpret it — a fragile coupling that changes whenever
+      the rubric changes. Publishing a typed `CiSignal` (`CI_PASS` or `CI_FAIL`)
+      as a first-class event on `MrEntity` gives CI systems a stable, schema-versioned
+      integration point. The signal is gated on the workflow reaching a terminal
+      state, so it can never be emitted while a review pass is still in progress.
+    implementation: |
+      `ReviewWorkflow` emits `MrCiPassed` (sets `MrEntity.ciSignal = "CI_PASS"`) or
+      `MrCiFailed` (sets `ciSignal = "CI_FAIL"`) as the terminal workflow transition.
+      `ReviewEndpoint` exposes `GET /api/mrs/{id}/ci-signal` which returns
+      `{ "mrId": "...", "signal": "CI_PASS"|"CI_FAIL"|"PENDING" }` — `PENDING` while
+      the workflow is still running. CI pipelines subscribe to `GET /api/mrs/sse`
+      and filter for `mrId` + terminal status to avoid polling.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Secret sanitizer · diff pre-scan
+    mechanism: Sanitizer
+    implementation: system-level
+    source: —
+  - id: G1
+    label: Output guardrail · commentary secret check
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: CG1
+    label: CI gate · pass/fail signal
+    mechanism: CI Gate
+    implementation: build-gate
+    source: —

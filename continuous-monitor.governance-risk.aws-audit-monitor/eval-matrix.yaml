@@ -1,0 +1,60 @@
+schema_version: 1
+sample_id: aws-audit-monitor
+coordination_pattern: continuous-monitor
+domain: governance-risk
+
+controls:
+  - id: H1
+    name: Risk officer must publish every audit report
+    mechanism:
+      kind: hitl
+      hook: deployer-runtime-monitoring
+      flavor: deployer-runtime-monitoring
+    enforcement: blocking
+    rationale: |
+      AWS compliance findings can trigger regulatory obligations, change-freeze windows, or
+      mandatory notifications to security teams. Publishing a report without a qualified
+      reviewer creates direct liability exposure. This gate ensures that every compiled
+      finding set is evaluated by a named risk officer before it enters the organization's
+      compliance record — the AI analysis is advisory input, not a final determination.
+    implementation: |
+      `FindingWorkflow` transitions every compiled report to PENDING_REVIEW and polls
+      `AuditReportEntity` every 10 seconds. The workflow advances only when a `ReviewDecision`
+      event is present on the report entity, which can only be emitted by
+      `AuditEndpoint.publish` or `AuditEndpoint.dismiss`. The reviewing officer's identity
+      (`reviewedBy`) is captured in `ReviewDecision` and surfaced in the UI and audit log.
+    regulation_anchors: []
+
+  - id: E1
+    name: Periodic accuracy eval of published finding analyses
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      AI-assisted control mapping and severity assignment can drift as AWS releases new
+      services and as the organization's control framework evolves. Sampling published
+      findings against an accuracy rubric gives a continuous signal that the
+      `FindingAnalystAgent`'s outputs remain trustworthy — and surfaces regression before
+      it affects a real compliance review cycle. This is especially important because the
+      HITL gate reviews the compiled report, not each individual analysis step.
+    implementation: |
+      `AccuracyEvalRunner` TimedAction fires every 4 hours. Picks up to 5 PUBLISHED
+      `AuditFindingEntity` instances without `evalScore`, oldest-first. For each, calls
+      `AccuracyJudgeAgent` (typed Agent) with the finding's `NormalizedFinding` and its
+      `AnalysisResult`, returning `EvalResult{score: Integer 1–5, rationale: String}`.
+      Emits `EvalScored` on the entity; surfaces score and rationale on the App UI tab's
+      finding detail pane.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Risk-officer publish gate
+    mechanism: HITL
+    implementation: deployer-runtime-monitoring
+    source: —
+  - id: E1
+    label: Analysis accuracy eval
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

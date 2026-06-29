@@ -1,0 +1,98 @@
+schema_version: 1
+sample_id: code-assistant-loop
+coordination_pattern: planner-executor
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Vet every file-edit and test-run dispatch before the action executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The Planner can instruct the Editor to write any path it knows about.
+      Without a guardrail, a mis-scoped plan step could overwrite system files
+      (`/etc/hosts`, `/root/.bashrc`, `~/.ssh/authorized_keys`) or invoke an
+      arbitrary shell command under the guise of running tests. A deterministic
+      path-policy and command allow-list check run before every `EDIT_FILE` or
+      `RUN_TESTS` dispatch stops the action before any side effect occurs and
+      forces the Planner to revise within its replan budget.
+    implementation: |
+      `EditGuardrail.vet(ActionDecision)` is called by `SessionWorkflow`'s
+      `guardrailStep` between `proposeStep` and `dispatchStep`. The vetter
+      checks (a) the action allow-list ({READ_FILE, EDIT_FILE, RUN_TESTS}),
+      (b) path scope for EDIT_FILE (must be under `/workspace/`; forbidden
+      prefixes: `/etc`, `/root`, `~/.ssh`), and (c) the test-command allow-list
+      for RUN_TESTS (`mvn test`, `gradle test`, `npm test`, `pytest`,
+      `go test ./...`). On reject, the workflow records an `EditBlocked` entry
+      on the edit log, then loops back to `proposeStep` so the Planner sees
+      the blocker and tries again.
+    regulation_anchors: []
+
+  - id: E1
+    name: Block commit when tests are failing
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      An agentic editor can introduce subtle regressions that the agent itself
+      may not detect from file contents alone. Requiring a green test run before
+      the session can progress to `COMMITTED` ensures that every change
+      accepted into the commit summary was validated by an automated test suite.
+      Three consecutive test failures without a successful edit exhaust the
+      planner's revision budget and end the session in `FAILED`, surfacing the
+      failure reason for the developer to review.
+    implementation: |
+      `CiGate.evaluate(EditEntry)` runs in `SessionWorkflow`'s `ciGateStep`
+      after every `RUN_TESTS` action result. The gate parses the `testOutput`
+      field for pass/fail signals from Maven, pytest, Node test runners, and
+      Go's test output format. On failure it appends a `CiGateFailed` entry to
+      the edit log and increments the consecutive-failure counter. When the
+      counter reaches three, the workflow transitions to `failStep`, which
+      emits `SessionFailed` with a `failureReason` citing the last test output.
+      A passing `RUN_TESTS` result resets the counter.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Stop the loop automatically when the edit-failure bound is breached
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      The guardrail and CI gate handle the known bad patterns. The automatic
+      halt is the final backstop: if the planner enters a state where it can
+      neither produce a guardrail-passing edit nor a passing test run — for
+      example, cycling through replans without forward progress — the session
+      must stop on its own without operator intervention. This prevents
+      unbounded LLM API consumption and ensures the developer always gets a
+      deterministic failure with a recorded reason rather than an infinite loop.
+    implementation: |
+      `SessionWorkflow`'s `autoHaltEvalStep` runs after every `EditEntry` is
+      appended. It checks two counters maintained in workflow state: (a) the
+      number of consecutive `Replan` decisions without an intervening `OK`
+      edit, and (b) the number of consecutive `CiGateFailed` entries. When
+      the replan counter reaches 2 or the CI-failure counter reaches 3, the
+      workflow transitions to `haltedStep`, which emits `SessionHaltedAutomatic`
+      on `SessionEntity` and ends the workflow with the session in `HALTED`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Edit path guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: CI test gate
+    mechanism: CI Gate
+    implementation: test-gate (CiGate parser + consecutive-failure counter)
+    source: —
+  - id: HT1
+    label: Loop-bound automatic halt
+    mechanism: Halt
+    implementation: automatic-safety-halt (replan + CI-failure counters)
+    source: —

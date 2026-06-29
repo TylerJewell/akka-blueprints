@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: schema-extractor
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Documents submitted for extraction — invoices, purchase orders, support tickets —
+      routinely contain vendor email addresses, phone numbers, tax identifiers,
+      payment-card-like tokens, and shipping addresses. These identifiers belong in the
+      extracted record's output (so the deployer can use them downstream), but they must
+      not appear in the LLM call body. The sanitizer replaces them with typed redaction
+      markers before the attachment reaches the agent; the raw document is preserved on
+      the entity for audit, while only the redacted form rides the wire to the model.
+    implementation: |
+      `DocumentSanitizer` Consumer subscribes to `DocumentSubmitted` events emitted by
+      `ExtractionJobEntity`. It runs a pipeline of regex stages (well-known email, phone,
+      VAT/tax-ID, and payment-card patterns), a heuristic stage (person names, postal
+      addresses), and an account-id-token stage. Outputs a `SanitizedDocument` carrying
+      the redacted text plus the list of PII categories found. Calls
+      `ExtractionJobEntity.attachSanitized(sanitized)`. `ExtractionWorkflow.extractStep`
+      then passes `sanitized.redactedDocument` as the `ExtractionAgent` task attachment;
+      the raw payload remains accessible only via `request.rawDocument` on the entity,
+      never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject schema-invalid records before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: schema-output-validator
+    enforcement: blocking
+    rationale: |
+      An extraction system that silently writes malformed records — missing required
+      fields, mismatched types, unknown field names — propagates bad data into every
+      downstream consumer before anyone notices. The after-llm-response hook is the
+      correct interception point: validate the candidate `ExtractedRecord` before it
+      leaves the agent loop, force a retry inside the same task, and only allow records
+      that fully conform to the submitted `TargetSchema` to reach the entity log. A
+      schema-valid record with `confidence = ABSENT` on some fields is still a valid
+      record — the guardrail accepts it and lets the coverage badge surface the gap to
+      the operator.
+    implementation: |
+      `RecordGuardrail` is registered on `ExtractionAgent` via the agent's
+      guardrail-configuration block, bound to the `after-llm-response` hook. On each
+      candidate response it (1) parses the response into `ExtractedRecord`, (2) asserts
+      every `fields[].fieldName` matches a field declared in the submitted `TargetSchema`,
+      (3) asserts every field in the schema marked `required = true` is present and
+      non-empty (or has `confidence = ABSENT` to indicate it was not found — this is
+      acceptable; what is not acceptable is omitting the field entirely), (4) asserts
+      every string-typed field value does not exceed its declared `maxLength`, and
+      (5) asserts the `schemaId` on the response matches the submitted schema. On any
+      failure returns a structured rejection naming the failed check; the agent loop
+      consumes one of its 3 iterations and retries. Passing responses flow through to
+      `extractStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Schema-output guardrail
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —

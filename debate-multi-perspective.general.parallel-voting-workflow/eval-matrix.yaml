@@ -1,0 +1,49 @@
+# Eval Matrix for the parallel-voting-workflow Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain sample with no industry- or jurisdiction-bound
+# anchors, so regulation_anchors is intentionally an empty list. Treat the requirement
+# as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: parallel-voting-workflow
+coordination_pattern: debate-multi-perspective
+domain: general
+
+matrix_cell:
+  coordination_pattern: debate-multi-perspective
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: E1
+    name: Score aggregated-decision alignment against individual votes after each decision
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The defining risk of a parallel voting workflow is an aggregated decision
+      that contradicts or ignores the votes it claims to represent — a PROCEED
+      that rides over two REJECT ballots, or a summary that never acknowledges
+      the dissenting dimension. Periodic sampling of completed decisions provides
+      a continuous quality signal on the aggregation logic without adding latency
+      to live traffic. Low scores flag systematic miscounting or prompt drift in
+      the TaskDispatcher's aggregation mode before the problem reaches users in
+      a production deployment.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 5 minutes. It picks the oldest
+      `DECIDED` or `PARTIAL` task without an `alignmentScore`, calls
+      `AggregationJudge` with the three voter ballots and the aggregated decision
+      against a 1–5 rubric, and emits an `AlignmentScored` event with the score
+      and a one-sentence rationale. The score surfaces on the App UI tab beside
+      each task card and is queryable via `GET /api/tasks/{id}`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Aggregation alignment eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

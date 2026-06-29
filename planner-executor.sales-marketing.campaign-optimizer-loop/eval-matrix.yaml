@@ -1,0 +1,104 @@
+schema_version: 1
+sample_id: campaign-optimizer-loop
+coordination_pattern: planner-executor
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Check every generated copy asset against the brand-voice policy before it advances
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Marketing copy produced by CopyWriterAgent is brand-public. A single
+      piece of copy that mentions a competitor brand, makes a legally
+      impermissible claim ("guaranteed results"), or touches a prohibited
+      topic can create regulatory exposure and reputational damage before any
+      human sees it. Intercepting the response at the before-agent-response
+      hook — before the output lands on the run ledger and before the workflow
+      advances to the publish step — ensures that non-compliant copy never
+      reaches a channel endpoint, regardless of what the language model
+      produced.
+    implementation: |
+      `CopyGuardrail.check(StepResult)` is called by `CampaignWorkflow`'s
+      `guardrailStep` immediately after `CopyWriterAgent` returns a
+      `StepResult`. The vetter checks (a) the competitor-brand deny-list
+      configured in `application.conf`, (b) superlative/regulatory phrase
+      patterns, and (c) the prohibited-topics list. On violation, the workflow
+      records a `StepBlocked` entry on the run ledger via
+      `CampaignEntity.recordBlock(step, "COPY_VIOLATION:<reason>")`, then
+      loops back to `proposeStep` so `PlannerAgent` sees the blocker and
+      revises.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require explicit marketer approval before any assets are published to a live channel
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Publishing a campaign to a live channel is an irreversible act: emails
+      are sent, ad spend commits, and audiences receive messages. A marketing
+      team needs the authority to review the full plan — copy, audience
+      selection, channel list — before any of that happens. The approval gate
+      is not advisory; it is a hard block in the workflow. The campaign sits
+      in `AWAITING_APPROVAL` until a marketer explicitly grants or denies it,
+      ensuring that no automated path can bypass human sign-off.
+    implementation: |
+      When `PlannerAgent` emits `SubmitForApproval`, `CampaignWorkflow`
+      transitions the entity to `AWAITING_APPROVAL` and enters
+      `approvalGateStep`, which polls `ApprovalEntity.get` until a decision
+      arrives. The App UI renders an approval card for every campaign in
+      `AWAITING_APPROVAL` status, with the full campaign ledger and run ledger
+      visible. `POST /api/campaigns/{id}/approve` and
+      `POST /api/campaigns/{id}/reject` write to `ApprovalEntity`. The
+      workflow resumes only on `ApprovalGranted`; on `ApprovalDenied` it
+      emits `CampaignRejected` and ends in `REJECTED`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Periodically evaluate live campaign KPIs and trigger re-optimization when targets are missed
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      A campaign that passes approval and goes live can still underperform —
+      open rates drop, click-through decays, conversion stalls. Without
+      automated monitoring, a poorly-performing campaign continues burning
+      budget until a human notices. Periodic evaluation closes that gap: KPIs
+      are sampled on every tick, compared against declared thresholds, and
+      when a miss is detected the system re-enters its optimization loop
+      rather than waiting for manual intervention.
+    implementation: |
+      `PerformanceMonitor` (TimedAction) ticks every 60 s. It queries
+      `CampaignView.getAllCampaigns`, filters campaigns with status `LIVE`,
+      reads matching entries from `sample-data/kpi-fixtures.jsonl`, and
+      compares open rate, click rate, and conversion rate against
+      `KpiThresholds` constants. On a miss it calls
+      `CampaignEntity.firePerformanceAlert`, which emits
+      `PerformanceAlertFired`. `CampaignWorkflow` detects the alert at the
+      top of its performance loop and dispatches `PerformanceAnalystAgent`
+      to produce recommendations; the Planner then revises the ledger and
+      re-executes the relevant steps (typically copy or audience).
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Brand-voice copy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response (CopyGuardrail)
+    source: —
+  - id: H1
+    label: Marketer approval gate
+    mechanism: HITL
+    implementation: application (ApprovalEntity + approval card)
+    source: —
+  - id: E1
+    label: KPI performance monitor
+    mechanism: Eval-periodic
+    implementation: performance-monitor (PerformanceMonitor TimedAction)
+    source: —

@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic AI Samples — Running on Akka, with embedded governance</title>
+<link rel="icon" href="https://akka.io/favicon.ico" type="image/x-icon">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root{
+    --yellow:#F5C518; --black:#000; --panel:#101116; --line:#27282f;
+    --muted:#8b8d98; --white:#fff; --green:#3fb950; --blue:#7EC8E3; --red:#ff5f57;
+  }
+  html{ background:var(--black); scroll-behavior:smooth; }
+  body{
+    font-family:'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background:var(--black); color:var(--white); overflow-x:hidden;
+    position:relative; line-height:1.5;
+  }
+  body::before{
+    content:''; position:fixed; inset:0;
+    background-image:radial-gradient(circle, rgba(245,197,24,0.06) 1px, transparent 1px);
+    background-size:48px 48px; pointer-events:none; z-index:0;
+  }
+  .wrap{ position:relative; z-index:1; max-width:1080px; margin:0 auto; padding:40px 48px 80px; }
+  @media (max-width:900px){ .wrap{ padding:32px 20px 60px; } }
+
+  .brand-mark{ font-size:24px; font-weight:800; letter-spacing:7px; color:var(--white); margin-bottom:20px; }
+  h1{ font-size:56px; line-height:1.0; letter-spacing:-0.04em; font-weight:800; margin-bottom:22px; }
+  @media (max-width:900px){ h1{ font-size:40px; } }
+  .accent{ color:var(--yellow); }
+  .intro{ color:#d7d7dc; font-size:20px; line-height:1.42; max-width:840px; margin-bottom:18px; }
+  .status-pill{ display:inline-flex; align-items:center; gap:8px;
+    border:1px solid rgba(63,185,80,.5); background:rgba(63,185,80,.08); color:var(--green);
+    border-radius:999px; padding:6px 14px; font-size:12px; font-weight:700; letter-spacing:1px;
+    text-transform:uppercase; margin-bottom:40px; }
+  .status-pill::before{ content:''; width:8px; height:8px; border-radius:50%; background:var(--green); }
+
+  /* stats row */
+  .stats{ display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:52px; }
+  @media (max-width:780px){ .stats{ grid-template-columns:repeat(2, 1fr); } }
+  .stat{ background:rgba(16,17,22,.88); border:1px solid var(--line); border-left:3px solid var(--yellow);
+    padding:16px 20px; }
+  .stat .num{ font-size:32px; font-weight:800; color:var(--yellow); letter-spacing:-0.02em; line-height:1; }
+  .stat .lbl{ font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--muted); margin-top:6px; }
+
+  /* section headings */
+  h2{ font-size:24px; font-weight:800; letter-spacing:-0.02em; margin:48px 0 6px; color:var(--white); }
+  h2:first-of-type{ margin-top:0; }
+  .sect-sub{ color:var(--muted); font-size:14px; line-height:1.5; margin-bottom:22px; max-width:780px; }
+
+  /* featured deep-dives */
+  .feat{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-bottom:8px; }
+  @media (max-width:780px){ .feat{ grid-template-columns:1fr; } }
+  .feat a{ display:block; text-decoration:none; color:inherit;
+    background:rgba(16,17,22,.88); border:1px solid var(--line); border-left:3px solid var(--yellow);
+    padding:18px 22px; transition:border-color .15s ease, background .15s ease; }
+  .feat a:hover{ border-color:var(--yellow); background:rgba(245,197,24,0.04); }
+  .feat a .ftag{ font-size:10px; font-weight:800; letter-spacing:2px; text-transform:uppercase;
+    color:var(--yellow); }
+  .feat a .ftitle{ font-size:17px; font-weight:700; color:var(--white); margin:6px 0 4px;
+    letter-spacing:-0.01em; }
+  .feat a .fdesc{ font-size:13px; color:var(--muted); line-height:1.45; }
+  .feat a .farr{ color:var(--yellow); font-weight:800; }
+
+  /* filter strip */
+  .filters{ background:rgba(16,17,22,.6); border:1px solid var(--line); padding:18px 22px;
+    margin-bottom:24px; }
+  .filter-row{ display:flex; align-items:flex-start; gap:14px; padding:10px 0;
+    border-top:1px solid rgba(255,255,255,0.06); }
+  .filter-row:first-child{ border-top:none; padding-top:0; }
+  .filter-row:last-child{ padding-bottom:0; }
+  .filter-row .flbl{ flex:0 0 140px; font-size:11px; font-weight:800; letter-spacing:1.5px;
+    text-transform:uppercase; color:var(--muted); padding-top:8px; }
+  @media (max-width:780px){ .filter-row{ flex-direction:column; }
+    .filter-row .flbl{ flex:none; padding-top:0; } }
+  .chips{ display:flex; flex-wrap:wrap; gap:6px; flex:1; }
+  .chip{ background:var(--panel); border:1px solid var(--line); border-radius:999px;
+    color:#c8d1d9; font-family:inherit; font-size:12px; font-weight:600; padding:5px 12px;
+    cursor:pointer; user-select:none; transition:all .12s ease; }
+  .chip:hover{ border-color:rgba(245,197,24,.5); color:var(--white); }
+  .chip.on{ background:var(--yellow); border-color:var(--yellow); color:var(--black); font-weight:800; }
+  .chip .ct{ opacity:0.6; font-weight:600; margin-left:4px; }
+  .chip.on .ct{ opacity:0.85; }
+
+  .reset-bar{ display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 0 4px; border-top:1px solid rgba(255,255,255,0.06); margin-top:6px; }
+  .reset-bar .summary{ font-size:13px; color:var(--muted); }
+  .reset-bar .summary b{ color:var(--white); font-weight:700; }
+  .reset-bar button{ background:transparent; border:1px solid var(--line); color:var(--muted);
+    font-family:inherit; font-size:12px; font-weight:700; padding:6px 14px; border-radius:6px;
+    cursor:pointer; letter-spacing:0.5px; }
+  .reset-bar button:hover{ border-color:var(--yellow); color:var(--yellow); }
+
+
+  /* sample list */
+  .list-head{ display:flex; align-items:baseline; justify-content:space-between; gap:14px;
+    margin-bottom:14px; flex-wrap:wrap; }
+  .list-head .count{ font-size:13px; color:var(--muted); font-weight:600; }
+  .list-head .count b{ color:var(--yellow); font-weight:800; }
+  .list-head select{ font-family:inherit; font-size:12px; border:1px solid var(--line);
+    border-radius:6px; padding:6px 10px; background:var(--panel); color:var(--white); cursor:pointer; }
+
+  .cards{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:780px){ .cards{ grid-template-columns:1fr; } }
+  .card{ background:rgba(16,17,22,.88); border:1px solid var(--line); padding:16px 18px;
+    display:flex; flex-direction:column; gap:8px; }
+  .card.hidden{ display:none; }
+  .card .sid{ font-size:10.5px; color:var(--muted); font-family:'SFMono-Regular',Consolas,monospace;
+    letter-spacing:0.3px; word-break:break-all; }
+  .card .sname{ font-size:16px; font-weight:700; color:var(--white); letter-spacing:-0.01em;
+    line-height:1.25; }
+  .card .sbadge{ font-size:10.5px; font-weight:800; letter-spacing:1px; text-transform:uppercase;
+    color:var(--yellow); }
+  .card .sbadge .x{ color:var(--muted); margin:0 4px; }
+  .card .sdesc{ font-size:13px; color:#c8d1d9; line-height:1.5; }
+  .card .meta{ display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+  .pill{ font-size:10px; font-weight:700; letter-spacing:0.5px; padding:3px 9px; border-radius:999px;
+    border:1px solid var(--line); color:#c8d1d9; background:var(--panel); white-space:nowrap; }
+  .pill.tier{ border-color:rgba(126,200,227,.4); color:var(--blue); }
+  .pill.bucket{ border-color:rgba(245,197,24,.4); color:var(--yellow); }
+  .pill.status-shipped{ border-color:rgba(63,185,80,.5); color:var(--green); }
+  .pill.status-planned{ border-color:rgba(245,197,24,.5); color:var(--yellow); }
+  .pill.status-not-started{ border-color:var(--line); color:var(--muted); }
+  .mechs{ display:flex; gap:4px; flex-wrap:wrap; margin-top:2px; }
+  .mech{ font-size:9px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase;
+    border:1px solid rgba(245,197,24,.35); background:rgba(245,197,24,.06); color:var(--yellow);
+    padding:2px 7px; border-radius:4px; }
+  .footer-row{ display:flex; justify-content:space-between; align-items:center; gap:8px;
+    margin-top:6px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.06); }
+  .footer-row .src{ font-size:11px; color:var(--muted); font-weight:500; }
+
+  .load-more-wrap{ text-align:center; margin-top:18px; }
+  .load-more{ background:var(--panel); border:1px solid var(--line); color:var(--white);
+    font-family:inherit; font-size:12.5px; font-weight:700; letter-spacing:0.5px;
+    padding:10px 26px; border-radius:6px; cursor:pointer; }
+  .load-more:hover{ border-color:var(--yellow); color:var(--yellow); }
+  .empty-msg{ padding:40px 20px; text-align:center; color:var(--muted); font-size:14px; }
+
+  /* breakdowns */
+  .bars{ display:flex; flex-direction:column; gap:8px; }
+  .bar-row{ display:grid; grid-template-columns:160px 1fr 60px; gap:12px; align-items:center; }
+  @media (max-width:600px){ .bar-row{ grid-template-columns:120px 1fr 50px; } }
+  .bar-row .blbl{ font-size:12px; font-weight:700; color:var(--white); text-transform:uppercase;
+    letter-spacing:0.5px; }
+  .bar-track{ background:rgba(245,197,24,0.05); border:1px solid var(--line); height:22px;
+    position:relative; }
+  .bar-fill{ background:var(--yellow); height:100%; transition:width .3s ease; }
+  .bar-row .bct{ font-size:12px; font-weight:700; color:var(--yellow); text-align:right; }
+
+  .loading{ padding:80px 20px; text-align:center; color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Agentic AI Blueprints</h1>
+
+  <div class="filters" id="filters">
+    <div class="loading">Loading corpus…</div>
+  </div>
+
+  <div class="list-head">
+    <div class="count" id="count-line"><b>—</b> matching</div>
+    <select id="sort-by">
+      <option value="status">Sort: status (shipped first)</option>
+      <option value="name">Sort: name (A-Z)</option>
+      <option value="pattern">Sort: pattern</option>
+    </select>
+  </div>
+  <div class="cards" id="cards"></div>
+  <div class="load-more-wrap" id="load-more-wrap" style="display:none;">
+    <button class="load-more" id="load-more">Show more</button>
+  </div>
+
+</div>
+
+<script>
+//=========================================================
+//  Constants & helpers
+//=========================================================
+const PATTERNS = [
+  'single-agent','sequential-pipeline','delegation-supervisor-workers','handoff-routing',
+  'team-shared-list','moderation-turn-taking','planner-executor','evaluator-optimizer',
+  'debate-multi-perspective','continuous-monitor','human-in-loop-gate','composite-multi-team'
+];
+const DOMAINS = [
+  'cx-support','sales-marketing','content-editorial','finance-analysis','dev-code',
+  'research-intel','ops-automation','hr-recruiting','planning-travel','healthcare',
+  'legal-compliance','governance-risk','general'
+];
+const MECHS = ['guardrail','hitl','hotl','sanitizer','eval-periodic','eval-event','ci-gate','halt'];
+const BUCKETS = ['agent','agent+workflow','autonomous-agent','autonomous-agent+workflow'];
+const TIERS = ['T1','T2','T3','T4'];
+const COMPONENTS = ['Agent','AutonomousAgent','Workflow','View','Entity','Consumer','Timer','Endpoint'];
+
+// Brand list for T2 detection (real-third-party integration heuristic)
+const T2_BRANDS = [
+  'slack','salesforce','gmail','github','gitlab','jira','confluence','notion','linear',
+  'zendesk','intercom','hubspot','stripe','shopify','asana','trello','monday','airtable',
+  'discord','teams','sharepoint','dropbox','box','drive','outlook','calendar','twilio',
+  'sendgrid','servicenow','workday','sap','dynamics','okta','snowflake','databricks',
+  'bigquery','redshift','postgres','mongodb','elastic','algolia','figma','canva',
+  'pagerduty','datadog','newrelic','sentry','snyk','aws','azure','gcp','google-cloud',
+  'cloudflare','vercel','netlify','heroku','firebase','supabase','clickup','calendly',
+  'quickbooks','xero','adp','greenhouse','lever','docusign','adobe-sign','box.com',
+  'aws-s3','s3','lambda','kinesis','glean','bedrock'
+];
+
+const TIER_LABEL = {
+  T1: 'None',
+  T2: 'Third-party service',
+  T3: 'Requires Docker sidecar',
+  T4: 'Browser or sandbox execution'
+};
+
+const PATTERN_LABEL = {
+  'single-agent': 'Single agent',
+  'sequential-pipeline': 'Sequential pipeline',
+  'delegation-supervisor-workers': 'Supervisor + workers',
+  'handoff-routing': 'Handoff / routing',
+  'team-shared-list': 'Team / shared list',
+  'moderation-turn-taking': 'Moderation / turn-taking',
+  'planner-executor': 'Planner + executor',
+  'evaluator-optimizer': 'Evaluator + optimizer',
+  'debate-multi-perspective': 'Debate / multi-perspective',
+  'continuous-monitor': 'Continuous monitor',
+  'human-in-loop-gate': 'Human-in-loop gate',
+  'composite-multi-team': 'Composite / multi-team'
+};
+
+function escapeHtml(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+//=========================================================
+//  Tier classification
+//=========================================================
+function classifyTier(entry){
+  const tools = (entry.implementation && entry.implementation.tools) || [];
+  const toolsLower = tools.map(t => String(t).toLowerCase());
+  if (toolsLower.some(t => t.includes('browser') || t.includes('code-exec') || t.includes('rpa'))) return 'T4';
+  if (toolsLower.some(t => t.includes('vector-db') || t.includes('vector')) &&
+      toolsLower.some(t => t.includes('rag'))) return 'T3';
+  const text = ((entry.name || '') + ' ' + (entry.description || '') + ' ' + toolsLower.join(' ')).toLowerCase();
+  if (T2_BRANDS.some(b => text.includes(b))) return 'T2';
+  return 'T1';
+}
+
+function inferComponents(entry, bucket){
+  const c = new Set();
+  if (bucket === 'agent' || bucket === 'agent+workflow') c.add('Agent');
+  if (bucket === 'autonomous-agent' || bucket === 'autonomous-agent+workflow') c.add('AutonomousAgent');
+  if (bucket === 'agent+workflow' || bucket === 'autonomous-agent+workflow') c.add('Workflow');
+  c.add('Endpoint'); // implied: every sample has an HTTP entry point
+  // Heuristic Timer
+  const trig = (entry.implementation && entry.implementation.trigger || '').toLowerCase();
+  if (trig.includes('schedule') || trig.includes('cron') || trig.includes('periodic') || trig.includes('timer')) c.add('Timer');
+  // State == event-sourced/cqrs -> Entity, View
+  const state = (entry.implementation && entry.implementation.state || '').toLowerCase();
+  if (state && state !== 'stateless') { c.add('Entity'); c.add('View'); }
+  // HITL -> often Consumer for fanout to a queue
+  if ((entry.implementation && entry.implementation.hitl_level || '').toLowerCase() !== 'none' &&
+      (entry.implementation && entry.implementation.hitl_level)) c.add('Consumer');
+  return c;
+}
+
+//=========================================================
+//  State
+//=========================================================
+const state = {
+  corpus: null,
+  classifications: null,
+  bucketById: {},
+  enriched: [],            // entries with .tier, .bucket, .components, .mechs
+  filters: {
+    pattern: new Set(),
+    domain: new Set(),
+    tier: new Set(),
+    component: new Set(),
+    mech: new Set(),
+  },
+  rendered: 0,
+  pageSize: 30,
+  sortBy: 'status',
+};
+
+//=========================================================
+//  Load
+//=========================================================
+function load(){
+  state.corpus = __CORPUS__;
+  state.classifications = __CLASSIFICATIONS__;
+  state.classifications.classifications.forEach(c => { state.bucketById[c.id] = c.bucket; });
+
+  state.enriched = state.corpus.entries.map(e => {
+    const bucket = state.bucketById[e.id] || 'agent';
+    const tier = classifyTier(e);
+    const components = inferComponents(e, bucket);
+    const mechs = new Set((e.controls || []).map(c => c.mechanism));
+    return Object.assign({}, e, { _bucket: bucket, _tier: tier, _components: components, _mechs: mechs });
+  });
+
+  renderFilters();
+  applyFilters();
+}
+
+//=========================================================
+//  Filters UI
+//=========================================================
+function chipBtn(label, count, on, onClick){
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'chip' + (on ? ' on' : '');
+  b.innerHTML = escapeHtml(label) + (count != null ? ` <span class="ct">${count}</span>` : '');
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function countsBy(getKey){
+  const map = {};
+  state.enriched.forEach(e => {
+    const k = getKey(e);
+    if (Array.isArray(k)) k.forEach(kk => map[kk] = (map[kk] || 0) + 1);
+    else if (k) map[k] = (map[k] || 0) + 1;
+  });
+  return map;
+}
+
+function renderFilters(){
+  const root = document.getElementById('filters');
+  root.innerHTML = '';
+
+  const patternCt = countsBy(e => e.matrix_cell.coordination_pattern);
+  const domainCt = countsBy(e => e.matrix_cell.domain);
+  const tierCt = countsBy(e => e._tier);
+  const compCt = countsBy(e => Array.from(e._components));
+  const mechCt = countsBy(e => Array.from(e._mechs));
+
+  function row(label, key, values, counts, formatter){
+    const r = document.createElement('div');
+    r.className = 'filter-row';
+    r.innerHTML = `<div class="flbl">${label}</div>`;
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    values.forEach(v => {
+      const on = state.filters[key].has(v);
+      chips.appendChild(chipBtn(formatter ? formatter(v) : v, counts[v] || 0, on, () => {
+        if (state.filters[key].has(v)) state.filters[key].delete(v);
+        else state.filters[key].add(v);
+        renderFilters(); applyFilters();
+      }));
+    });
+    r.appendChild(chips);
+    root.appendChild(r);
+  }
+
+  row('Pattern', 'pattern', PATTERNS, patternCt, v => PATTERN_LABEL[v] || v);
+  row('Domain', 'domain', DOMAINS, domainCt);
+  row('Integration', 'tier', TIERS, tierCt, v => TIER_LABEL[v]);
+  row('Components', 'component', COMPONENTS, compCt);
+  row('Governance', 'mech', MECHS, mechCt);
+
+  // Reset bar
+  const bar = document.createElement('div');
+  bar.className = 'reset-bar';
+  const activeCt = Object.values(state.filters).reduce((s, set) => s + set.size, 0);
+  bar.innerHTML = `<div class="summary"><b>${activeCt}</b> filter${activeCt === 1 ? '' : 's'} active</div>`;
+  const resetBtn = document.createElement('button');
+  resetBtn.type = 'button';
+  resetBtn.textContent = 'Clear all';
+  resetBtn.addEventListener('click', () => {
+    Object.values(state.filters).forEach(s => s.clear());
+    renderFilters(); applyFilters();
+  });
+  bar.appendChild(resetBtn);
+  root.appendChild(bar);
+}
+
+//=========================================================
+//  Sample list
+//=========================================================
+function entryMatches(e){
+  const f = state.filters;
+  if (f.pattern.size && !f.pattern.has(e.matrix_cell.coordination_pattern)) return false;
+  if (f.domain.size && !f.domain.has(e.matrix_cell.domain)) return false;
+  if (f.tier.size && !f.tier.has(e._tier)) return false;
+  if (f.component.size){
+    let ok = false;
+    for (const c of f.component) if (e._components.has(c)) { ok = true; break; }
+    if (!ok) return false;
+  }
+  if (f.mech.size){
+    let ok = false;
+    for (const m of f.mech) if (e._mechs.has(m)) { ok = true; break; }
+    if (!ok) return false;
+  }
+  return true;
+}
+
+function statusRank(s){ return s === 'shipped' ? 0 : s === 'planned' ? 1 : 2; }
+
+function sortedEntries(){
+  const arr = state.enriched.filter(entryMatches);
+  const sb = state.sortBy;
+  arr.sort((a, b) => {
+    if (sb === 'name') return (a.name || '').localeCompare(b.name || '');
+    if (sb === 'pattern') return a.matrix_cell.coordination_pattern.localeCompare(b.matrix_cell.coordination_pattern) ||
+      (a.name || '').localeCompare(b.name || '');
+    // status default
+    const sa = statusRank(a.akka_sample?.status), sb2 = statusRank(b.akka_sample?.status);
+    if (sa !== sb2) return sa - sb2;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+  return arr;
+}
+
+function cardHtml(e){
+  const status = e.akka_sample?.status || 'not-started';
+  const mechs = Array.from(e._mechs);
+  return `
+    <div class="sname">${escapeHtml(e.name || e.akka_sample?.candidate_name || '')}</div>
+    <div class="sbadge">${escapeHtml(PATTERN_LABEL[e.matrix_cell.coordination_pattern] || e.matrix_cell.coordination_pattern)} <span class="x">×</span> ${escapeHtml(e.matrix_cell.domain)}</div>
+    <div class="sdesc">${escapeHtml(e.description || '')}</div>
+    <div class="meta">
+      <span class="pill tier">${escapeHtml(TIER_LABEL[e._tier])}</span>
+      <span class="pill status-${status}">${escapeHtml(status)}</span>
+    </div>
+    ${mechs.length ? `<div class="mechs">${mechs.map(m => `<span class="mech">${escapeHtml(m)}</span>`).join('')}</div>` : ''}
+  `;
+}
+
+function applyFilters(){
+  const all = sortedEntries();
+  state.rendered = 0;
+  const cards = document.getElementById('cards');
+  cards.innerHTML = '';
+  const total = all.length;
+  const cl = document.getElementById('count-line');
+  if (cl) cl.innerHTML = `<b>${total}</b> matching`;
+  if (total === 0){
+    cards.innerHTML = '<div class="empty-msg" style="grid-column:1/-1;">No samples match the current filters. Try clearing some.</div>';
+    document.getElementById('load-more-wrap').style.display = 'none';
+    return;
+  }
+  renderMore(all);
+  // Wire load-more
+  document.getElementById('load-more').onclick = () => renderMore(all);
+  // Cache list for load-more
+  state._filtered = all;
+}
+
+function renderMore(all){
+  const cards = document.getElementById('cards');
+  const end = Math.min(state.rendered + state.pageSize, all.length);
+  for (let i = state.rendered; i < end; i++){
+    const e = all[i];
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = cardHtml(e);
+    cards.appendChild(div);
+  }
+  state.rendered = end;
+  document.getElementById('load-more-wrap').style.display = state.rendered < all.length ? 'block' : 'none';
+  if (state.rendered < all.length){
+    document.getElementById('load-more').textContent = `Show ${Math.min(state.pageSize, all.length - state.rendered)} more (${all.length - state.rendered} remaining)`;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('sort-by').addEventListener('change', e => {
+    state.sortBy = e.target.value;
+    applyFilters();
+  });
+});
+
+//=========================================================
+//  Mechanism frequency bars
+//=========================================================
+//  Kick off
+//=========================================================
+try { load(); } catch (err) {
+  document.getElementById('filters').innerHTML = `<div class="empty-msg">Failed to load corpus: ${escapeHtml(err.message)}</div>`;
+}
+</script>
+</body>
+</html>

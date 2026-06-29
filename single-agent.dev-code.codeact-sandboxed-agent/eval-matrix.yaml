@@ -1,0 +1,112 @@
+schema_version: 1
+sample_id: codeact-sandboxed-agent
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Reject code with forbidden patterns before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: code-policy-validator
+    enforcement: blocking
+    rationale: |
+      The agent's primary action in this pattern is emitting an execute_code tool call.
+      Without a pre-execution gate, the first line of generated code that contains a
+      subprocess call or a filesystem write would run unchecked. The before-tool-call
+      hook is the correct interception point: it inspects the code argument before the
+      sandbox receives it, names the forbidden pattern in the rejection, and gives the
+      agent loop a structured error it can act on by rewriting the code. Blocking here
+      prevents the class of vulnerability rather than detecting it after the fact.
+    implementation: |
+      `SandboxGuardrail` is registered on `CodeActAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook and scoped
+      to the `execute_code` tool. On each candidate tool call it inspects the `code`
+      argument for: forbidden imports (subprocess, socket, ftplib, paramiko, smtplib),
+      forbidden built-ins (eval, exec, __import__, compile), filesystem write patterns
+      (open with write mode, os.remove, shutil.rmtree), and lines exceeding 400
+      characters as an obfuscation proxy. On any match returns
+      `Guardrail.reject(<structured-error>)` naming the matched rule; the agent loop
+      consumes one of its 5 iterations and rewrites. Passing calls are forwarded to the
+      in-process sandbox executor unchanged.
+    regulation_anchors: []
+
+  - id: H1
+    name: Halt execution automatically on destructive or secret-leaking output
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      Generated code that passes the pre-execution guardrail may still produce harmful
+      output at runtime — a file-deletion command embedded in a string literal, a
+      network request that exfiltrates data, or a loop that writes a secret it received
+      via context data. A guardrail cannot catch these because they are runtime effects,
+      not static code patterns. The automatic safety halt closes this gap: it inspects
+      every execution output immediately after the sandbox run and before the CodeExecuted
+      event is written, so a destructive or secret-bearing output never enters the event
+      log or propagates to the UI. Stopping at the output layer, not after retries, is
+      intentional — there is no safe retry path once a destructive action has run.
+    implementation: |
+      `SafetyHaltMonitor` is called synchronously by `ExecutionWorkflow.executeStep`
+      after each sandbox invocation and before `TaskEntity.recordExecution` is called.
+      It scans the raw output string for: destructive action markers ("Deleted",
+      "Removed", "rm -rf", "DROP TABLE", outbound URL patterns with exfiltration
+      query parameters), fork-bomb indicators (rapid line repetition beyond a threshold),
+      PEM headers ("-----BEGIN"), and high-entropy alphanum tokens of 40+ characters
+      matching AWS, GCP, or GitHub key prefixes. On any match it returns
+      `Optional.of(haltReason)`; `ExecutionWorkflow` immediately calls
+      `TaskEntity.triggerHalt(reason)` which emits `HaltTriggered` and transitions the
+      entity to `HALTED` without starting another iteration. Clean output returns
+      `Optional.empty()` and execution proceeds normally.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub secrets from execution outputs before they reach the event log
+    mechanism:
+      kind: sanitizer
+      flavor: secret
+    enforcement: non-blocking
+    rationale: |
+      A code-executing agent may inadvertently print secrets it received as context data
+      or discovered through the sandboxed environment — an AWS key passed as an input
+      variable, a GitHub token in a config file read by the generated code, a database
+      password embedded in an error message. These strings must not land in the entity
+      event log or appear in the UI, even when the output does not trigger the safety
+      halt (a secret printed to stdout alongside valid results is not a destructive
+      action, but it is a data exposure). The sanitizer runs as a Consumer after each
+      `CodeExecuted` event; enforcement is non-blocking because the output is already
+      written to the entity by the time the Consumer fires, but the sanitized form
+      replaces it in the view and in every UI-facing response.
+    implementation: |
+      `SecretSanitizer` Consumer subscribes to `CodeExecuted` events emitted by
+      `TaskEntity`. It runs a multi-stage pipeline over `rawOutput`: AWS access key
+      patterns (AKIA prefix + 16 alphanum), GitHub token patterns (ghp_ / gho_ / ghr_
+      prefixes), PEM certificate headers, generic bearer token patterns
+      (`Bearer [A-Za-z0-9_.-]{20,}`), credential-assignment patterns
+      (`[A-Z_]+(KEY|TOKEN|SECRET|PASSWORD)=[^\s]{8,}`), and high-entropy alphanum
+      strings of 32+ characters. Each matched token is replaced with a typed redaction
+      marker (e.g., `[REDACTED-AWS-KEY]`, `[REDACTED-GITHUB-TOKEN]`). Builds
+      `SanitizedOutput{iterationNumber, sanitizedOutput, secretCategoriesFound}` and
+      calls `TaskEntity.attachSanitizedOutput`. `TaskView` and `TaskEndpoint` expose
+      only the sanitized form; raw output is accessible only via the entity's audit
+      record for operators with direct entity access.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Code-policy guardrail before execution
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Automatic halt on destructive/secret output
+    mechanism: Halt
+    implementation: automatic-safety-halt
+    source: —
+  - id: S1
+    label: Secret scrubbing from execution outputs
+    mechanism: Sanitizer
+    implementation: secret
+    source: —

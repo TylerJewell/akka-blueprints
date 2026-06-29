@@ -1,0 +1,47 @@
+schema_version: 1
+sample_id: akka-bridge
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Intercept and validate every tool call before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-policy-validator
+    enforcement: blocking
+    rationale: |
+      When an LLM-driven agent is wrapped inside Akka workflows, the durability
+      and retry guarantees Akka provides are only as useful as the governance
+      placed at the tool-call boundary. Without a before-tool-call check, the
+      agent can freely call any tool the framework exposes — including tools the
+      run operator never intended to permit, tools whose argument structures
+      the current task cannot satisfy, and tools beyond a run's allowed budget.
+      Each of these failure modes is undetectable after the fact unless the call
+      is intercepted before execution. The guardrail acts as the single control
+      point that enforces the operator's intent: permitted-tools list, argument
+      schema conformance, and call-budget cap. Because the hook fires before the
+      call reaches AgentFrameworkAdapter, neither the adapter nor the tool
+      executor ever sees a policy-violating request.
+    implementation: |
+      `ToolCallGuardrail` is registered on `BridgeAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      On each candidate tool call it (1) checks the tool name against
+      `run.request.permittedTools`, (2) validates the arguments JSON against
+      the tool's declared `argSchema` (required-keys check), and (3) counts
+      `PERMITTED` entries in `run.toolCalls` against `run.request.toolBudget`.
+      On any failure it calls `RunEntity.blockToolCall(callId, rejectionReason)`
+      and returns `Guardrail.reject(<structured-error>)` — the agent loop
+      receives a tool error describing which check failed and can adapt. On pass
+      it calls `RunEntity.requestToolCall` then `RunEntity.permitToolCall` and
+      returns `Guardrail.permit()`, which causes `AgentFrameworkAdapter` to
+      receive a `ToolCallPermitted` event and execute the call.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-tool-call policy guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

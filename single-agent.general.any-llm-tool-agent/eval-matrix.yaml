@@ -1,0 +1,43 @@
+schema_version: 1
+sample_id: any-llm-tool-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Validate tool input before executing get_weather
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: input-validator
+    enforcement: blocking
+    rationale: |
+      A tool-calling agent is only as safe as the arguments it passes to its
+      tools. When the backing tool is an external weather API, an empty,
+      malformed, or injection-bearing location string wastes a network call at
+      best and triggers unintended API behaviour at worst. The before-tool-call
+      hook intercepts the invocation before the tool method body runs — not
+      after — so invalid input never reaches WeatherTools.get_weather or any
+      downstream HTTP client. This is the correct cut point for tool-boundary
+      governance in a single-agent system where the guardrail cannot rely on
+      a separate sanitizer component upstream.
+    implementation: |
+      `WeatherToolGuardrail` is registered on `WeatherAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On
+      each `get_weather` invocation it (1) asserts the `location` argument is
+      non-null and non-blank, (2) asserts length is at most 200 characters, and
+      (3) checks the string against a compact regex blocklist of SQL fragments,
+      HTML script tags, and path-traversal sequences. On any failure it returns
+      `Guardrail.reject("invalid-tool-input: " + reason)`; the agent loop
+      surfaces the structured error as context for the next iteration, causing
+      the agent to produce a clarification-request report rather than retrying
+      the bad call. Passing invocations flow through to `WeatherTools.get_weather`
+      unchanged.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-input guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

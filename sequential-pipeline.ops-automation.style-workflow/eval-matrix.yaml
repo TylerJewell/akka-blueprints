@@ -1,0 +1,91 @@
+schema_version: 1
+sample_id: sequential-pipeline-ops-automation-style-workflow
+coordination_pattern: sequential-pipeline
+domain: ops-automation
+
+controls:
+  - id: H1
+    name: Reject tool calls whose stage precondition is not yet satisfied
+    mechanism:
+      kind: hitl
+      hook: before-tool-call
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      In an ops-automation pipeline, the contract between stages is carried by
+      typed task results — VALIDATE writes a `ValidationReport`, EXECUTE writes
+      an `ExecutionResult`, NOTIFY writes a `RunResult`. If a later stage's tool
+      is callable while an earlier stage has not recorded its result, the
+      pipeline silently degrades and the dependency property is lost. In
+      operations automation this is directly harmful: a notification could be
+      dispatched before all steps have executed, or execution could begin
+      against a workflow definition whose dependency graph has not been checked.
+      The before-tool-call hook is the right cut: catch the misordered call at
+      the agent–tool boundary, surface it as a structured rejection, and let the
+      agent self-correct inside its iteration budget.
+    implementation: |
+      `StageGuardrail` is registered on `PipelineOrchestrationAgent` via the
+      agent's guardrail-configuration block, bound to the `before-tool-call`
+      hook. Each function-tool class (`ValidateTools`, `ExecuteTools`,
+      `NotifyTools`) carries a `Stage` constant on its methods. On every tool
+      call the guardrail reads the candidate's `Stage` and the current
+      `WorkflowRunEntity.status` (looked up via the `runId` carried in the
+      in-flight `TaskDef.metadata`) and applies the matrix:
+      `VALIDATE` tools require `status ∈ {CREATED, VALIDATING}`;
+      `EXECUTE` tools require `status ∈ {VALIDATED, EXECUTING}` AND
+      `validation.isPresent()`; `NOTIFY` tools require
+      `status ∈ {EXECUTED, NOTIFYING}` AND `execution.isPresent()`. On
+      reject, the guardrail returns a structured `stage-violation` error to
+      the agent loop and calls
+      `WorkflowRunEntity.recordGuardrailRejection` so the rejection is visible
+      in the UI's rejection-log strip and in the audit log. On accept, the
+      call proceeds.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every emitted run result for step coverage and execution integrity
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Even a well-formed run result can be integrity-compromised — an executed
+      step not listed in the workflow declaration, a declared step with no
+      execution record, or outcome counts that do not match the declared step
+      count. In ops-automation these discrepancies are not cosmetic: a phantom
+      step in the execution log may indicate a misrouted or injected task; a
+      missing step in the execution record means a required operation silently
+      did not run. An on-completion evaluator surfaces these patterns without
+      blocking the run result itself, giving the operator a fast signal about
+      which runs warrant manual inspection before triggering follow-on actions.
+    implementation: |
+      `StepCoverageScorer` runs inside `WorkflowRunPipeline.evalStage`,
+      fired immediately after `NotificationSent` lands. The scorer is
+      deterministic and rule-based (no LLM call — keeping the single-agent
+      sequential-pipeline invariant honest). Four checks, one point per check
+      satisfied, on a base of 1:
+      (1) step coverage — every `ValidationReport.validations[i].stepId` has
+      a matching `ExecutionResult.outcomes[j].stepId`.
+      (2) phantom-step check — every `ExecutionResult.outcomes[j].stepId`
+      appears in `ValidationReport.validations[].stepId` (no extra steps
+      executed outside the declared workflow).
+      (3) valid-outcome check — every `StepOutcome.status` is one of
+      `{SUCCEEDED, FAILED, SKIPPED}`.
+      (4) count parity — `outcomes.size() == validations.size()` (no silent
+      expansion or collapse).
+      Emits `RunEvaluated{score: 1-5, rationale: String}` with a rationale
+      sentence naming the largest gap. The score is surfaced on the App UI tab;
+      runs with score ≤ 2 are flagged for manual operator review.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Stage-gate tool guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Run step coverage eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

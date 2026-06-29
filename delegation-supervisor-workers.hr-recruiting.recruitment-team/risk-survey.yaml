@@ -1,0 +1,63 @@
+schema_version: 1
+sample_id: recruitment-team
+
+purpose:
+  primary_function: Match candidates to roles and screen applications, with a human approving every final outcome
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: draft-only            # the system recommends; a human decides
+  user_type: recruiter / hiring reviewer
+
+data:
+  inputs:
+    - role descriptions
+    - resume text (sanitized before agent use)
+    - reviewer approve/reject commands
+  data_classes:
+    pii: true                              # resumes contain personal data
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  special_category: true                   # protected attributes redacted by S1
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+decisions:
+  authority_level: recommend-only
+  decision_subject: job candidates
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-before-human-approval
+
+failure:
+  blast_radius: single-customer
+  failure_modes:
+    - biased or skewed screening recommendation
+    - protected-attribute leakage into an agent prompt
+    - stale decision left unresolved
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+oversight:
+  human_in_loop: true                      # H1 — final outcome gated
+  human_on_loop: true                      # P1 — drift watch surfaces skew
+  reviewer_role: hiring reviewer
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls: []                   # runs out of the box, no external calls
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  high_risk_employment: true               # hiring / candidate evaluation
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

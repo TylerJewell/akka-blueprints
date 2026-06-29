@@ -1,0 +1,94 @@
+# Eval Matrix for the fraud-flagging-team Akka sample.
+#
+# Schema note: framework/schema/control.schema.yaml requires regulation_anchors on
+# each control. This sample models a finance-analysis scenario but is not bound to a
+# specific jurisdiction or named regulation, so regulation_anchors is an empty list
+# across all controls. A real deployer anchors these via risk-survey.yaml.
+
+schema_version: 1
+sample_id: fraud-flagging-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Require analyst confirmation before any account action
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      A fraud flag is advisory. Freezing or notifying on a customer account is
+      consequential and must be confirmed by a human analyst before it runs.
+    implementation: >
+      FraudReviewWorkflow pauses in awaitAnalystStep while CaseEntity status is
+      FLAGGED; POST /api/cases/{id}/confirm and .../dismiss transition the workflow.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact financial transaction data before logging
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: system-level
+    rationale: >
+      Transaction payloads carry account numbers, card numbers, and customer
+      identifiers. These must be masked in logs to meet financial-sector data
+      handling expectations.
+    implementation: >
+      A Redaction helper masks card/account/customer identifiers in any
+      transaction field before it is written to a log line; the workers and
+      workflow log only redacted summaries.
+    regulation_anchors: []
+
+  - id: E1
+    name: Evaluate every fraud decision for false-positive and false-negative signal
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      Fraud verdicts have asymmetric error cost. Each decision is evaluated so the
+      false-positive and false-negative trend is visible to the analyst.
+    implementation: >
+      A consumer on CaseFlagged and CaseCleared records a verdict-quality score and
+      an FP/FN signal on the case; the App UI shows the score beside each case.
+    regulation_anchors: []
+
+  - id: G1
+    name: Gate the account-action tool until the case is confirmed
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      The account freeze/notify action is irreversible in the production analog and
+      must not run before the human confirmation gate has passed.
+    implementation: >
+      A before-tool-call guardrail on FraudReviewWorkflow.actionStep verifies
+      CaseEntity status is CONFIRMED before the in-process account-action tool runs.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Analyst confirmation gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for analyst confirm/dismiss before any account action.
+  - id: S1
+    name: Transaction redaction
+    mechanism: "sanitizer · sector"
+    short: Mask card/account/customer identifiers before logging.
+  - id: E1
+    name: Decision eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Score every fraud verdict for FP/FN signal.
+  - id: G1
+    name: Account-action gate
+    mechanism: "guardrail · before-tool-call"
+    short: Block freeze/notify unless status is CONFIRMED.

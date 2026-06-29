@@ -1,0 +1,121 @@
+# Eval Matrix for the ambient-email-assistant Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (ops-automation domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an
+# empty list across all controls.
+
+schema_version: 1
+sample_id: ambient-email-assistant
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: ops-automation
+
+integration_tier: Requires Gmail/Calendar credential; mock available
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human approval gate before any outbound action
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Sending an email reply or creating a calendar event on behalf of a user is an
+      externally visible, hard-to-undo action. The approval gate between the draft
+      phase and the execute phase ensures a person reviews the agent's proposed
+      action before it reaches the recipient or their calendar. This is the defining
+      control of the human-in-loop-gate pattern in an ops-automation context, where
+      the cost of an incorrectly sent message is higher than in editorial workflows.
+    implementation: >
+      EmailWorkflow pauses in awaitApprovalStep, polling EmailThreadEntity status
+      every 5 seconds. POST /api/threads/{id}/approve and POST
+      /api/threads/{id}/dismiss transition the entity; the workflow resumes on the
+      next poll. The execute step runs only when status is APPROVED.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block Gmail and Calendar write tools unless the thread is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      The simulated Gmail send and Calendar create tools represent real external
+      writes in a production deployment. A before-tool-call guardrail prevents
+      these tools from executing if the EmailThreadEntity has not been explicitly
+      approved, providing a second enforcement layer below the workflow-level gate.
+      This matters because the workflow poll can race with entity state transitions;
+      the guardrail eliminates any window where the tool runs on a stale APPROVED
+      read.
+    implementation: >
+      A before-tool-call guardrail on ReplyDraftAgent and MeetingSchedulerAgent
+      re-reads EmailThreadEntity.status immediately before the tool call dispatches.
+      If status is not APPROVED, the call is rejected and the agent returns an error
+      that the workflow records without retrying the tool.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip PII from email content before it enters LLM prompts or event logs
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: system-level
+    rationale: >
+      Incoming email bodies routinely contain the sender's personal contact
+      information, names of third parties, and other PII that the user has not
+      consented to route through a third-party language model. Without sanitization,
+      every triage and draft call would transmit this data to the model API. The
+      sanitizer provides a data-minimization baseline that deployers can extend
+      with domain-specific patterns without altering the workflow logic.
+    implementation: >
+      A PiiSanitizer utility class is invoked by a before-agent-request interceptor
+      registered on TriageAgent, ReplyDraftAgent, and MeetingSchedulerAgent. It
+      replaces RFC 5322 email addresses with [EMAIL], E.164 and common US phone
+      formats with [PHONE], and capitalized name-like word pairs with [NAME].
+      Sanitized strings flow into the prompt; the originals remain in
+      EmailThreadEntity under access-controlled command handlers.
+    regulation_anchors: []
+
+  - id: E1
+    name: Emit LLM-as-judge eval scores after each triage and draft decision
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      Ops-automation agents make consequential routing and drafting decisions at
+      high frequency. Without systematic scoring, quality regressions in triage
+      accuracy or draft relevance are invisible until an operator complains. The
+      eval event creates a structured audit trail that integrates with an
+      LLM-as-judge pipeline, enabling continuous monitoring of model performance
+      on real production traffic without blocking the workflow.
+    implementation: >
+      After each TriageAgent and ReplyDraftAgent task completes, EmailWorkflow emits
+      an EvalEvent record carrying threadId, agentName, sanitized inputSummary,
+      outputSummary, judgeScore (0–1 double), and evaluatedAt. The event is written
+      to a dedicated eval log topic. The LLM-as-judge call that populates judgeScore
+      is deployer-configured; the sample ships a mock scorer that returns 0.85 for
+      all outputs.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/dismiss before any outbound action fires.
+  - id: G1
+    name: Guard Gmail/Calendar write tools
+    mechanism: "guardrail · before-tool-call"
+    short: Block send-email and create-event unless thread status is APPROVED.
+  - id: S1
+    name: PII sanitizer on email content
+    mechanism: "sanitizer · pii"
+    short: Strip email addresses, phone numbers, and names before LLM prompt ingestion.
+  - id: E1
+    name: Decision eval events
+    mechanism: "eval-event · on-decision-eval"
+    short: Emit LLM-as-judge scores after each triage and draft decision.

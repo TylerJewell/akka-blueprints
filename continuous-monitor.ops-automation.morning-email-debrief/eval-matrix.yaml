@@ -1,0 +1,63 @@
+schema_version: 1
+sample_id: morning-email-debrief
+coordination_pattern: continuous-monitor
+domain: ops-automation
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Morning email batches drawn from an operational mailbox routinely contain names,
+      email addresses, phone numbers, account numbers, and other personal identifiers
+      from senders and referenced parties. A summarisation model has no need to see
+      any of these to produce a useful digest. Redaction runs in a Consumer before the
+      sanitized payload enters the workflow and reaches any agent, ensuring no raw PII
+      is ever part of an LLM prompt or stored in a debrief output.
+    implementation: |
+      `EmailPiiSanitizer` Consumer subscribes to `EmailReceived` events on `EmailQueue`.
+      Applies a two-stage pipeline: a regex stage covering well-known formats (email
+      addresses, phone numbers, national ID patterns, account-like numeric tokens) and a
+      heuristic stage for names and addresses. Emits `EmailSanitized` carrying the
+      redacted subject and body plus a `piiCategoriesFound` list used for audit.
+      The raw incoming payload is retained only in `EmailEntity` for the audit log;
+      the redacted `SanitizedEmailPayload` is what `EmailSummarizerAgent` and
+      `DebriefAssemblerAgent` receive.
+    regulation_anchors: []
+
+  - id: E1
+    name: Periodic eval of completed debriefs
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      A scheduled email-digest pipeline must remain trustworthy over time: high-priority
+      emails must not be silently omitted from the digest, and the language of the assembled
+      narrative must remain appropriate for the intended audience. A periodic eval provides
+      a continuous quality signal across debrief runs without blocking the pipeline.
+      Degradation in eval scores is an early indicator that the summarisation or assembly
+      prompts need tuning.
+    implementation: |
+      `EvalRunner` TimedAction fires every 60 minutes (configurable via EVAL_RUNNER_SECONDS
+      for testing). Queries `DebriefView.getAllDebriefs()`, selects up to 3 READY debriefs
+      without an `evalScore` (oldest-first), and for each calls `DebriefEvalAgent` (an
+      AutonomousAgent with a tight 1–5 rubric covering coverage, tone, and completeness).
+      Emits `DebriefEvalScored` with score and one-sentence rationale. The score is surfaced
+      on the App UI tab's debrief detail panel.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: E1
+    label: Debrief quality eval
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

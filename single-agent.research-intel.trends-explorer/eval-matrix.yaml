@@ -1,0 +1,8 @@
+schema_version: 1
+sample_id: google-trends-agent
+coordination_pattern: single-agent
+domain: research-intel
+
+controls: []
+
+simplified_view: []

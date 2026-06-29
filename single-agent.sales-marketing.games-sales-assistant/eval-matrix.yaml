@@ -1,0 +1,42 @@
+schema_version: 1
+sample_id: games-sales-assistant
+coordination_pattern: single-agent
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Reject off-catalog and forbidden-topic responses before they reach the shopper
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: content-and-catalog-validator
+    enforcement: blocking
+    rationale: |
+      A retail sales assistant that cites titles not present in the catalog creates broken
+      customer expectations and potential mis-sells. One that includes warranty commitments,
+      competitor pricing claims, or other customers' personal data in a response creates
+      legal and compliance exposure. Because the response is directly customer-facing, the
+      guardrail must intercept bad responses before they are returned — not after. The
+      before-agent-response hook is the correct cut point: it runs inside the agent loop,
+      forces a retry within the same task, and ensures the shopper never sees a response
+      that references a nonexistent title or forbidden content.
+    implementation: |
+      `ResponseGuardrail` is registered on `SalesAssistantAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate `AssistantResponse` it (1) looks up every `Recommendation.titleId` in the
+      in-process `CatalogIndex`; any titleId absent from the index fails the check,
+      (2) scans the `answer` text for strings from the compile-time `FORBIDDEN_TOPICS` set
+      (warranty commitments, competitor-pricing phrases, other-customer PII patterns), and
+      (3) verifies that any promotional claim in the `answer` is present verbatim in at
+      least one catalog entry's `shortPitch`. On any failure it returns
+      `Guardrail.reject(<structured-error>)` naming which check failed and which value
+      triggered it; the agent loop counts one iteration and retries. Passing responses flow
+      through to `SessionWorkflow.assistStep`, which records `TurnAnswered` on the entity.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Catalog-and-content guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

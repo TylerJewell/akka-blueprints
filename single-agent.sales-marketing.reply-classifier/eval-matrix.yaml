@@ -1,0 +1,43 @@
+schema_version: 1
+sample_id: reply-classifier
+coordination_pattern: single-agent
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Block unsafe CRM mutations before the tool call executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: safe-action-validator
+    enforcement: blocking
+    rationale: |
+      An LLM classifying email replies has no runtime awareness of the current deal
+      pipeline stage or the business rules governing stage progression. Without a
+      gate, the agent could advance a CLOSED_WON deal back to PROSPECTING, move a
+      deal forward on an UNSUBSCRIBE signal, or update the wrong deal entirely.
+      A before-tool-call check is the right interception point: it fires on the
+      agent's proposed tool call before any mutation reaches Pipedrive, preserving
+      CRM data integrity while still letting valid stage updates flow through
+      automatically.
+    implementation: |
+      `CrmMutationGuardrail` is registered on `ReplyClassifierAgent` via the
+      agent's guardrail-configuration block, bound to the `before-tool-call` hook.
+      On each proposed `updateDealStage(dealId, newStage)` tool call it (1) checks
+      that `dealId` matches the submission's deal id, (2) looks up the deal's
+      current stage in `ReplyEntity` and verifies `newStage` is in the
+      `ALLOWED_STAGE_TRANSITIONS` map for that stage, and (3) rejects any
+      stage-forward mutation when the classification intent is `UNSUBSCRIBE` or
+      `NOT_INTERESTED`. On any failure returns a structured `Guardrail.reject`
+      naming the failed check; the agent loop consumes one of its 3 iterations and
+      may retry with a corrected call or emit `SKIP_CRM_UPDATE`. Passing tool calls
+      flow through to `ClassificationWorkflow.crmUpdateStep`, which calls
+      `PipedriveClient.updateDealStage`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: CRM mutation gate
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

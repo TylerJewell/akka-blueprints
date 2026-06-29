@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: youtube-analyst
+coordination_pattern: single-agent
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Reject malformed reports before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A channel-analyst system that lets a structurally invalid report reach the
+      entity log creates silent analytical failures: a report citing a videoId that
+      was never fetched, or a recommendation anchored to a metric field that does not
+      exist, cannot be trusted as evidence. The before-agent-response hook intercepts
+      the bad response before it leaves the agent loop, forces a retry inside the same
+      task, and ensures only reports consistent with the fetched data set land in
+      downstream views and the UI.
+    implementation: |
+      `ReportGuardrail` is registered on `ChannelAnalystAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On
+      each candidate response it (1) parses the response into `ChannelReport`,
+      (2) asserts every `topVideos[].videoId` exists in the fetched
+      `ChannelMetrics.topVideos` list, (3) asserts every
+      `recommendations[].metricRef` names a field present in `ChannelMetrics`
+      (e.g., `subscriberDelta`, `viewsDelta`, `engagementRate`), and (4) asserts the
+      `recommendations` list is non-empty. On any failure returns a structured
+      rejection naming the failed check; the agent loop consumes one of its 3
+      iterations and retries. Passing responses flow through to `analyseStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every report for analytical completeness
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A well-formed report can still be analytically hollow — a tier classification
+      of GROWING with no numeric evidence, engagement rates all at zero, or
+      recommendations that name a metric but specify no action. An on-decision
+      evaluator surfaces these patterns immediately after the report lands, without
+      blocking it, so a strategist reviewing the output knows which reports warrant
+      closer inspection before acting on them.
+    implementation: |
+      `AnalysisEvaluator` runs inside `AnalysisWorkflow.evalStep`, fired immediately
+      after `ReportRecorded` lands. The evaluator is deterministic and rule-based
+      (no LLM call — keeping the single-agent invariant honest): checks that the
+      `summary` paragraph contains at least one numeric token (a digit), that every
+      `TopVideo.engagementRate` is greater than zero, that the `recommendations` list
+      has at least one entry with a non-empty `action` string, and that the
+      `PerformanceTier` classification is consistent with the `subscriberDelta` sign
+      (GROWING requires positive delta; DECLINING requires negative delta; STEADY
+      accepts either). Emits `EvaluationScored` with a 1–5 score and a one-line
+      rationale. The score is surfaced on the App UI tab; analyses with score ≤ 2 are
+      flagged for human inspection.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Report-form guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision report eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

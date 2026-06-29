@@ -1,0 +1,140 @@
+schema_version: 1
+sample_id: finance-close-reconciler
+coordination_pattern: single-agent
+domain: finance-analysis
+
+controls:
+  - id: G1
+    name: Block invalid GL writes before they execute
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-validator
+    enforcement: blocking
+    rationale: |
+      The ReconciliationAgent proposes GL writes as structured tool calls during its
+      reconciliation pass. A write to a non-existent account code, an unbalanced
+      debit/credit pair, or a write to a period that has already been closed would
+      corrupt the ledger and create an audit finding. The before-tool-call hook is
+      the correct interception point: it fires before the write is recorded on
+      PeriodEntity, so a rejected proposal leaves the entity state unchanged and
+      the agent has the opportunity to revise the tool call within its iteration
+      budget. A post-execution check would require compensating writes, which is
+      more hazardous in a financial close context.
+    implementation: |
+      `WriteGuardrail` is registered on `ReconciliationAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      proposed GL write tool call it (1) verifies the target account code is present
+      in the submitted `List<AccountRule>`, (2) asserts the debit and credit amounts
+      are equal (balanced entry), (3) checks that `PeriodEntity` status is not
+      already ATTESTED or REJECTED (period still open), and (4) checks that the
+      write amount does not exceed the rule's `toleranceAmount` scaled to materiality.
+      On any failure returns a structured rejection naming the failed check; the agent
+      loop consumes one of its 4 iterations and retries with a corrected tool call.
+      Passing tool calls flow through to `reconcileStep` for recording in
+      `ReconciliationReport.proposedGlWrites`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require accountant sign-off before attestation
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Period-end reconciliation reports carry material financial significance under
+      SOX and IFRS. No report should advance to the audit trail without explicit
+      sign-off from a qualified accountant. The workflow pause after `ReportRecorded`
+      gives the accountant time to read the variance list, compare it against source
+      ledgers, and either approve the findings or reject them with an explanatory note.
+      A rejection stops the attestation path and preserves the entity in REJECTED
+      state so the variance can be investigated. Approval is required regardless of
+      the report's `ReportStatus` — even an IN_BALANCE report must be attested by a
+      human to satisfy the control requirement.
+    implementation: |
+      `ReconciliationWorkflow.awaitSignOffStep` polls `PeriodEntity.getPeriod` every
+      2 s, waiting for `period.signOff().isPresent()`. The accountant calls
+      `POST /api/periods/{id}/signoff` via `ReconciliationEndpoint`, which routes to
+      either `PeriodEntity.grantSignOff` or `PeriodEntity.rejectSignOff` depending
+      on the `decision` field. A `SignOffGranted` event advances `awaitSignOffStep`
+      to `attestStep`; a `SignOffRejected` event calls `PeriodEntity.fail` and ends
+      the workflow. The step timeout is 86400 s (24 h) to accommodate human response
+      latency; expiry transitions to `FAILED` with reason `"sign-off-timeout"`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Mask confidential financial fields before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: blocking
+    rationale: |
+      Trial balances submitted for reconciliation routinely contain internal margin
+      percentages, entity codes, and account identifiers that are commercially
+      sensitive or subject to SOX confidentiality requirements. These fields are not
+      needed by the reconciliation rules and must not appear in LLM call logs or
+      model training data. The masking pipeline runs inside a Consumer between the
+      raw submission event and the agent invocation; the raw trial balance is
+      preserved on the entity for audit but is never the input seen by the model.
+    implementation: |
+      `BalanceSanitizer` Consumer subscribes to `PeriodSubmitted` events emitted by
+      `PeriodEntity`. It runs a column-scanning pipeline over the CSV `rawBalance`:
+      a pattern stage strips columns matching `*_MARGIN_PCT` and `*_MARGIN_AMT`, an
+      entity-code stage strips columns matching `ENTITY_CODE_*`, and a rule-alignment
+      stage drops any account code columns not referenced in the submitted
+      `List<AccountRule>`. Outputs a `SanitizedBalance` carrying the masked CSV plus
+      the list of field-type categories removed. Calls
+      `PeriodEntity.attachSanitized(sanitized)`. `ReconciliationWorkflow.reconcileStep`
+      then passes `sanitized.maskedBalance` as the `ReconciliationAgent` task
+      attachment; the raw payload remains accessible only via
+      `submission.rawBalance` on the entity.
+    regulation_anchors: []
+
+  - id: CI1
+    name: Gate promotion on complete attestation event chains
+    mechanism:
+      kind: ci-gate
+      flavor: attestation-gate
+    enforcement: build-gate
+    rationale: |
+      Financial close processes require a demonstrable audit trail — every reconciled
+      period must have a complete sequence of events from submission through attestation
+      before the artifact enters a production-candidate state. A CI gate that asserts
+      this property on every build catches regressions early: if a code change breaks
+      the event chain (e.g., a refactor that drops the `AttestationCompleted` emitter),
+      the build fails before the artifact is promoted and the compliance gap never
+      reaches production. The gate runs against fixture data so it does not depend on
+      a live service.
+    implementation: |
+      `AttestationGateTest.java` is a JUnit test wired into the Maven `verify` phase.
+      It loads every period fixture from `src/test/resources/fixtures/periods/`, runs
+      `AttestationScorer.score(period, rules)` on each, and asserts that
+      `attestationResult.complete()` is `true` and that every `ruleId` in the fixture's
+      submitted rules has a corresponding `AccountFinding` in the fixture's report.
+      If any fixture fails, the test method fails and `mvn verify` returns a non-zero
+      exit code, blocking artifact promotion. `AttestationScorer` is the same
+      deterministic class invoked by `ReconciliationWorkflow.attestStep` at runtime,
+      so the gate tests the same logic path.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: GL-write guardrail (before-tool-call)
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Accountant sign-off gate
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: S1
+    label: Confidential-field masking before LLM
+    mechanism: Sanitizer
+    implementation: sector
+    source: —
+  - id: CI1
+    label: Attestation chain gate (build)
+    mechanism: CI Gate
+    implementation: attestation-gate
+    source: —

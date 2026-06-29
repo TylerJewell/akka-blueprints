@@ -1,0 +1,99 @@
+schema_version: 1
+sample_id: guardrails-baseline
+coordination_pattern: single-agent
+domain: governance-risk
+
+controls:
+  - id: S1
+    name: Strip PII from messages before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      User-submitted messages in moderation pipelines routinely contain personally
+      identifiable information — email addresses, phone numbers, government identifiers,
+      payment-card-like tokens, and person names. Sending those identifiers to an LLM
+      creates unnecessary data-exposure risk and may violate data-minimisation obligations.
+      Redaction runs in the MessageSanitizer Consumer between raw submission and agent
+      invocation; the raw message is preserved on the entity for audit but is never the
+      input seen by the model.
+    implementation: |
+      `MessageSanitizer` Consumer subscribes to `MessageSubmitted` events emitted by
+      `ModerationEntity`. It runs a pipeline of regex stages (well-known identifier
+      formats), a heuristic stage (person names, postal addresses), and an
+      account-id-token stage. Outputs a `SanitizedMessage` carrying the redacted text
+      plus the list of categories found. Calls `ModerationEntity.attachSanitized(sanitized)`.
+      `ModerationWorkflow.moderateStep` then passes `sanitized.redactedMessage` as the
+      `ModerationAgent` task attachment; the raw payload remains accessible only via
+      `request.rawMessage` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block forbidden tool invocations before the first LLM call
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: tool-policy
+    enforcement: blocking
+    rationale: |
+      A moderation agent that can call arbitrary tools is a broader attack surface than
+      one that is restricted to the tools the policy author intended. The
+      before-agent-invocation hook is the right cut: check the agent's planned tool list
+      once, before any LLM call is made, and reject any tool that is not on the allowlist.
+      Catching this at invocation-time rather than post-hoc prevents the LLM from ever
+      receiving a turn in which a forbidden tool was available, removing an entire class
+      of prompt-injection and capability-escalation risk.
+    implementation: |
+      `InputGuardrail` is registered on `ModerationAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-invocation` hook. On each
+      new task it reads the agent's planned tool invocations and checks each tool name
+      against the `ALLOWED_TOOLS` set defined for the active policy. Any tool not on the
+      allowlist triggers `Guardrail.reject(<structured-error>)` naming the forbidden tool;
+      the agent loop consumes one of its 3 iterations and retries without the blocked tool.
+      Passes through immediately if all planned tools are on the allowlist.
+    regulation_anchors: []
+
+  - id: G2
+    name: Reject malformed moderation decisions before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A single-agent moderation pipeline is one bad parse away from a malformed decision
+      propagating into the entity log and downstream consumers. The after-llm-response
+      hook intercepts the candidate response before it leaves the agent's loop, enforcing
+      four structural invariants: parseable JSON, every rule result references a submitted
+      rule, every action is in the allowed enum, and the overall verdict is consistent with
+      the individual rule results (a BLOCK rule result cannot coexist with an ALLOW
+      verdict). Only decisions that satisfy all four checks proceed to the workflow.
+    implementation: |
+      `OutputGuardrail` is registered on `ModerationAgent` via the agent's
+      guardrail-configuration block, bound to the `after-llm-response` hook. On each
+      candidate response it (1) parses the response into `ModerationDecision`, (2) asserts
+      every `ruleResults[].ruleId` is present in the submitted `List<PolicyRule>`,
+      (3) asserts every `action` is in `{ALLOW, BLOCK, ESCALATE}`, (4) asserts every
+      submitted rule has at least one corresponding result, and (5) asserts verdict
+      consistency (if any result is BLOCK, overall verdict must not be ALLOW). On any
+      failure returns a structured rejection naming the failed check; the agent loop retries.
+      Passing responses flow through to `moderateStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII strip before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Tool-policy input guardrail
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —
+  - id: G2
+    label: Decision-structure output guardrail
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —

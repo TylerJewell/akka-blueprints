@@ -1,0 +1,80 @@
+schema_version: 1
+sample_id: flight-booking-pipeline
+coordination_pattern: sequential-pipeline
+domain: planning-travel
+
+controls:
+  - id: H1
+    name: Require user confirmation before committing an irreversible booking write
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      A flight booking commits real money on behalf of the user. Once a reservation
+      is confirmed with the airline, cancellation fees and fare differences are the
+      user's problem. The pipeline must not self-approve: the workflow pauses after
+      the agent selects a seat and waits for an explicit user action (clicking
+      "Confirm booking" in the UI) before the BOOK phase begins. The
+      before-tool-call guardrail backs this pause at the tool level — even if the
+      agent loop somehow attempts to call `commitReservation` before the user has
+      confirmed, the call is rejected with a `hitl-violation` reason. Two
+      independent enforcement layers (workflow pause + tool rejection) prevent any
+      code path from committing spend without user approval.
+    implementation: |
+      `BookingPipelineWorkflow.confirmStep` emits `AwaitingConfirmation` onto
+      `BookingEntity` and suspends using `Workflow.asyncResult`. The workflow
+      resumes only after `BookingEntity.confirm()` writes `BookingConfirmed`, which
+      happens when the user POSTs to `BookingEndpoint`'s `/api/bookings/{id}/confirm`
+      endpoint. `BookingGuardrail` additionally enforces this at the `before-tool-call`
+      hook: `commitReservation` (in `BookTools`) requires `status ∈ {CONFIRMED,
+      BOOKING}` AND `seatSelection.isPresent()`. Any premature call returns
+      `Guardrail.reject("hitl-violation: booking not confirmed by user")` and records
+      a `GuardrailRejected` event on the entity for audit.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject tool calls whose phase precondition or confirmation gate is not satisfied
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      In a flight booking pipeline the three phases have a strict data dependency:
+      SEARCH produces the candidate flights; SELECT picks a seat from those flights;
+      BOOK commits the chosen seat. A SELECT-phase tool called before `FlightsFound`
+      is recorded has no valid input to work with and would produce a fabricated
+      seat selection. A BOOK-phase tool called before `SeatSelected` and `BookingConfirmed`
+      are both on record is an irreversible spend without the user's knowledge. The
+      before-tool-call hook is the right cut for both risks: it sits at the
+      agent–tool boundary, catches misordered or premature calls before any
+      side-effect, and returns a structured rejection that the agent loop can correct
+      within its iteration budget.
+    implementation: |
+      `BookingGuardrail` is registered on `BookingAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. Each
+      function-tool class (`SearchTools`, `SelectTools`, `BookTools`) carries a
+      `Phase` constant on its methods. On every tool call the guardrail reads the
+      candidate's `Phase` and the current `BookingEntity.status` (looked up via the
+      `bookingId` carried in the in-flight `TaskDef.metadata`) and applies the
+      accept matrix: `SEARCH` tools require `status ∈ {CREATED, SEARCHING}`;
+      `SELECT` tools require `status ∈ {SEARCH_DONE, SELECTING}` AND
+      `flightOffers.isPresent()`; `BOOK` tools require `status ∈ {CONFIRMED,
+      BOOKING}` AND `seatSelection.isPresent()` AND `flightOffers.isPresent()`. On
+      reject, the guardrail returns a structured error to the agent loop and calls
+      `BookingEntity.recordGuardrailRejection` so the rejection is visible in the
+      UI's rejection-log strip and in the audit log. On accept, the call proceeds.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: User confirmation before booking
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: G1
+    label: Phase-gate + spend-protection guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

@@ -1,0 +1,39 @@
+schema_version: 1
+sample_id: akka-basic
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Reject structurally invalid results before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: after-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A workflow that records every model response directly to an entity log is one
+      bad parse away from storing garbage that downstream views and UIs must silently
+      ignore or crash on. The after-agent-response hook is the correct cut point:
+      validate the candidate PromptResult before it leaves the agent loop, force a
+      retry within the same task if any check fails, and only let well-formed results
+      flow through to the entity. This keeps the entity log clean without adding a
+      second LLM call or a compensating transaction.
+    implementation: |
+      `OutputGuardrail` is registered on `PromptAgent` via the agent's
+      guardrail-configuration block, bound to the `after-agent-response` hook. On each
+      candidate response it (1) deserialises the response into `PromptResult`,
+      (2) asserts `outputText` is non-empty, (3) asserts `confidenceScore` is in
+      `[0.0, 1.0]`, and (4) asserts `category` is one of `{SUMMARISE, EXTRACT,
+      CLASSIFY}`. On any failure it returns a structured rejection naming the failed
+      check and the actual value that triggered it; the agent loop consumes one of its
+      3 iterations and retries. Passing responses flow through to
+      `PromptWorkflow.processStep`, which calls `PromptEntity.recordResult`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output-structure guardrail
+    mechanism: Guardrail
+    implementation: after-agent-response
+    source: —

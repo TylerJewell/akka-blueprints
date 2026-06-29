@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: rag-pdf-chat
+
+# ---- Purpose ----
+purpose:
+  primary_function: pdf-document-question-answering
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: answer-with-citations
+  user_type: researcher-or-knowledge-worker
+
+# ---- Data ----
+data:
+  inputs:
+    - uploaded-pdf-documents
+    - user-questions
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    confidential-internal-documents: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  documents_may_contain_sensitive_content: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: answer-with-citations
+  decision_subject: question-about-pdf-content
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  user_expected_to_verify_citations: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-question-session
+  failure_modes:
+    - fabricated-citation
+    - unanswerable-question-answered-as-answerable
+    - relevant-passage-not-retrieved
+    - answer-unsupported-by-cited-passages
+    - stale-index-after-document-update
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  user_is_expected_to_follow_citations: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_session: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  document-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  copyright-clearance-for-uploaded-documents: TO_BE_COMPLETED_BY_DEPLOYER

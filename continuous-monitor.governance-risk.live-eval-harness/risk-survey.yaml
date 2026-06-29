@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: live-eval-harness
+
+# ---- Purpose ----
+purpose:
+  primary_function: governance-monitoring
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: automated-with-monitoring
+  user_type: ai-governance-officer
+
+# ---- Data ----
+data:
+  inputs:
+    - agent-output-decisions
+    - model-version-metadata
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  user_identifiable_fields_stripped_before_eval: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: automated-with-monitoring
+  decision_subject: agent-output
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: score-immutable-after-eval
+
+# ---- Failure ----
+failure:
+  blast_radius: aggregate-quality-signal
+  failure_modes:
+    - silent-quality-degradation
+    - fairness-drift-undetected
+    - eval-timeout-masking-real-failures
+    - alarm-threshold-misconfigured
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: ai-governance-officer
+  alarm_threshold_configured: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_decision: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  ai-system-registry-required: TO_BE_COMPLETED_BY_DEPLOYER

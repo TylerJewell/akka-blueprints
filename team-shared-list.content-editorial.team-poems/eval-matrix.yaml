@@ -1,0 +1,22 @@
+# Eval Matrix for the team-poems-multi-agent Akka sample.
+#
+# This is a toy creative writing sample in the content-editorial domain with no
+# industry- or jurisdiction-bound regulatory anchors. The controls list is
+# intentionally empty. A deployer adding this system to a regulated context
+# (e.g., a publishing platform with content-moderation obligations) should
+# extend this file with appropriate controls using the schema in
+# framework/schema/control.schema.yaml.
+
+schema_version: 1
+sample_id: team-poems-multi-agent
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: team-shared-list
+  domain: content-editorial
+
+integration_tier: runs-out-of-the-box
+
+controls: []
+
+simplified_view: []

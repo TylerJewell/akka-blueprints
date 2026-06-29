@@ -1,0 +1,71 @@
+schema_version: 1
+sample_id: slack-assistant
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Reject replies containing secrets or invalid action types before posting
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A Slack-bot that posts to public channels is a high-visibility surface: a single
+      response containing a leaked credential or a hallucinated action type is immediately
+      visible to every channel member and may propagate via copy-paste. The
+      before-agent-response hook is the right cut — catch the bad response before it
+      leaves the agent's loop, force a retry inside the same task, and only allow
+      well-formed, secret-free replies to reach the channel.
+    implementation: |
+      `ReplyGuardrail` is registered on `ChannelAssistantAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate response it (1) parses the response into `AssistantReply`, (2) asserts
+      `actionType` is in `{ANSWER, ESCALATE, RUNBOOK_REF, CLARIFY}`, (3) scans
+      `responseText` for patterns matching known secret formats (xoxb-, xoxp-, ghp_,
+      glpat-, AKIA[0-9A-Z]{16}, Bearer tokens longer than 20 characters), and (4) asserts
+      `responseText` is non-empty. On any failure returns a structured rejection naming the
+      failed check; the agent loop consumes one of its 3 iterations and retries. Passing
+      responses flow through to `replyStep` and onward to the Slack API call.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip secrets from message context before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: secret
+    enforcement: blocking
+    rationale: |
+      Ops teams routinely paste tokens, webhook URLs, and access keys into Slack channels
+      — sometimes intentionally (sharing a temporary credential) and sometimes by mistake
+      (stack traces that include env-var values). If that channel history rides into an LLM
+      context window, the credential is at risk of being echoed in the reply, logged in an
+      external inference endpoint, or included in a training dataset. Stripping before the
+      task attachment is built eliminates the exposure at its source while preserving the
+      raw text on the entity for internal audit.
+    implementation: |
+      `SecretSanitizer` Consumer subscribes to `MessageReceived` events emitted by
+      `MessageEntity`. It runs a pipeline of regex stages over `context.triggerText`:
+      Slack bot tokens (xoxb-), Slack user tokens (xoxp-), GitHub personal-access tokens
+      (ghp_), GitLab tokens (glpat-), AWS access-key IDs (AKIA[0-9A-Z]{16}), generic
+      Bearer tokens (Bearer [A-Za-z0-9+/=]{20,}), and webhook URLs (/hooks/ or /services/
+      path segments). Each match is replaced with a `[REDACTED-<CATEGORY>]` marker.
+      Outputs a `SanitizedContext` carrying the scrubbed text plus the list of categories
+      found. Calls `MessageEntity.attachSanitized(sanitized)`. `MessageWorkflow.replyStep`
+      then passes `sanitized.scrubbedText` as the `ChannelAssistantAgent` task attachment;
+      the raw `triggerText` remains accessible only via `context.triggerText` on the entity,
+      never on the wire to the model.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Reply guardrail (secrets + action type)
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: Secret scrubbing before LLM
+    mechanism: Sanitizer
+    implementation: secret
+    source: —

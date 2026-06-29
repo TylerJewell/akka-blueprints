@@ -1,0 +1,141 @@
+schema_version: 1
+sample_id: sdlc-task-planner
+coordination_pattern: planner-executor
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Vet every specialist dispatch before the sub-task runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The Planner chooses one of four specialists — Analyst, Architect, Coder,
+      Reviewer — each with write-adjacent reach into code artefacts and design
+      decisions. A misjudged dispatch (a CODER sub-task that writes outside
+      /workspace/, a REVIEWER sub-task that embeds a shell invocation, an
+      ANALYST query that leaks PII from fixture data) is the primary blast-radius
+      event in an SDLC automation system where the outputs feed directly into
+      development work. A deterministic guardrail wired to the dispatch hook
+      stops the sub-task before execution and forces the Planner to revise the
+      decision, keeping all write-scope confined to the declared /workspace/
+      boundary.
+    implementation: |
+      `DispatchGuardrail.vet(DispatchDecision)` is called by `PlanWorkflow`'s
+      `guardrailStep` between `proposeStep` and `dispatchStep`. The vetter
+      checks (a) the specialist allow-list (ANALYST, ARCHITECT, CODER, REVIEWER
+      only), (b) per-specialist content policy: CODER sub-tasks must not
+      reference paths outside /workspace/; REVIEWER sub-tasks must not embed
+      shell-command patterns; ANALYST sub-tasks must stay within the declared
+      fixture scope. On reject, the workflow records a `SubtaskBlocked` entry on
+      the progress ledger and loops back to `proposeStep` so the Planner sees
+      the blocker text and tries an alternative.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the workflow automatically when an unsafe output is observed
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      SDLC automation touches source code, design documentation, and build
+      configuration — a broader blast radius than a read-only task assistant.
+      The guardrail catches bad dispatch intentions before execution, but a
+      permitted sub-task can still return content that reveals a post-execution
+      unsafe condition: a coder diff touching a sensitive system path, a
+      reviewer finding that contains prompt-injection markers inserted by a
+      malicious fixture, or an analyst result echoing PII-shaped patterns.
+      Detecting these after execution and halting immediately prevents the
+      compromised output from influencing subsequent Planner decisions and
+      prevents it from appearing in the final deliverable.
+    implementation: |
+      `SafetyEvaluator.evaluate(ProgressEntry)` runs in `PlanWorkflow`'s
+      `autoHaltEvalStep` after every recorded sub-task. It flags UNSAFE on
+      CODER results whose diff references /etc, /root, or ~/.ssh/ paths; on
+      REVIEWER results whose content includes prompt-injection markers such as
+      "ignore previous instructions" or a raw `<system>` tag; on ANALYST
+      results matching SSN or credit-card patterns. On UNSAFE the workflow
+      transitions to `haltedStep`, which emits `PlanHaltedAutomatic` on
+      `PlanEntity` and ends the workflow with the plan in `HALTED`.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Let the operator pause new dispatches without killing in-flight work
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: blocking
+    rationale: |
+      SDLC task automation can operate over long-lived plans spanning multiple
+      minutes. During that window a human reviewer may spot that the Planner's
+      current strategy is heading in an undesirable direction — for example,
+      repeatedly dispatching Coder sub-tasks for a section of code that should
+      instead be reviewed first. The operator needs to pause new dispatches
+      without abandoning the in-flight sub-task and losing its result. The
+      graceful drain model — finish the current sub-task, stop at the next
+      check-halt boundary — preserves recorded progress while giving the
+      operator time to intervene.
+    implementation: |
+      `SystemControlEntity` (single instance keyed by literal `"global"`) holds
+      the halt flag. The App UI tab exposes an operator dashboard card with
+      Halt / Resume buttons backed by `POST /api/control/halt` and
+      `POST /api/control/resume`. Every `PlanWorkflow` reads the flag in its
+      `checkHaltStep` at the top of each loop iteration. On `halted=true`,
+      the workflow lets the current `dispatchStep` finish, then emits
+      `PlanHaltedOperator` and moves the plan to `HALTED`. The operator pane
+      reflects every `control-update` SSE event in real time.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub secret-shaped strings from every specialist result
+    mechanism:
+      kind: sanitizer
+      flavor: secret
+    enforcement: blocking
+    rationale: |
+      SDLC fixture files and coder artefacts routinely contain configuration
+      examples, CI/CD snippets, and legacy credential placeholders. If an
+      Analyst or Coder sub-task returns content containing an API key, a JWT,
+      or a bearer token, that material propagates directly into subsequent
+      Planner prompts and into the final `PlanDeliverable` that the UI
+      presents. In a development workflow the deliverable is often copy-pasted
+      into pull-request descriptions or shared design docs — making credential
+      leakage a concrete downstream risk. Unconditional, deterministic
+      sanitization prevents this regardless of which fixture or code path is
+      exercised.
+    implementation: |
+      `SecretScrubber.scrub(String)` runs in `PlanWorkflow`'s `sanitizeStep`
+      between the specialist call and `recordStep`. It applies a sequence of
+      labelled-replacement regexes (AWS access key, GitHub token, JWT,
+      OpenAI key, generic bearer token) plus a high-entropy fallback for
+      tokens >= 32 characters whose Shannon entropy exceeds 4.5 bits/char.
+      Replacements are tagged: `[REDACTED:aws-access-key]`,
+      `[REDACTED:github-token]`, `[REDACTED:jwt]`, etc. The scrubbed string
+      is what lands on the `ProgressEntry` event and what the Planner sees on
+      the next prompt.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Dispatch guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: HT1
+    label: Automatic safety halt
+    mechanism: Halt
+    implementation: automatic-safety-halt (post-execution evaluator)
+    source: —
+  - id: HO1
+    label: Operator runtime monitoring
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring (SystemControlEntity + dashboard)
+    source: —
+  - id: S1
+    label: Secret sanitizer
+    mechanism: Sanitizer
+    implementation: secret (regex + entropy redactor)
+    source: —

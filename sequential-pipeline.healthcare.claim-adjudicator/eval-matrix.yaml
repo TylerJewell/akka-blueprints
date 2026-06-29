@@ -1,0 +1,129 @@
+schema_version: 1
+sample_id: claim-adjudication-agent
+coordination_pattern: sequential-pipeline
+domain: healthcare
+
+controls:
+  - id: S1
+    name: Sanitise PHI fields before any tool body executes
+    mechanism:
+      kind: sanitizer
+      hook: before-tool-call
+      flavor: sector
+    enforcement: blocking
+    rationale: |
+      Insurance claims carry Protected Health Information — member identifiers,
+      dates of birth, provider NPIs, and procedure codes that, in combination,
+      can re-identify individuals. In a sequential pipeline the LLM passes these
+      values as arguments to function tools. Without a runtime sanitiser sitting
+      at the agent-tool boundary, raw PHI can flow into tool logs, error messages,
+      and downstream systems whose data-handling posture may differ from the
+      payer's. The before-tool-call hook is the right cut: it runs on every tool
+      invocation regardless of phase, it fires before the tool body has any
+      opportunity to log or forward the value, and it produces a queryable audit
+      trail of every redaction event without requiring each tool author to implement
+      their own masking logic. Sanitisation failures transition the claim to FAILED
+      rather than passing raw PHI silently through.
+    implementation: |
+      `PhiSanitizerGuardrail` is registered on `AdjudicationAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On every
+      tool call it inspects all arguments against `PhiFieldRegistry` (fields: `name`,
+      `dob`, `memberId`, `npi`). Each matched field value is replaced with
+      `[REDACTED:<field>:<sha1(value)[0:8]>]` — deterministic and length-preserving
+      enough that downstream parsing does not break. A `PhiRedacted{field, maskedValue,
+      redactedAt}` event is emitted on `ClaimEntity` for each masked field, giving the
+      compliance team a full, queryable redaction log. The sanitised call is then passed
+      through to the tool body. If sanitisation fails (unrecognised PHI schema version
+      or serialisation error), the guardrail returns a hard reject and `ClaimFailed` is
+      emitted with reason `phi-sanitization-error`. The sanitiser also carries a secondary
+      phase-gate check: it reads the candidate tool call's `AdjudicationPhase` constant
+      and the current `ClaimEntity.status`, and rejects calls whose phase precondition
+      has not been satisfied, emitting a `GuardrailRejected` event for audit.
+    regulation_anchors: []
+
+  - id: H1
+    name: Hold denial decisions for human review before finalisation
+    mechanism:
+      kind: hitl
+      hook: workflow-pause
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      An adjudication decision to deny a claim has direct financial and clinical
+      consequences for the member — delayed or foregone care, out-of-pocket expense,
+      and potential appeals. Errors in automated denial (wrong coverage interpretation,
+      missing pre-authorisation check, ambiguous exclusion rule) are difficult to
+      reverse once the member has received notice. Requiring a human reviewer to
+      confirm or override every denial before it is finalised intercepts errors at the
+      lowest-cost point in the process: after the LLM has produced its rationale but
+      before the payer system records a binding decision. The hold is time-bounded to
+      prevent claims from lingering in review queues indefinitely; an unreviewed denial
+      escalates automatically so it cannot silently disappear.
+    implementation: |
+      `ClaimAdjudicationWorkflow.humanReviewStep` is triggered whenever
+      `AdjudicationDecision.outcome == DENIED`. The workflow emits
+      `HumanReviewRequested{decisionSummary, denialCode, reviewDeadline}` on the entity,
+      sets the claim to `PENDING_REVIEW`, and blocks at the step waiting for either an
+      `approveDenial` or `overrideToApprove` command posted to
+      `ClaimEndpoint POST /api/claims/{id}/review`. The step timeout is 72 h in production
+      configuration (10 s in dev mode, controlled by `akka.javasdk.dev-mode.hitl-timeout`).
+      On `DenialApproved` the entity transitions to `DENIED` and the workflow advances to
+      `evalStep`. On `DenialOverridden` the entity transitions to `APPROVED` and the
+      workflow advances to `evalStep`. If the timeout expires, `ClaimEscalated` is emitted
+      and the claim status becomes `ESCALATED` (a terminal state surfaced in the UI with a
+      distinct badge). Claims routed to `APPROVED` in `adjudicateStep` skip `humanReviewStep`
+      entirely and proceed directly to `evalStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every adjudication decision for policy-rule coverage and evidence completeness
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A well-structured adjudication decision can still be evidence-thin — citing only
+      one policy rule when the procedure family typically requires three, or citing a rule
+      whose applicability does not cover the submitted procedure codes. An on-decision
+      evaluator surfaces these patterns after every decision without blocking the claim's
+      progression, giving the medical-director team a reliable signal about which decisions
+      merit secondary review before they are communicated to the member. Scoring is
+      deterministic and rule-based so the same decision always receives the same score,
+      making the metric auditable and immune to LLM non-determinism in the evaluation itself.
+    implementation: |
+      `AdjudicationScorer` runs inside `ClaimAdjudicationWorkflow.evalStep`, fired
+      immediately after `DecisionReached` lands (or after `DenialApproved` /
+      `DenialOverridden` for claims that passed through `humanReviewStep`). The scorer
+      is deterministic and rule-based (no LLM call). Four checks, one point per check
+      satisfied, on a base of 1:
+      (1) rule citation count — `rationale.citedRuleIds.size() >= 2`.
+      (2) code provenance — every `citedRuleId` maps to a `PolicyRule` whose
+      `applicability` field covers at least one procedure family recognised in
+      `validationResult.codeVerifications`.
+      (3) outcome consistency — if `coverage.exclusionRules` is non-empty and
+      `coverage.coverageAmount.coveredPercent < 0.01`, the decision outcome must be
+      `DENIED` or `PENDING_REVIEW`.
+      (4) evidence completeness — `citedRuleIds.size() >= expectedRuleCount(primaryFamily)`
+      where `expectedRuleCount` is a static map keyed by procedure family (lab→2, surgery→3,
+      mental-health→2).
+      Emits `EvaluationScored{score: 1-5, rationale: String}` naming the first failing check.
+      Scores ≤ 2 flag the claim for secondary review; the App UI highlights the card border
+      red and adds a secondary-review badge.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PHI sanitiser (sector)
+    mechanism: Sanitizer
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Denial human-review hold
+    mechanism: HITL
+    implementation: workflow-pause
+    source: —
+  - id: E1
+    label: Adjudication completeness eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

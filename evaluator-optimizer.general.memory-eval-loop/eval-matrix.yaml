@@ -1,0 +1,106 @@
+schema_version: 1
+sample_id: memory-eval-loop
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: E1
+    name: Record every answer cycle's verdict as an eval event
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The scorer's pass-or-improve verdict is the primary quality signal
+      the loop produces for a given session turn. Recording it as a typed
+      event per attempt gives operators a continuous quality stream across
+      users and sessions — pass rate per attempt number, average score,
+      frequency of grounding failures — without instrumenting the workflow
+      itself. Because memory accumulates across sessions, this stream also
+      feeds the drift watcher (E2) with the raw material it needs to detect
+      quality degradation over time.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `SessionView.getAllSessions`, finds attempts that have been scored
+      but do not yet have a matching `EvalRecorded` event, and calls
+      `SessionEntity.recordEval(attemptNumber, verdict, score, userId)`.
+      The call is idempotent on `(sessionId, attemptNumber)`. The workflow
+      itself also emits one `EvalRecorded` event on the terminal transition
+      (SessionAccepted or SessionRejectedFinal) carrying the whole loop's
+      outcome.
+    regulation_anchors: []
+
+  - id: E2
+    name: Watch for answer-quality drift as memory accumulates
+    mechanism:
+      kind: eval-periodic
+      hook: scheduled-eval
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      Long-term memory is a double-edged input: as the store grows, the
+      answer agent gains more context, but it can also retrieve stale or
+      contradictory entries that degrade answer quality over time. A
+      periodic drift check quantifies this: it computes the rolling
+      pass-rate and average score across recent completed turns and flags
+      sessions where performance has fallen below the configured floor.
+      Without this check, quality erosion across a growing memory corpus
+      would go undetected until user complaints surface it.
+    implementation: |
+      `DriftWatcher` (TimedAction) fires every 10 minutes. Queries
+      `SessionView.getAllSessions`, takes the last 20 completed turns,
+      computes pass-rate and average score, then calls
+      `SessionEntity.recordDriftCheck(passRate, avgScore, driftFlagged,
+      computedAt)` on the sentinel entity id `"drift-watch-singleton"`.
+      `driftFlagged` is set to `true` when `passRate` falls below
+      `evals-with-memory.drift.pass-rate-floor` (default 0.60). The
+      resulting `DriftCheckRecorded` event surfaces in the App UI's drift
+      panel and is visible via `GET /api/sessions/drift-watch-singleton`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Sanitize PII before writing to long-term memory
+    mechanism:
+      kind: sanitizer
+      hook: pre-persist
+      flavor: pii
+    enforcement: system-level
+    rationale: |
+      Long-term memory is persistent and cross-session, making it a
+      higher-risk store than a single conversation buffer. Users may
+      include email addresses, phone numbers, or SSNs in their questions
+      or answers; these values should not accumulate in the memory store
+      where they could surface in future retrievals for the same or other
+      users. A deterministic pre-persist sanitizer is applied before any
+      content is written to `MemoryStore`, ensuring the raw value never
+      reaches the event log.
+    implementation: |
+      `PiiSanitizer.java` is a pure-function utility called inline in
+      `AnswerWorkflow`'s `memoryWriteStep` before each `MemoryStore
+      .addEntry` call. It applies three regex patterns — email
+      (`[\\w.+-]+@[\\w-]+\\.[\\w.]+`), E.164 phone
+      (`\\+?[1-9]\\d{6,14}`), and SSN (`\\d{3}-\\d{2}-\\d{4}`) — and
+      replaces each match with `[REDACTED:EMAIL]`, `[REDACTED:PHONE]`, or
+      `[REDACTED:SSN]` respectively. When a redaction is applied, the
+      workflow also calls `MemoryStore.recordPiiRedaction` which emits a
+      `MemoryEntryPiiRedacted` event for the audit log. The original value
+      never appears in any event payload, view row, or HTTP response.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-attempt eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: E2
+    label: Drift watcher · memory accumulation
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —
+  - id: S1
+    label: PII sanitizer · pre-persist
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

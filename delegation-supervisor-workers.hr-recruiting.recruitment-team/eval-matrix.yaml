@@ -1,0 +1,94 @@
+schema_version: 1
+sample_id: recruitment-team
+coordination_pattern: delegation-supervisor-workers
+domain: hr-recruiting
+
+controls:
+  - id: S1
+    name: Redact protected attributes before any agent reads a resume
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: blocking
+    rationale: |
+      Recruiting text carries protected-attribute signals (age, gender,
+      ethnicity, nationality) that must not reach a matching or screening
+      model. Redacting them at the boundary keeps those signals out of every
+      downstream decision.
+    implementation: |
+      ResumeSanitizer runs in ScreeningWorkflow.sanitizeStep before any agent
+      call, replacing protected-attribute tokens with placeholders and
+      recording ResumeSanitized on CandidateEntity. The workflow cannot reach
+      matchStep until sanitization completes.
+    regulation_anchors:
+      - "EU AI Act Annex III(4) — employment and worker-management (high-risk)"
+
+  - id: E1
+    name: Evaluate every screen decision
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Each automated screen should be scored so a reviewer sees decision
+      quality alongside the recommendation, not just the verdict.
+    implementation: |
+      After ScreenAgent returns, ScreeningWorkflow.screenStep computes an eval
+      score over the decision and records DecisionEvaluated on CandidateEntity;
+      the score renders in the App UI and Eval Matrix surfaces.
+    regulation_anchors: []
+
+  - id: P1
+    name: Watch hiring decisions for fairness drift
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: system-level
+    rationale: |
+      Aggregate outcomes can skew over time even when each decision looks
+      reasonable. A periodic watch surfaces drift before it compounds.
+    implementation: |
+      FairnessDriftMonitor (TimedAction, every 45s) queries
+      CandidatesView.getAllCandidates, computes a skew signal over recently
+      decided candidates, and records DriftFlagged on CandidateEntity when it
+      crosses a threshold.
+    regulation_anchors:
+      - "EU AI Act Annex III(4) — employment and worker-management (high-risk)"
+
+  - id: H1
+    name: Hold the final candidate outcome for human approval
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      No candidate is advanced or rejected by the system alone; a human makes
+      the final call.
+    implementation: |
+      ScreeningWorkflow.awaitDecisionStep pauses while CandidateEntity status is
+      AWAITING_DECISION; an approve or reject command from the App UI resumes it
+      to a terminal state.
+    regulation_anchors:
+      - "EU AI Act Annex III(4) — employment and worker-management (high-risk)"
+
+simplified_view:
+  - id: S1
+    label: Redact protected attributes
+    mechanism: Sanitizer
+    implementation: pre-agent redaction in sanitizeStep
+    source: special-category
+  - id: E1
+    label: Evaluate each screen decision
+    mechanism: Eval (event)
+    implementation: on-decision-eval in screenStep
+    source: —
+  - id: P1
+    label: Fairness / drift watch
+    mechanism: Eval (periodic)
+    implementation: FairnessDriftMonitor every 45s
+    source: —
+  - id: H1
+    label: Human approves final outcome
+    mechanism: HITL
+    implementation: awaitDecisionStep pause
+    source: —

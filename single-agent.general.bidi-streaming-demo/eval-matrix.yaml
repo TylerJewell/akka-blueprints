@@ -1,0 +1,41 @@
+schema_version: 1
+sample_id: bidi-demo
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Reject malformed response frames before they reach the SSE wire
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A bidirectional streaming system makes its correctness guarantees visible frame by
+      frame — a client that receives a frame with an empty content string and done==false,
+      or a frame with a non-sequential frameIndex, cannot assemble a coherent reply.
+      The before-agent-response hook is the right cut point: the malformed frame never
+      reaches the SSE wire, the agent retries within its iteration budget, and the
+      client receives only well-formed frames. Catching this at the agent boundary also
+      prevents partial invalid frame sequences from landing in the entity log.
+    implementation: |
+      `FrameGuardrail` is registered on `ChannelAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate `ResponseFrameList` it (1) asserts the list is non-empty,
+      (2) asserts every frame except the final one has non-empty `content`,
+      (3) asserts the last frame has `done == true`, (4) asserts `frameIndex` values
+      are 0-based and monotonically increasing with no gaps, and (5) asserts every
+      frame's `turnId` matches the expected turn id for the current workflow run.
+      On any failure it returns a structured rejection naming which check failed; the
+      agent loop consumes one of its 3 iterations and retries with a corrected frame
+      list. Passing frame lists flow through to `ChannelWorkflow.respondStep` for
+      per-frame publishing via `ChannelEntity.publishFrame`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Frame-integrity guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

@@ -1,0 +1,71 @@
+schema_version: 1
+sample_id: sdlc-technical-designer
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Reject malformed design proposals before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A technical design agent that returns an incomplete or internally inconsistent proposal
+      can silently mislead an engineering team into building against a broken spec. The most
+      dangerous failures are proposals where decision-log entries reference component ids that
+      do not exist in the components list, or where a selected componentKind falls outside the
+      Akka primitive set (which would generate uncompilable code). Catching these at the
+      before-agent-response hook — before the proposal ever reaches the entity or the UI —
+      forces the agent to self-correct within the same task rather than letting a bad proposal
+      land and require manual triage.
+    implementation: |
+      `ProposalGuardrail` is registered on `DesignAgent` via the agent's guardrail-configuration
+      block, bound to the `before-agent-response` hook. On each candidate response it (1) parses
+      the response into `DesignProposal`, (2) asserts every `components` entry is non-empty,
+      (3) asserts every `decisionLog[].componentId` resolves to a `componentId` in the
+      `components` list, (4) asserts every `componentKind` is in the allowed set
+      (`EventSourcedEntity`, `Workflow`, `HttpEndpoint`, `View`, `Consumer`,
+      `AutonomousAgent`, `TimedAction`), (5) asserts `executiveSummary` is non-empty, and
+      (6) asserts `apiSurface` is non-empty. On any failure returns a structured rejection
+      naming the failed check and the offending field; the agent loop consumes one of its
+      3 iterations and retries. Passing responses flow through to `designStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every proposal for completeness and rationale depth
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Structurally valid proposals can still be thin — component choices without rationale,
+      decision logs that list no alternatives, data models without field-level purpose
+      annotations. In a dev-code context, these gaps are invisible at merge time but surface
+      as engineering confusion later. An on-decision evaluator runs after every proposal lands,
+      producing a 1–5 score that the UI surfaces alongside the proposal itself. Score ≤ 2
+      signals that a human reviewer should inspect the proposal before the feature work begins,
+      without blocking the workflow.
+    implementation: |
+      `ProposalScorer` runs inside `DesignWorkflow.evalStep`, fired immediately after
+      `ProposalRecorded` lands. The scorer is deterministic and rule-based (no LLM call —
+      keeping the single-agent invariant honest): checks that every `ComponentChoice.rationale`
+      is non-empty (−1 point per empty entry, cap −2), that every `DecisionLogEntry.rationale`
+      is non-empty (−1 per empty, cap −2), that every `DecisionLogEntry.alternativesConsidered`
+      has at least one entry (−1 if every entry is empty), and that every `DataField.purpose`
+      is non-empty (−1 if more than half are empty). Emits `EvaluationScored` with a 1–5 score
+      and a one-line rationale. Reviews with score ≤ 2 are flagged on the App UI card.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Proposal-form guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision proposal eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

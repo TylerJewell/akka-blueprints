@@ -1,0 +1,106 @@
+schema_version: 1
+sample_id: computer-use-agent
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Block destructive or out-of-scope actions before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: action-policy-enforcer
+    enforcement: blocking
+    rationale: |
+      A computer-use agent operates directly on live environments — files, forms, accounts,
+      APIs. A single unchecked action (deleting a file, submitting a form with exfiltrated
+      data, navigating to an unauthorized domain) can cause immediate and irreversible harm.
+      The before-tool-call hook is the only control that runs before the action reaches the
+      environment; a post-hoc audit cannot undo a destructive click. Blocking at the
+      tool-call boundary ensures the agent's autonomy is bounded by explicit policy without
+      requiring the operator to predict every possible failure mode in advance.
+    implementation: |
+      `ActionGuardrail` is registered on `ComputerUseAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each proposed
+      `ToolCall` it evaluates three checks: (1) the `actionType` against a blocklist — any
+      `FILE_DELETE` or `ACCOUNT_MODIFY` that lacks a prior approved `ConfirmationReceived`
+      in the current task's action history is rejected; (2) the `targetSelector` against a
+      domain allow-list for `NAVIGATE` and `API_CALL` action types; (3) the `payload` field
+      against a content policy for `TYPE` and `FORM_SUBMIT` actions (no data-exfiltration
+      patterns, no credential-like strings). On any failure, `ActionGuardrail` returns
+      `Guardrail.reject(structuredBlockedReason)` to the agent loop; the agent may propose
+      an alternative within its 20-iteration budget. Passing tool calls flow through to
+      `EnvironmentSimulator.execute(toolCall)`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Stop a running task immediately on operator command
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      An autonomous agent executing actions on a live environment must have an unconditional
+      stop mechanism. If the agent enters an unexpected loop, begins executing in an
+      unintended part of the environment, or if an external event makes the task unsafe to
+      continue, the operator must be able to stop it immediately — without waiting for the
+      current action to complete, without asking the agent, and without any code path that
+      could be overridden by the agent's reasoning. A halt that requires the agent's
+      cooperation is not a real halt.
+    implementation: |
+      `TaskEndpoint` exposes `POST /api/tasks/{id}/halt`. On receipt, it calls
+      `TaskEntity.halt()`, which emits `TaskHalted` and sets `haltRequested = true` on the
+      entity state. `TaskExecutionWorkflow.executeActionStep` reads `task.haltRequested` as
+      its first operation on every iteration — before any agent invocation. When the flag is
+      set, the step transitions immediately to `haltStep`, which calls
+      `TaskEntity.complete(TaskOutcome{status: HALTED})` and terminates the workflow.
+      No agent call is made after a halt is issued. The `actionHistory` is preserved on the
+      entity in full; the UI surfaces it in the selected-task detail pane.
+    regulation_anchors: []
+
+  - id: C1
+    name: Pause and require user approval for high-impact actions
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Some computer-use actions are individually valid per the action-policy guardrail but
+      are consequential enough that a human should explicitly confirm them before execution —
+      form submissions that trigger external workflows, file writes that modify persistent
+      storage, account modifications. Routing these through a confirmation gate keeps the
+      agent productive for low-risk actions while giving operators meaningful oversight of
+      the decisions that matter. The gate is application-level: the workflow suspends at a
+      defined step, the user sees the pending action with its risk rationale, and only their
+      explicit approval causes the action to execute.
+    implementation: |
+      When `TaskExecutionWorkflow.executeActionStep` determines that a proposed `ToolCall`
+      has a high-impact `actionType` (`FORM_SUBMIT`, `FILE_WRITE`, `FILE_DELETE`,
+      `ACCOUNT_MODIFY`, `API_CALL`), it writes `ConfirmationPending{confirmationRequest}`
+      to `TaskEntity` and transitions to `awaitConfirmationStep`. That step polls
+      `TaskEntity.getTask()` every 2 s up to a 300 s timeout. The user approves or rejects
+      via the App UI confirmation banner or `POST /api/tasks/{id}/confirm`. `TaskEndpoint`
+      calls `TaskEntity.recordConfirmation(response)`, which emits `ConfirmationReceived`
+      and clears `pendingConfirmation` from the entity state. `awaitConfirmationStep`
+      detects the cleared field, reads the response, and either executes the action (approved)
+      or records `ActionExecuted{status: REJECTED}` and returns a `USER_REJECTED` signal to
+      the agent on the next `executeActionStep` iteration (rejected). On timeout,
+      `awaitConfirmationStep` fails over to `errorStep`; the pending action does not execute.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-tool-call action guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Operator halt
+    mechanism: Halt
+    implementation: operator-regulator-stop
+    source: —
+  - id: C1
+    label: Human confirmation gate
+    mechanism: HITL
+    implementation: application
+    source: —

@@ -1,0 +1,69 @@
+schema_version: 1
+sample_id: data-processing-planner
+coordination_pattern: planner-executor
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Vet every job dispatch for cost and resource scope before the step runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      Job submissions to Glue, EMR, Spark, and S3 consume real infrastructure and
+      accrue cost the moment the API call lands. A planning agent that proposes a
+      step targeting a production cluster or bucket, or whose cost estimate exceeds
+      the configured ceiling, can drain budget or corrupt production data before a
+      human notices. The guardrail intercepts every dispatch decision before the
+      JobExecutorAgent runs and enforces the cost ceiling and resource deny-list
+      deterministically — no LLM judgment required at the enforcement boundary.
+    implementation: |
+      `CostGuardrail.vet(JobDispatch)` is called by `PipelineWorkflow`'s
+      `guardrailStep` between `proposeStep` and `executeStep`. The vetter checks
+      (a) the engine allow-list (`GLUE_CRAWLER`, `EMR_STEP`, `SPARK_SUBMIT`,
+      `S3_COPY`), (b) `estimatedCostUsd ≤ 5.00` (ceiling from
+      `guardrail-config.yaml`), and (c) that `stepSpec` does not reference a
+      bucket or cluster matching the production deny-list in `guardrail-config.yaml`
+      (prefixes: `prod-`, `prd-`, suffix: `-prod`). On rejection the workflow
+      records a `JobStepBlocked` entry on `PipelineEntity`, then loops back to
+      `proposeStep` so the PlannerAgent sees the block and revises.
+    regulation_anchors: []
+
+  - id: H1
+    name: Allow an operator or regulator to cancel a pipeline run without mid-step abort
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      Data-processing pipelines can run for minutes. An operator investigating an
+      anomaly, or a regulator exercising a stop-processing directive, needs to halt
+      new job submissions immediately without corrupting the step that is currently
+      writing to storage. A hard kill at an arbitrary point in a Glue or EMR step
+      can leave output partitions in an inconsistent state. The operator-regulator-stop
+      pattern finishes the in-flight step first, then stops the workflow — keeping
+      data integrity intact while honoring the cancellation directive.
+    implementation: |
+      `SystemControlEntity` (single instance keyed by literal `"global"`) holds
+      the halt flag. The App UI's operator pane exposes **Cancel pipeline** and
+      **Resume** buttons backed by `POST /api/control/halt` and
+      `POST /api/control/resume`. Every `PipelineWorkflow` reads the flag in its
+      `checkHaltStep` at the top of each loop iteration. On `halted=true`, the
+      workflow finishes the in-flight `executeStep`, then emits
+      `PipelineRunHaltedOperator` and ends the run in `HALTED`. The `haltReason`
+      field on the run record carries the operator's stated reason.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Cost + resource guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call (CostGuardrail + deny-list)
+    source: —
+  - id: H1
+    label: Operator / regulator stop
+    mechanism: Halt
+    implementation: operator-regulator-stop (SystemControlEntity + dashboard)
+    source: —

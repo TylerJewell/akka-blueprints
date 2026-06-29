@@ -1,0 +1,102 @@
+schema_version: 1
+sample_id: itsm-change-planner
+coordination_pattern: planner-executor
+domain: ops-automation
+
+controls:
+  - id: H1
+    name: Require Change Advisory Board approval before any execution step runs
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      ITSM change management practice mandates that a designated reviewer — the
+      Change Advisory Board — formally approve an implementation plan before any
+      production-touching action executes. Without this gate, an AI-generated
+      plan could begin modifying infrastructure immediately after planning
+      completes, with no human having verified the impact assessment, the
+      backout plan, or the step sequence. The CAB approval gate keeps a human
+      accountable for every change that enters production.
+    implementation: |
+      After `PlannerAgent` returns a `ChangeLedger` and `ChangeWorkflow` emits
+      `ChangePlanned`, the workflow parks in `cabApprovalPollStep`. This step
+      repeatedly reads `ChangeEntity.getChange` until the status field is either
+      `APPROVED` or `REJECTED`. The status is set by a CAB reviewer calling
+      `POST /api/changes/{id}/approve` or `POST /api/changes/{id}/reject` via
+      `ChangeEndpoint`, which issues `ChangeApproved` or `ChangeRejected` events
+      on `ChangeEntity`. No `EXECUTE_STEP` task is ever dispatched to
+      `ExecutorAgent` until `APPROVED` is observed.
+    regulation_anchors: []
+
+  - id: G1
+    name: Vet each implementation step against the production CI allow-list before the executor runs it
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      Even a CAB-approved plan can contain a step that references an out-of-scope
+      configuration item or a forbidden system path — due to hallucination, a
+      typo in the CI name, or an ambiguous step description. Allowing the
+      ExecutorAgent to run such a step unvetted risks applying changes to the
+      wrong infrastructure component. The production-touch guardrail intercepts
+      each step before execution, enforcing the CI allow-list and a path-level
+      policy that forbids changes to kernel, boot, and root-owned paths.
+    implementation: |
+      `ProductionTouchGuardrail.vet(ImplementationStep)` is called by
+      `ChangeWorkflow`'s `guardrailStep` before every `executeStepStep`. The
+      vetter checks (a) `targetCi` against `sample-data/ci-allowlist.json` and
+      (b) the `description` field for forbidden path patterns (`/etc`, `/root`,
+      `.ko` kernel modules, `/boot`, `grub.cfg`, MBR). On rejection the workflow
+      records a `StepBlocked` entry via `ChangeEntity.recordBlock` and dispatches
+      a `REVISE_STEP` task to `PlannerAgent`. The revised step is re-vetted
+      before the executor sees it. After two failed revisions of the same step,
+      the workflow transitions to `failStep`.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Automatically trigger the backout plan when a test step fails
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      In ITSM change management, a failed test step is the canonical signal that
+      the change did not apply cleanly and that the system may be in a partial
+      or inconsistent state. Continuing execution after a test failure compounds
+      the damage. The automatic safety halt ensures that the moment a
+      `TestResult.passed == false` is observed, the system stops advancing and
+      immediately begins executing the pre-generated backout plan — with no
+      operator action required and no possibility of the workflow accidentally
+      proceeding to the next implementation step.
+    implementation: |
+      After `TestRunnerAgent` returns a `TestResult`, `ChangeWorkflow`'s
+      `testStepStep` checks `testResult.passed`. On `false`, the workflow
+      emits `TestFailed` on `ChangeEntity` (status → `ROLLING_BACK`) and
+      transitions to `backoutBranchStep`. This step iterates
+      `ChangeLedger.backoutPlan` in reverse sequence order, dispatching each
+      `BackoutStep` to `BackoutAgent` via `EXECUTE_BACKOUT`. Each completed
+      backout step is recorded via `ChangeEntity.recordBackoutStep`. On all
+      backout steps completing, the workflow emits `ChangeRolledBack` and ends
+      with status `ROLLED_BACK`. `BackoutEvaluator` flags the rollback as
+      INCOMPLETE if fewer backout steps succeeded than expected.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: CAB approval gate
+    mechanism: HITL
+    implementation: application (cabApprovalPollStep + ChangeEntity CAB decision)
+    source: —
+  - id: G1
+    label: Production-touch guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call (ProductionTouchGuardrail + REVISE_STEP replanning)
+    source: —
+  - id: HT1
+    label: Automatic backout on test failure
+    mechanism: Halt
+    implementation: automatic-safety-halt (TestResult.passed check → backout branch)
+    source: —

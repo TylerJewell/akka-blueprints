@@ -1,0 +1,84 @@
+schema_version: 1
+sample_id: text-to-sql-guarded
+
+# ---- Purpose ----
+purpose:
+  primary_function: natural-language-to-sql-query-pipeline
+  sector: finance-analysis
+  decisions_surface: recommend-only
+  user_type: financial-analyst-or-data-consumer
+
+# ---- Data ----
+data:
+  inputs:
+    - user-supplied-natural-language-question
+    - in-process-financial-database
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  pii_categories:
+    - employee-name
+    - social-security-number
+    - account-number
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: financial-query-result
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  analyst_reviews_report_before_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-query
+  failure_modes:
+    - destructive-sql-execution
+    - pii-exposure
+    - phase-violation
+    - hallucinated-table
+    - schema-mismatch
+    - prompt-injection-via-question
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reader_role: financial-analyst
+  analyst_must_review_report_before_action: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-h2-database
+    - in-process-function-tools
+  rate_limit_per_query: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  database-access-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  pii-redaction-policy-reviewed: TO_BE_COMPLETED_BY_DEPLOYER

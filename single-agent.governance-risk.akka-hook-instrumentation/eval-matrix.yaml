@@ -1,0 +1,106 @@
+schema_version: 1
+sample_id: hook-instrumentation
+coordination_pattern: single-agent
+domain: governance-risk
+
+controls:
+  - id: G1
+    name: Block disallowed tool calls before the agent invokes them
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      An agent operating over a configurable tool registry can inadvertently call
+      tools it was never intended to reach — either because the task description
+      implies a broader capability than the deployer permits, or because the LLM
+      generalizes from a similar tool name. The before-tool-call hook is the right
+      cut point: intercept the call before any side effect occurs, return a
+      structured rejection the agent can reason about, and record the attempt in
+      the audit log. Blocking at this boundary keeps the tool's actual invocation
+      surface strictly within the deployer-configured allowlist.
+    implementation: |
+      `BeforeToolCallGuardrail` is registered on `ActivityObserverAgent` via the
+      agent's hook-configuration block, bound to the `before-tool-call` hook. On
+      each tool invocation it (1) checks the requested tool name against
+      `HookConfig.blockedToolNames`, returning `Guardrail.reject(structured error)`
+      if the name appears; (2) validates the input parameters against the matching
+      `ToolSpec` schema, returning a schema-mismatch rejection if the shape is
+      wrong. Allowed calls are logged as `HookLogEntry(BEFORE_TOOL_CALL, ALLOWED, ...)`
+      and passed through to the tool execution. Blocked calls log
+      `HookLogEntry(BEFORE_TOOL_CALL, BLOCKED, ...)` with the `rejectReason` field
+      set to the structured error text.
+    regulation_anchors: []
+
+  - id: G2
+    name: Redact sensitive patterns from tool outputs before they re-enter agent context
+    mechanism:
+      kind: guardrail
+      hook: after-tool-call
+      flavor: after-tool-call
+    enforcement: blocking
+    rationale: |
+      Tools can return data that the agent should not incorporate verbatim into
+      subsequent prompts or its final response — internal hostnames, credential
+      fragments that leaked through a query result, PII returned from a lookup
+      that was not originally present in the task input. The after-tool-call hook
+      intercepts the raw output before it reaches the agent's next reasoning step.
+      Redacting at this boundary ensures the agent's context window stays clean
+      while the full original output is preserved as a hash in the audit log for
+      later forensic review.
+    implementation: |
+      `AfterToolCallGuardrail` is registered on `ActivityObserverAgent` bound to
+      the `after-tool-call` hook. For each tool output it scans the result string
+      against every pattern in `HookConfig.sensitivePatterns`; matched spans are
+      replaced with `[REDACTED-<PATTERN_NAME>]`. The SHA-256 of the original output
+      is written to `HookLogEntry.originalPayloadHash` — the raw value never leaves
+      the process. The sanitized string is what the agent sees in its next turn.
+      If no patterns match, the entry records `PASS_THROUGH` and the output flows
+      unchanged.
+    regulation_anchors: []
+
+  - id: G3
+    name: Strip credential-like tokens from prompts before each LLM invocation
+    mechanism:
+      kind: guardrail
+      hook: before-llm-call
+      flavor: before-llm-call
+    enforcement: blocking
+    rationale: |
+      Prompts assembled from tool outputs or task context can contain high-entropy
+      strings, bearer tokens, API keys, or other secret material that found its
+      way into the conversation through a prior tool result or a poorly-scoped task
+      description. Sending those strings to an external model endpoint is a data
+      exfiltration vector even when the model does not explicitly store them.
+      The before-llm-call hook is the last gate before the prompt wire; stripping
+      credential-like patterns here provides a defense-in-depth backstop that does
+      not rely on the agent or the user having sanitized inputs upstream.
+    implementation: |
+      `BeforeLlmCallGuardrail` is registered on `ActivityObserverAgent` bound to
+      the `before-llm-call` hook. Before each LLM invocation it scans the assembled
+      prompt string against every pattern in `HookConfig.credentialPatterns` (high-
+      entropy token pattern, `Bearer \S+` pattern, `key-[A-Za-z0-9]{20,}` pattern,
+      and similar). Each matched span is stripped and replaced with
+      `[REDACTED-CREDENTIAL]`. If stripping removes more than 10% of the token count
+      (estimated by whitespace split), the entry records `REDACTED` and populates
+      `rejectReason` with a size note; otherwise it records `PASS_THROUGH`. The
+      scrubbed prompt is the only form that reaches the model.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-tool-call block
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: G2
+    label: After-tool-call redaction
+    mechanism: Guardrail
+    implementation: after-tool-call
+    source: —
+  - id: G3
+    label: Before-LLM-call credential strip
+    mechanism: Guardrail
+    implementation: before-llm-call
+    source: —

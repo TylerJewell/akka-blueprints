@@ -1,0 +1,100 @@
+schema_version: 1
+sample_id: maps-trip-planner
+coordination_pattern: single-agent
+domain: planning-travel
+
+controls:
+  - id: S1
+    name: Block restricted destinations before any LLM call
+    mechanism:
+      kind: screener
+      flavor: destination-blocklist
+    enforcement: blocking
+    rationale: |
+      Travel planning requests may name destinations subject to sanctions, internal
+      policy restrictions, or operator-configured embargoes. Routing such a request
+      to an LLM and then discarding its output wastes compute and leaks the destination
+      name into model context. The screener runs in a Consumer between submission and
+      agent invocation; a blocked request transitions the entity to BLOCKED and the
+      workflow never starts the agent call. The raw request is preserved on the entity
+      for audit; only the screener's pass/block decision travels to the workflow.
+    implementation: |
+      `RequestScreener` Consumer subscribes to `TripRequestSubmitted` events emitted by
+      `TripRequestEntity`. It loads a blocked-destinations list from
+      `src/main/resources/blocked-destinations.txt` at startup and performs a
+      case-insensitive substring match against every destination in the request. On any
+      match it calls `TripRequestEntity.block(reason)` where reason names the matched
+      keyword. On no match it builds `ScreenResult(PASS, "ok")` and calls
+      `TripRequestEntity.attachScreen(screen)`, then starts `PlanningWorkflow`. The
+      `PlanningWorkflow.awaitScreenedStep` checks `status == BLOCKED` and routes to its
+      terminal no-op rather than calling the agent.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject malformed itineraries before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A trip-planner that returns an itinerary with empty stop lists, negative transit
+      durations, or a day count mismatched to the requested dates would create a poor
+      and potentially confusing experience. The before-agent-response hook is the right
+      cut: catch structural defects before the itinerary leaves the agent's loop,
+      force a retry inside the same task, and only let well-formed itineraries reach
+      the workflow and the entity log.
+    implementation: |
+      `ItineraryGuardrail` is registered on `TripPlannerAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate response it (1) parses the response into `TripItinerary`, (2) asserts
+      every `days[].stops` list is non-empty (at least one PlaceStop per day), (3)
+      asserts every `TransitLeg.durationMinutes` is positive, and (4) asserts the
+      itinerary's day count equals `endDate - startDate + 1` from the original
+      `TripRequest`. On any failure it returns a structured rejection naming the failed
+      check; the agent loop consumes one of its 3 iterations and retries. Passing
+      responses flow through to `planStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every itinerary for coverage and realism
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A structurally valid itinerary can still fail a traveller: it might ignore their
+      stated preferences, pack implausibly many hours of activity into a single day, or
+      produce transit legs that do not connect stops in sequence. An on-decision
+      evaluator surfaces these patterns without blocking the itinerary itself, giving
+      planners and product teams a fast signal about which outputs need human review
+      before they are shared with the traveller.
+    implementation: |
+      `CoverageScorer` runs inside `PlanningWorkflow.evalStep`, fired immediately after
+      `ItineraryRecorded` lands. The scorer is deterministic and rule-based (no LLM
+      call — preserving the single-agent invariant): it tokenises `preferencesText` from
+      the original `TripRequest` and checks that each keyword appears in at least one
+      stop description or `dayNarrative` in the `TripItinerary`; it sums
+      `visitMinutes + sum(leg.durationMinutes)` per day and flags any day that exceeds
+      960 minutes (16 hours); and it verifies that each `TransitLeg.fromPlace` matches
+      the preceding stop's `placeName` within the same day. It emits `EvaluationScored`
+      with a 1–5 score and a one-line rationale. The score is surfaced on the App UI
+      tab; itineraries with score ≤ 2 are flagged for human inspection.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Destination blocklist screen
+    mechanism: Screener
+    implementation: destination-blocklist
+    source: —
+  - id: G1
+    label: Itinerary-form guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision coverage eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

@@ -1,0 +1,70 @@
+schema_version: 1
+sample_id: react-loop-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Block disallowed tool calls before dispatch
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-validator
+    enforcement: blocking
+    rationale: |
+      A ReAct loop gives the agent repeated opportunities to call tools; each action
+      boundary is an opportunity for scope creep, parameter injection, or misuse of
+      a tool the deployer has not sanctioned for this run. Blocking at the tool-call
+      boundary — before the stub executes — is the earliest and cheapest point to
+      enforce policy. A rejected call returns a structured observation rather than
+      an exception, letting the agent reason past the block without crashing the run.
+    implementation: |
+      `ToolCallGuardrail` is a plain Java class invoked synchronously by
+      `ReActWorkflow.loopStep` whenever the agent emits an ACTION step. It checks
+      that the `toolName` is present in `RunRequest.availableTools`, that the call
+      parameters are valid JSON, and that the `toolName` is not in
+      `RunRequest.deniedTools`. On failure it returns a `GuardrailOutcome` with
+      `allowed = false` and a `blockReason` string. The workflow then calls
+      `RunEntity.blockAction(step, blockReason)`, emitting an `ActionBlocked` event,
+      and synthesizes an OBSERVATION step with content `"[BLOCKED] " + blockReason`
+      which the agent receives on its next iteration. The block is fully auditable
+      in the entity event log.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score reasoning chain for circular and unsupported steps
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A ReAct loop that terminates with a final answer may still have produced a
+      low-quality chain: repeated Thoughts without new observations (circular loop),
+      claims about tool results that no Observation supports (hallucinated
+      attribution), or a chain so dominated by Thoughts that the agent barely used
+      its tools (reasoning-only run masquerading as tool-augmented reasoning).
+      A post-hoc chain evaluator surfaces these patterns without stopping the run,
+      giving operators a signal about which completed runs warrant human inspection.
+    implementation: |
+      `ChainEvaluator` runs inside `ReActWorkflow.finalizeStep`, fired immediately
+      after `RunCompleted` or `RunExhausted` lands. It is deterministic and makes
+      no LLM call — maintaining the single-agent invariant. The scorer starts at 5
+      and deducts: 2 points if any THOUGHT text is a verbatim repeat of an earlier
+      THOUGHT, 1 point if the final answer references a tool by name but no
+      OBSERVATION step from that tool exists, and 1 point if the ratio of ACTION
+      steps to total steps is less than 0.1. The result is clamped to a minimum of 1.
+      The score and a one-line rationale are written to `RunEntity` as
+      `EvaluationScored`; runs scoring 1–2 are flagged in the UI for inspection.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-call guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: On-decision chain eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

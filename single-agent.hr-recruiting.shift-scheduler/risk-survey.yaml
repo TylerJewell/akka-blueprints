@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: nexshift
+
+# ---- Purpose ----
+purpose:
+  primary_function: workforce-shift-scheduling
+  sector: hr-recruiting
+  decisions_surface: draft-for-human-approval
+  user_type: workforce-manager
+
+# ---- Data ----
+data:
+  inputs:
+    - open-shift-definitions
+    - employee-roster-with-availability
+    - weekly-hours-already-scheduled
+  data_classes:
+    pii: true
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: false
+
+# ---- Decisions ----
+decisions:
+  authority_level: draft-for-human-approval
+  decision_subject: employee-shift-assignment
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_verdict_before_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-scheduling-run
+  failure_modes:
+    - double-booking
+    - hour-cap-breach
+    - unqualified-placement
+    - shift-left-unassigned-silently
+    - availability-window-mismatch
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: workforce-manager
+  reviewer_must_read_verdict_before_action: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - AssignShift-tool-calls
+  rate_limit_per_run: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  working-time-directive-hours-cap-applied: true

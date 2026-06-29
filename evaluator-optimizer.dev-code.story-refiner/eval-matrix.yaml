@@ -1,0 +1,42 @@
+schema_version: 1
+sample_id: story-refiner
+coordination_pattern: evaluator-optimizer
+domain: dev-code
+
+controls:
+  - id: E1
+    name: Record every review cycle's verdict as an eval event
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      In a story-refinement loop, the reviewer's approve-or-revise verdict is
+      the primary quality signal. Stories that require many revision cycles before
+      approval, or that never converge, indicate either a weak drafter prompt or
+      a rubric that is misaligned with the team's actual definition of done.
+      Recording each verdict as a typed event produces a per-story, per-attempt
+      quality trace without instrumenting the workflow logic itself. Aggregated
+      across submissions, the event stream reveals pass rate by attempt number,
+      average score progression across attempts, and which rubric dimensions
+      (role clarity, AC testability, scope tightness) fail most often — enabling
+      targeted prompt improvement.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. It queries
+      `StoriesView.getAllStories`, identifies attempts that carry a completed
+      review but do not yet have a matching `EvalRecorded` event, and calls
+      `StoryEntity.recordEval(attemptNumber, verdict, score, fieldScores)`.
+      The call is keyed on `(storyId, attemptNumber)` so repeated ticks for
+      the same attempt are idempotent. The `RefinementWorkflow` also emits one
+      `EvalRecorded` event on each terminal transition (StoryApproved or
+      StoryRejectedFinal), carrying the loop-level outcome. Both paths write
+      the same event type so downstream consumers need a single handler.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-attempt review verdict recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

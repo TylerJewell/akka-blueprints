@@ -1,0 +1,108 @@
+schema_version: 1
+sample_id: customer-service-tool-agent
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Redact customer PII from reply log output
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: non-blocking
+    rationale: |
+      Customer support sessions routinely surface names, email addresses, phone
+      numbers, payment-card numbers, postal addresses, and account identifiers.
+      These values must never appear in plaintext in the event log or in any
+      downstream system that consumes session events. The sanitizer runs in a
+      Consumer after the agent reply lands on the entity — the raw reply is
+      preserved for audit on the entity itself, but only the screened form is
+      projected into the view and displayed in the UI.
+    implementation: |
+      `ReplyScreener` Consumer subscribes to `AgentReplied` events emitted by
+      `ConversationEntity`. It runs a pipeline of regex stages (email, phone,
+      16-digit card numbers, SSN-like patterns), a postal-address heuristic,
+      and an account-id-token stage over the `reply.replyText`. Outputs a
+      `ScreenedPayload` carrying the redacted text plus the list of PII categories
+      found. Calls `ConversationEntity.recordScreened(screened)`. The
+      `ConversationView` row carries only the screened form; the raw
+      `reply.replyText` remains accessible solely on the entity for compliance
+      audit. `ConversationWorkflow.screenStep` waits for `ReplyScreened` before
+      marking the workflow complete.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block out-of-policy write tool calls before they execute
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: policy-enforcement
+    enforcement: blocking
+    rationale: |
+      Customer-service agents calling write tools — refunds, account updates —
+      can cause real financial and data side-effects. A before-tool-call guardrail
+      is the correct cut point: the tool never executes if the call is out of
+      policy, so there is nothing to roll back. Read-only tools pass through
+      immediately. Write tools are gated against a configurable auto-approve
+      threshold so that high-value operations require human escalation rather than
+      silent automation.
+    implementation: |
+      `ToolCallGuardrail` is registered on `SupportAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      For each pending tool call it inspects the tool name. Read-only tools
+      (`lookupOrder`, `getAccountInfo`, `checkInventory`) are always allowed.
+      For `processRefund` it parses `arguments.get("amount")` and compares to
+      `cx.refund.auto-approve-limit` (default 250.0, declared in
+      `application.conf`). For `updateAccount` it confirms the arguments are
+      within the permitted field set. Out-of-policy calls return
+      `Guardrail.block(<structured-error>)` with a `blockReason` string; the
+      agent loop receives the synthetic block result as the tool's output and
+      can draft an escalation reply. Allowed calls proceed normally. The
+      `ToolCall` record captures `outcome: ToolCallOutcome.BLOCKED` and the
+      `blockReason` for every blocked call.
+    regulation_anchors: []
+
+  - id: G2
+    name: Reject replies containing raw PII or lacking grounding before the agent sends
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-content-validator
+    enforcement: blocking
+    rationale: |
+      Even when the agent's tool calls are sound, the drafted reply can contain
+      a raw payment-card number echoed from a tool result, or a government
+      identifier that appeared in the account record. A before-agent-response
+      guardrail catches these before any reply leaves the agent loop, and also
+      enforces that every reply is grounded in at least one tool result — preventing
+      the agent from fabricating order details it did not actually look up.
+    implementation: |
+      `ReplyGuardrail` is registered on `SupportAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate `AgentReply` it (1) applies a regex for 13–16-digit
+      card-number patterns in `replyText`, (2) applies a regex for SSN-like
+      patterns (`###-##-####`), (3) checks that at least one `toolCalls` entry
+      carries `outcome == ALLOWED` (grounding check — if the agent called no
+      tools it cannot have grounded its reply), and (4) asserts `replyText
+      .length() <= 1000`. On any failure returns `Guardrail.reject(<structured-
+      error>)` naming the failed check; the agent loop consumes one of its 4
+      iterations and retries. Passing replies flow through to
+      `ConversationWorkflow.screenStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction in reply log
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Write-tool policy gate
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: G2
+    label: Reply content + grounding check
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: industry-research-team
+
+# Pre-filled where the blueprint's nature determines the answer. Fields the
+# deployer must answer carry the literal string TO_BE_COMPLETED_BY_DEPLOYER so
+# the generated UI's Risk Survey tab fades them out.
+
+purpose:
+  primary_function: Produce industry research briefs by delegating sector analysis to worker agents and synthesizing the findings
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: advisory-only
+  user_type: internal research and intelligence staff
+
+data:
+  inputs:
+    - research request prompts
+    - public market and sector signals
+    - draft and synthesized brief text
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+decisions:
+  authority_level: recommend-only
+  decision_subject: research topics and sectors, not people
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+
+failure:
+  blast_radius: single-tenant
+  failure_modes:
+    - ungrounded or fabricated claim in a brief
+    - missing required sector disclaimer
+    - sector decomposition omits a relevant sector
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: research lead reviews completed briefs
+  audit_frequency: weekly
+
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls: []
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+    content-generation: true
+    synthetic-media: false
+  model:
+    gpai: true
+    foundation: true
+  subjects:
+    children: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

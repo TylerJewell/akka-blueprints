@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: rag-support-bot
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Strip PII from customer queries before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Customer support messages routinely contain email addresses, order numbers,
+      account identifiers, phone numbers, and person names. Allowing these to reach
+      a language model introduces both data-protection risk (the model provider may
+      log request bodies) and prompt-injection surface (an attacker can craft an
+      order number that bleeds into the instruction context). Stripping identifiers
+      before any LLM call eliminates this class of exposure; the raw query is
+      preserved on the entity for audit but the model only ever sees the redacted
+      form.
+    implementation: |
+      `MessageSanitizer` Consumer subscribes to `QueryReceived` events emitted by
+      `ConversationEntity`. It runs a pipeline of regex stages targeting well-known
+      formats (emails, phone numbers, order-number tokens ORD-\d+, payment-card-like
+      tokens), a heuristic stage (postal addresses, person names), and an
+      account-id-token stage. Outputs a `SanitizedQuery` carrying the redacted text
+      plus the list of categories found. Calls `ConversationEntity.attachSanitized`.
+      `ConversationWorkflow.replyStep` then passes `sanitized.redactedQuery` as the
+      `SupportAgent` task instruction text; the raw query remains accessible only via
+      `query.rawQuery` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject replies not anchored in retrieved passages before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A customer-facing support reply that invents product details, cites a passage
+      that was never retrieved, or sends an ESCALATE outcome with the escalation flag
+      unset can cause real customer harm — wrong return windows, incorrect pricing,
+      or missed escalation routing. The before-agent-response hook is the correct
+      interception point: malformed or ungrounded replies are caught before they
+      leave the agent loop and before they are written to the entity log, so the
+      customer never sees an unanchored claim. Retrying within the same task budget
+      preserves latency because the conversation context is already loaded.
+    implementation: |
+      `ReplyGuardrail` is registered on `SupportAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On
+      each candidate response it (1) parses the response into `SupportReply`, (2)
+      asserts at least one `sourcePassageId` in the reply is present in
+      `retrieved.passages`, (3) asserts `escalation == true` iff
+      `outcome == ESCALATE`, and (4) asserts `answerText` length is within the
+      50–600 character policy window. On any failure returns a structured rejection
+      naming the failed check; the agent loop consumes one of its 3 iterations and
+      retries. Passing responses flow through to `replyStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII strip before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Passage-anchoring guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

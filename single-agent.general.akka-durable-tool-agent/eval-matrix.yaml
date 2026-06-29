@@ -1,0 +1,45 @@
+schema_version: 1
+sample_id: durable-weather-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Gate every outbound tool call before the activity executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: argument-validator
+    enforcement: blocking
+    rationale: |
+      Weather tool calls are the only exit point where user-supplied input — a city name
+      or bounding box — reaches an external HTTP service. Without a gate at this boundary,
+      a misbehaving or injected query could request data for restricted locations, trigger
+      a runaway forecast horizon (30-day calls are significantly more expensive than 3-day
+      calls on most weather APIs), or pass a bounding box large enough to saturate the
+      provider's rate limit in a single call. Placing the check inside the workflow
+      activity — after the agent decides to call the tool but before the HTTP request
+      fires — means the guard runs on every tool call regardless of how the agent arrives
+      at that decision, and the activity's durability guarantees the check cannot be
+      bypassed by a mid-flight restart.
+    implementation: |
+      `ToolCallGuardrail` is registered on `WeatherAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook, and also
+      invoked directly at the top of each `WeatherToolActivity` method as a defence-in-
+      depth check. For `get_current_weather` it verifies the `city` argument is non-empty
+      and absent from the `RESTRICTED_CITIES` set configured in `application.conf`. For
+      `get_forecast` it additionally asserts `days` is in `[1, 14]`. For
+      `get_weather_alerts` it asserts the bounding box area (latitude delta × longitude
+      delta) does not exceed 25 square degrees. On any failure it returns
+      `GuardrailResult{pass: false, rejectionCode, rejectionDetail}` and the activity
+      records a `ToolCallRecord` with `status = BLOCKED`; the agent loop receives the
+      structured `{tool, argument, reason}` error and may rephrase its arguments within
+      its 4-iteration budget.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-call argument guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

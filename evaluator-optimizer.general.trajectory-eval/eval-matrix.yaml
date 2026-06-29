@@ -1,0 +1,100 @@
+schema_version: 1
+sample_id: trajectory-eval
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: G1
+    name: Enforce step-count ceiling before the evaluator runs
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      An agent that calls an unbounded number of tools before the evaluator
+      sees the trajectory can exhaust system resources and produce deviation
+      reports whose step-index references are meaningless against a bounded
+      reference path. A deterministic pre-evaluation guardrail catches runaway
+      trajectories, returns structured feedback to the Runner that names the
+      excess, and keeps the Evaluator focused on semantic path comparison
+      rather than raw size management.
+    implementation: |
+      Wired as the `guardrailStep` of `TrajectoryWorkflow`, immediately after
+      `executeStep`. A pure-function check on `trajectory.stepCount() <=
+      maxSteps` (config key `trajectory-eval.runner.max-steps`, default 20).
+      On failure, emits `TrajectoryGuardrailVerdictRecorded` with
+      `verdict.passed = false` and `reasonCode = "OVER_STEP_LIMIT"`, then
+      transitions back to `executeStep` with a fixed `DeviationReport`
+      indicating the step-count violation. The Runner's next call sees the
+      report as the prior deviation context. The cycle still counts toward
+      `maxAttempts`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every evaluation cycle verdict as a periodic eval event
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      Trajectory regression testing produces a continuous pass/fail signal
+      across every (evaluationId, attemptNumber) pair. Recording that signal
+      as a typed event per attempt lets operators compute pass-rate trends per
+      scenario, detect deviation-count drift across model updates, and identify
+      which step indices fail most often — all without instrumenting the
+      workflow itself or querying raw entity history.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `EvaluationsView.getAllEvaluations`, finds attempts that have received a
+      `TrajectoryEvaluated` event but do not yet have a matching `EvalRecorded`
+      event, and calls `EvaluationEntity.recordEval(attemptNumber, verdict,
+      deviationCount, stepLimitExceeded)`. The call is idempotent on
+      `(evaluationId, attemptNumber)`. The workflow itself also emits one
+      `EvalRecorded` event on the terminal transition (EvaluationPassed or
+      EvaluationFailedFinal) carrying the whole loop's outcome.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the evaluation loop gracefully at the retry ceiling
+    mechanism:
+      kind: halt
+      flavor: graceful-degradation
+    enforcement: system-level
+    rationale: |
+      A runner that repeatedly produces diverging trajectories could run
+      indefinitely if the loop had no bound. Unbounded loops consume model
+      budget, accumulate trajectory data, and leave evaluations in-progress
+      for observability surfaces. The halt mechanism terminates the loop at a
+      configured ceiling, surfaces the attempt with the fewest deviations as
+      the best-effort result, and records a structured failure reason so
+      operators can diagnose whether the reference path, the runner's prompting,
+      or the task itself is the root cause.
+    implementation: |
+      `TrajectoryWorkflow` reads `trajectory-eval.runner.max-attempts`
+      (default 4) at start. Before scheduling the next `executeStep`, it checks
+      `attemptCount < maxAttempts`. If the ceiling is hit, the workflow
+      transitions to `failStep`, which emits `EvaluationFailedFinal` with the
+      attempt that had the smallest `deviationCount` as the best-of and a
+      structured `failureReason` ("max attempts reached" plus the count).
+      `defaultStepRecovery(maxRetries(2).failoverTo(failStep))` ensures any
+      unrecoverable agent failure also lands in the same terminal state rather
+      than hanging.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · step-count ceiling
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Per-cycle eval recorder
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —
+  - id: HT1
+    label: Halt at retry ceiling
+    mechanism: Halt
+    implementation: graceful-degradation
+    source: —

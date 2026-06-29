@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: financial-advisor-agent
+coordination_pattern: single-agent
+domain: finance-analysis
+
+controls:
+  - id: S1
+    name: Strip regulated financial identifiers before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: blocking
+    rationale: |
+      Client profiles submitted to a financial advisory system routinely carry
+      account numbers, tax identifiers (SSN, EIN, TIN-like tokens), national IDs,
+      and payment-card-like values. Allowing these into an LLM provider call creates
+      a regulated data-leakage risk: the provider's request log retains the raw
+      payload and the provider's training pipeline may ingest it. The sector
+      sanitizer removes the risk at the only place it can be removed cleanly —
+      between the raw submission and the first byte sent to the model.
+    implementation: |
+      `ClientDataSanitizer` Consumer subscribes to `AdvisoryRequested` events
+      emitted by `AdvisoryEntity`. It runs a staged redaction pipeline over the
+      serialized `ClientProfile` JSON: an IBAN and brokerage-account-ID stage
+      (patterns such as `BR-\d{8,}`), an SSN/EIN/TIN-like stage, a national-ID
+      stage, and a payment-card-like token stage. Outputs a `SanitizedProfile`
+      carrying the redacted JSON plus the list of identifier categories found. Calls
+      `AdvisoryEntity.attachSanitized(sanitized)`. `AdvisoryWorkflow.adviseStep`
+      then passes `sanitized.redactedProfileJson` as the `FinancialAdvisorAgent`
+      task attachment; the raw payload remains accessible only via
+      `request.profile` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block non-compliant advisory responses before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: sector
+    enforcement: blocking
+    rationale: |
+      A financial advisory agent operating across multiple account types (BROKERAGE,
+      IRA, ROTH_IRA) must not recommend instruments outside the authorized set for
+      each account type — IRAs, for example, have restrictions on certain alternative
+      assets under IRS rules. A response that passes structural parsing but contains
+      a prohibited asset class or an out-of-range portfolio weight would create
+      regulatory exposure. The before-agent-response hook is the correct interception
+      point: the violation is caught before the response leaves the agent loop and
+      before it is persisted into the entity log.
+    implementation: |
+      `RecommendationGuardrail` is registered on `FinancialAdvisorAgent` via the
+      agent's guardrail-configuration block, bound to the `before-agent-response`
+      hook. On each candidate response it (1) parses the response into
+      `AdvisoryResponse`, (2) checks every `holdingAdvice[].assetClass` against
+      the authorized set for the advisory's `accountType` (IRA and ROTH_IRA
+      reject crypto instruments unless the request carries an explicit
+      suitability-waiver flag), (3) asserts the `riskRating` is one of
+      `{CONSERVATIVE, MODERATE, AGGRESSIVE}`, and (4) asserts every
+      `holdingAdvice[].suggestedWeight` is in `[0.0, 1.0]`. On any failure
+      returns a structured rejection naming the violated check; the agent loop
+      consumes one of its 3 iterations and retries. Passing responses flow
+      through to `adviseStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Regulated-identifier redaction before LLM
+    mechanism: Sanitizer
+    implementation: sector
+    source: —
+  - id: G1
+    label: Asset-class and weight guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

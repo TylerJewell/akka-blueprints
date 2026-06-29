@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: activity-interrupt-cancellation
+coordination_pattern: continuous-monitor
+domain: ops-automation
+
+controls:
+  - id: H1
+    name: Stop any running activity on operator request
+    mechanism:
+      kind: halt
+      hook: operator-regulator-stop
+      flavor: operator-regulator-stop
+    enforcement: blocking
+    rationale: |
+      Automation tasks operating on infrastructure, data pipelines, or
+      reporting systems can cause irreversible side-effects if left to run
+      past the point an operator identifies a problem. A single API call to
+      POST .../cancel must be sufficient to stop the agent at the next safe
+      iteration boundary — no polling, no waiting for the current step to
+      finish producing its full output. The blocking enforcement means the
+      workflow will not advance to the next execution step once the
+      CancellationRequested event has been recorded on the entity.
+    implementation: |
+      `ActivityEndpoint.cancel` writes a `CancellationRequested` event to
+      `ActivityEntity`, transitioning the record to CANCELLING immediately.
+      At the start of each `executeStep` iteration, `ActivityWorkflow` reads
+      the entity's current status. When it sees CANCELLING, it passes
+      `shouldContinue=false` to `TaskRunnerAgent`, which returns a terminal
+      `StepResult` without performing further work. The workflow then
+      branches to `cleanupStep`. The signal path from API call to agent halt
+      is bounded by one workflow iteration timeout (default 15 s).
+    regulation_anchors: []
+
+  - id: H2
+    name: Run cleanup before marking a cancelled task terminal
+    mechanism:
+      kind: halt
+      hook: graceful-degradation
+      flavor: graceful-degradation
+    enforcement: blocking
+    rationale: |
+      Operations automation tasks often hold transient resources (locks,
+      partially-written artefacts, in-progress allocations) at the moment a
+      cancellation arrives. Terminating the entity without cleanup leaves
+      those resources in an unknown state, which can block subsequent runs or
+      leave infrastructure in an inconsistent condition. Every cancellation
+      path — whether operator-initiated or triggered by `StaleActivityReaper`
+      — must produce a recorded `CleanupPlan` before the CANCELLED terminal
+      event is emitted, ensuring operators can verify what was cleaned up and
+      what may need manual follow-through.
+    implementation: |
+      `ActivityWorkflow` contains a dedicated `cleanupStep` that is entered
+      from both the operator-cancel path and the stale-timeout path.
+      `cleanupStep` calls `CleanupAgent` (typed Agent) with the full
+      `ActivityTask` record and the completed `stepLog`. `CleanupAgent`
+      returns a `CleanupPlan` containing ordered remediation steps, a reason,
+      and an optional `rollbackNote`. The workflow emits `CleanupRecorded`
+      on `ActivityEntity` before emitting `TaskCancelled`. The cleanup plan
+      is persisted in entity state and surfaced in both the SSE stream and
+      the detail view in the UI. Cleanup failure triggers `TaskFailed` (not
+      silent drop).
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Operator cancel API
+    mechanism: Halt
+    implementation: operator-regulator-stop
+    source: —
+  - id: H2
+    label: Cleanup-before-terminal
+    mechanism: Halt
+    implementation: graceful-degradation
+    source: —

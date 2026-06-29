@@ -1,0 +1,102 @@
+schema_version: 1
+sample_id: bank-support-agent
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Veto card-blocking tool calls until risk threshold is met
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: pre-condition-check
+    enforcement: blocking
+    rationale: |
+      Card-blocking is a destructive, largely irreversible action: once a card is
+      deactivated the customer loses access to their funds until a replacement arrives.
+      An agent operating under customer pressure — a lost-card report, a fraud claim —
+      can be steered by adversarial or ambiguous enquiry text into triggering a block
+      prematurely. The before-tool-call hook is the right cut: it fires before
+      AccountLookupTool.blockCardRequest executes, so a low-risk enquiry can never
+      cause a card block no matter what the model outputs. Only when the running
+      riskScore in task context reaches 7 or above is the call allowed through.
+    implementation: |
+      `ToolCallGuardrail` is registered on `BankSupportAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On every
+      `AccountLookupTool` invocation it inspects the tool parameters. If the call
+      carries `blockCard=true`, the guardrail reads the current `riskScore` from the
+      task context. A score below 7 produces `Guardrail.block(structured-error)` naming
+      the unmet pre-condition; a score of 7 or above lets the call through. All
+      non-blocking lookups (balance, transaction history) pass unconditionally, with
+      no score check.
+    regulation_anchors: []
+
+  - id: G2
+    name: Reject malformed support responses before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A support response that carries a risk score outside [1, 10], or one that
+      sets blockCard=true with a risk score below 7, would either confuse downstream
+      systems that route on the score or trigger an unauthorized card-block action.
+      Catching these inconsistencies inside the agent loop — before the response leaves
+      the AutonomousAgent — means the entity log never receives a malformed record and
+      the UI never displays contradictory data to support staff.
+    implementation: |
+      `ResponseGuardrail` is registered on `BankSupportAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate response it (1) parses the response into `SupportResponse`, (2) asserts
+      `riskScore` is in `[1, 10]`, (3) asserts that if `blockCard == true` then
+      `riskScore >= 7`, and (4) asserts `answer` is non-empty. On any failure it returns
+      a structured rejection naming the failed check; the agent loop consumes one of its
+      3 iterations and retries. Passing responses flow through to `EnquiryWorkflow.
+      respondStep`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII from response log before writing to the audit view
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Support agents routinely include the customer's account number, name, email
+      address, and phone number in their answer text — because those identifiers help
+      personalize the response. That same personalization creates a compliance exposure
+      if the answer text flows unredacted into a centralized audit log accessible to
+      analysts, data engineers, or external audit tools. The sanitizer strips these
+      identifiers before writing to the view, so the audit trail contains only the
+      redacted form while the entity retains the full response for authorized compliance
+      review.
+    implementation: |
+      `ResponseSanitizer` is invoked directly inside `EnquiryWorkflow.sanitizeStep`
+      immediately after `ResponseRecorded` lands on `EnquiryEntity`. It runs a pipeline
+      of regex stages over `response.answer`: account-number tokens matching
+      `ACCT-\d+`, sort codes matching `\d{2}-\d{2}-\d{2}`, email addresses, phone
+      numbers, and a person-name heuristic. Outputs a `SanitizedLog` carrying the
+      redacted answer and the list of PII categories found. Calls
+      `EnquiryEntity.attachSanitizedLog(sanitizedLog)`, which emits `LogSanitized` and
+      transitions the entity to `LOGGED`. `EnquiryView` only projects the
+      `sanitizedLog.redactedAnswer`; the raw `response.answer` is accessible only via
+      `GET /api/enquiries/{id}` by callers with compliance access.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Card-block pre-condition check
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: G2
+    label: Response structure + consistency check
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: PII redaction before audit log
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

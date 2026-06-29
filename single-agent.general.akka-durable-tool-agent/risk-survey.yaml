@@ -1,0 +1,84 @@
+schema_version: 1
+sample_id: durable-weather-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: weather-data-retrieval-and-summarisation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: inform-only
+  user_type: general-end-user
+
+# ---- Data ----
+data:
+  inputs:
+    - user-weather-queries
+    - city-names
+    - geographic-bounding-boxes
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  external_api_calls: true
+  external_api_provider: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: inform-only
+  decision_subject: weather-conditions-and-forecast
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  downstream_action_taken_by: human-user
+
+# ---- Failure ----
+failure:
+  blast_radius: single-query
+  failure_modes:
+    - hallucinated-conditions
+    - stale-data-presented-as-current
+    - guardrail-bypass-via-indirect-location
+    - tool-call-loop
+    - fixture-data-leaked-to-production
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: false
+  reviewer_role: none
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - weather-api-current
+    - weather-api-forecast
+    - weather-api-alerts
+  rate_limit_per_query: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+  invocation_modes:
+    - trigger_agent
+    - call_agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  restricted_location_block_list_maintained: TO_BE_COMPLETED_BY_DEPLOYER

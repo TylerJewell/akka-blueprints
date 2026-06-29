@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: project-tracker
+
+# ---- Purpose ----
+purpose:
+  primary_function: ops-automation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: advisory-with-gate
+  user_type: project-manager
+
+# ---- Data ----
+data:
+  inputs:
+    - project-board-events
+    - task-metadata
+    - team-member-capacity-signals
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    employee-performance-data: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: advisory-with-gate
+  decision_subject: employee
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-before-escalation
+
+# ---- Failure ----
+failure:
+  blast_radius: single-employee-or-team
+  failure_modes:
+    - incorrect-assignment
+    - nudge-to-wrong-person
+    - unwarranted-escalation
+    - missed-overdue-detection
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: project-manager
+  reviewer_must_approve_every_outgoing: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - assignTask (stub; replace with Microsoft Graph API call in production)
+    - sendNudge (stub; replace with messaging platform call in production)
+    - escalateTask (stub; replace with ticketing system call in production)
+  rate_limit_per_message: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  employee_consent_to_ai_assignment: TO_BE_COMPLETED_BY_DEPLOYER
+  works_council_notification_required: TO_BE_COMPLETED_BY_DEPLOYER

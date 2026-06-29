@@ -1,0 +1,82 @@
+schema_version: 1
+sample_id: smart-home-agent
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Block unauthorized or out-of-range device actions before dispatch
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: action-validator
+    enforcement: blocking
+    rationale: |
+      IoT actuators produce physical consequences that cannot be undone by a
+      software rollback: a lock that is unlocked is unlocked, a thermostat
+      driven to an extreme temperature wastes energy and risks hardware
+      damage. The before-tool-call hook is the right cut — it intercepts the
+      agent's proposed DeviceAction before any dispatch occurs, validates that
+      the target device exists in the registry, that the action type is
+      permitted for that device class, and that any numeric parameter is
+      within the device's declared safe range. An agent that proposes an
+      out-of-range thermostat set-point or references a non-existent device
+      receives a structured rejection and retries within the same task rather
+      than propagating a bad command to the actuator layer.
+    implementation: |
+      `ActionGuardrail` is registered on `HomeControlAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      On each candidate `DeviceAction` it (1) looks up the `deviceId` in
+      `DeviceRegistry.getDevices()` — returning `device-not-found` if absent,
+      (2) asserts the `actionType` is in the permitted set for the device's
+      `DeviceClass` (e.g., `TURN_ON`/`TURN_OFF`/`SET_BRIGHTNESS` for
+      `LIGHT`; `LOCK`/`UNLOCK` for `LOCK`) — returning `action-type-mismatch`
+      on violation, and (3) for actions with a `numericParam`, asserts
+      `device.minValue <= numericParam <= device.maxValue` — returning
+      `parameter-out-of-range` with the allowed bounds on violation.
+      A passing action flows to `CommandWorkflow.guardStep` which records
+      `GuardPassed` on `CommandEntity`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require resident confirmation before physically consequential actions
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Lock, unlock, and thermostat-override commands have direct physical and
+      safety implications: an unintended unlock creates a security exposure;
+      an unintended thermostat override in an occupied space affects occupant
+      comfort and energy cost. A resident who issues an ambiguous command
+      ("make it comfortable") should see the specific proposed action before
+      it executes. The HITL confirmation step is the right mechanism because
+      it is synchronous with the workflow — the action cannot proceed until a
+      human explicitly approves it, and a cancellation cleanly terminates the
+      workflow without partial state.
+    implementation: |
+      `CommandWorkflow.confirmStep` fires when `HomeControlAgent` returns a
+      `DeviceAction` whose `actionType` is in `{LOCK, UNLOCK,
+      SET_TEMPERATURE}`. The step emits `ConfirmationRequested` on
+      `CommandEntity` (transitioning it to `AWAITING_CONFIRMATION`) and then
+      waits — up to its 300 s `stepTimeout` — for `CommandEndpoint` to
+      receive either `POST /api/commands/{id}/confirm` or
+      `POST /api/commands/{id}/cancel` from the resident. On confirm, the
+      workflow calls `DeviceRegistry.applyAction(...)` and emits
+      `ActionDispatched`. On cancel, the workflow emits `ActionCancelled` and
+      ends. If the timeout elapses without a response, the step fails over to
+      `CommandWorkflow::error`, which calls `CommandEntity.fail(
+      "confirmation-timeout")`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Action guardrail (before-tool-call)
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Resident confirmation (HITL)
+    mechanism: HITL
+    implementation: application
+    source: —

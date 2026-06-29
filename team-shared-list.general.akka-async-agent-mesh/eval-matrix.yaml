@@ -1,0 +1,83 @@
+# Eval Matrix for the akka-async-agent-mesh Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain async messaging sample with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: akka-async-agent-mesh
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: team-shared-list
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Refuse inter-agent sends to unknown recipients before the tool executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: |
+      Every call to send_message_to_agent_async is a tool call that names a
+      recipient agent. In an async mesh where neither agent observes the other
+      directly, a misaddressed message — caused by an agent hallucinating an
+      agent id or by a prompt that injects an unexpected target — would either
+      silently drop or route to an unintended receiver. Neither outcome is
+      detectable after the fact without a gate that fires before the send. The
+      guardrail also reads the operator halt flag, so a halted mesh cannot
+      dispatch new messages regardless of the agent's output.
+    implementation: |
+      A before-tool-call guardrail registered on `DispatcherAgent` inspects every
+      `send_message_to_agent_async` call before it executes. The guardrail reads
+      the configured `async-mesh.agents` roster from `application.conf` and refuses
+      any call whose `toAgent` field is not present in that list. It also refuses
+      all sends when `SystemControl` reports the mesh is halted. On a refusal,
+      `MessageDispatchWorkflow.sendStep` calls `MessageBusEntity.recordBlocked`
+      and terminates without creating a `MessageEntity`, recording the request as
+      `SEND_BLOCKED` with the guardrail reason.
+    regulation_anchors: []
+
+  - id: S1
+    name: Sanitize PII from message payloads before writing to durable storage
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: non-blocking
+    rationale: |
+      Agents exchange free-text messages that may carry personally identifiable
+      data — email addresses, phone numbers, or national identifiers embedded by
+      the user or injected by a prior agent's output. If those values are written
+      to `AgentMemoryEntity` or projected into `MessageBusView`, they persist in
+      durable storage and can surface in future memory-recall context or SSE
+      streams. Sanitizing at the workflow boundary, before any entity write,
+      ensures the raw value never reaches storage even if the agent itself does
+      not filter it.
+    implementation: |
+      `PiiSanitizer` is a deterministic pure function (not an LLM call) that
+      scans a String for email addresses, phone-number patterns, and 9-digit
+      national IDs using compiled regular expressions, replacing each match with
+      `[REDACTED:<type>]`. `MessageProcessingWorkflow.sanitizeStep` calls
+      `PiiSanitizer.sanitize(payload.body)` and stores the sanitized body in
+      local workflow state before `processStep` runs. Both `AgentMemoryEntity`
+      and the `MessageEntity.complete` call receive the sanitized body; the
+      original value is never written to any entity or projected into
+      `MessageBusView`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Inter-agent send guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: PII sanitizer on message payloads
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

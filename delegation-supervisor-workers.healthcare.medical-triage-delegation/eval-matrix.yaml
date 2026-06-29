@@ -1,0 +1,101 @@
+# Eval Matrix for the medical-triage-delegation Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a healthcare-domain sample; no specific jurisdiction-bound anchors are
+# pre-filled — deployers must add them based on their regulatory context (GDPR Art. 9,
+# MDR, HIPAA, etc.). regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: medical-triage-delegation
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: healthcare
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: S1
+    name: Strip special-category health data before it reaches any agent
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: non-blocking
+    rationale: >
+      The raw question submitted by a user may contain direct identifiers (name, date of
+      birth, NHS number) alongside symptom descriptions that constitute GDPR Article 9
+      special-category health data. Processing identifiable health data through a third-party
+      LLM without a lawful basis and adequate safeguards violates the regulation. A
+      special-category sanitizer runs before any agent receives the text, replacing
+      identified PII tokens with anonymised placeholders and confirming that no
+      re-identifiable health markers are forwarded.
+    implementation: >
+      TriageWorkflow.sanitizeStep executes a deterministic in-process PII stripper against
+      the raw question before classifyStep passes it to TriageCoordinator. The step applies
+      regex and dictionary patterns for direct identifiers (names, NHS/insurance numbers,
+      dates of birth) and flags residual sensitive tokens for redaction. No LLM is invoked
+      in this step. The sanitised question string is stored as a separate field on the
+      TriageWorkflow state and is the only version forwarded to agents.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block responses that make diagnosis claims before they reach the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: >
+      A triage system that phrases its output as a definitive medical diagnosis — rather than
+      informational guidance — exposes deployers to patient-safety liability and may constitute
+      unauthorised medical practice. The synthesised response is the patient-facing artifact.
+      A before-agent-response guardrail intercepts the output before it leaves the workflow
+      and rejects any response that contains diagnosis language ("you have", "this is",
+      "diagnosed with"), prescriptive medication quantities, or incorrect emergency-care
+      triage that could delay a user seeking urgent help.
+    implementation: >
+      TriageWorkflow.guardrailStep runs a two-pass check: first a deterministic string
+      matcher for prohibited phrasing patterns, then an LLM judge that evaluates the full
+      SynthesisedResponse for safety compliance on a pass/fail basis. On failure, the
+      workflow calls CaseEntity.block, transitioning the case to BLOCKED and recording the
+      rejection reason in failureReason. The guardrail runs after synthesiseStep and before
+      hotlStep; a blocked case never emits HotlFlagged.
+    regulation_anchors: []
+
+  - id: H1
+    name: Notify a clinical compliance reviewer after every successful response
+    mechanism:
+      kind: hotl
+      flavor: live-compliance-review
+    enforcement: non-blocking
+    rationale: >
+      Even when the safety guardrail passes, a triage agent operates in a high-stakes
+      domain where individual responses may be technically non-violating but contextually
+      inappropriate for a specific patient situation. Providing a live review channel for
+      clinical compliance staff allows a trained reviewer to inspect any response before the
+      user acts on it, and to surface systemic issues (repeated near-misses, emerging topic
+      clusters) that a per-response guardrail cannot detect. This control does not block
+      delivery; it ensures reviewability.
+    implementation: >
+      TriageWorkflow.hotlStep calls CaseEntity.flagHotl after every RESPONDED transition,
+      setting hotlPending = true and emitting HotlFlagged. ComplianceSampler (TimedAction,
+      every 5 minutes) queries CaseView for RESPONDED cases with hotlPending = true and
+      emits a compliance review notification. A compliance reviewer calls
+      CaseEntity.acknowledgeHotl to clear the flag. The App UI shows a "Pending review"
+      badge on cases where hotlPending is true.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: Special-category health data sanitizer
+    mechanism: "sanitizer · special-category"
+    short: Remove PII and GDPR Article 9 health markers before any agent receives the question.
+  - id: G1
+    name: Safety guardrail — no diagnosis claims
+    mechanism: "guardrail · before-agent-response"
+    short: Block responses containing diagnosis language, prescriptive dosing, or unsafe triage.
+  - id: H1
+    name: Human-on-the-loop compliance review
+    mechanism: "hotl · live-compliance-review"
+    short: Flag every successful response for clinical compliance review before the user acts on it.

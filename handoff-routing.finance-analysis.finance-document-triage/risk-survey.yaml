@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: finance-document-triage
+
+# ---- Purpose ----
+purpose:
+  primary_function: document-processing
+  sector: financial-services
+  decisions_surface: internal-processing-result
+  user_type: finance-operations-analyst
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-finance-documents
+  data_classes:
+    pii: true
+    phi: false
+    financial-data: true
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    aml-flags: true
+    credit-scores: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+  sector_data_redacted_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: draft-only
+  decision_subject: finance-document
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible-until-published
+  routing_decisions_made_by_ai: true
+  processing_decisions_made_by_ai: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-document
+  failure_modes:
+    - wrong-document-type-routing
+    - fabricated-approval-amount
+    - pii-leakage-via-llm
+    - sector-data-leakage
+    - regulatory-conclusion-overreach
+    - fabricated-credit-conclusion
+    - invented-reference-id
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: finance-operations-supervisor
+  reviewer_must_approve_every_outgoing: false
+  reviewer_must_unblock_guardrail_failures: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_document: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+  licensed_compliance_officer_required: TO_BE_COMPLETED_BY_DEPLOYER

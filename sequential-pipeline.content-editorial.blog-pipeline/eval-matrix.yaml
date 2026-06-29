@@ -1,0 +1,50 @@
+schema_version: 1
+sample_id: ai-blog-writer-pipeline-with-ollama
+coordination_pattern: sequential-pipeline
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Block agent responses that violate content policy before writing to the entity
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      In a content-editorial pipeline, prose produced by an LLM can carry
+      prohibited content, unsupported factual claims, or post-type mismatches
+      (a tutorial with no code example, an opinion piece with no first-person
+      stance) regardless of how well the earlier phases ran. Catching these
+      violations at the agent-response boundary — before the result is written
+      onto the entity or surfaced in the UI — means the stored entity log always
+      contains only policy-cleared prose. The before-agent-response hook is the
+      right cut: the agent has already produced a typed result, but the workflow
+      has not yet committed it. Rejection at this boundary lets the agent revise
+      within its iteration budget without requiring a compensating write, a
+      rollback event, or a separate review workflow.
+    implementation: |
+      `ContentPolicyGuardrail` is registered on `BlogWriterAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On every task response, the guardrail receives the full prose output and
+      applies three checks: (1) prohibited-pattern scan — loads keyword patterns
+      from `src/main/resources/policy/prohibited-patterns.json` and scans the
+      prose for matches; (2) originality check — every factual claim in
+      DRAFT/EDIT/PUBLISH phase prose must trace to a `Reference.url` present in
+      the upstream `ResearchNotes` (passed in via `TaskDef` metadata
+      `"researchNotesJson"`); (3) post-type alignment — a `tutorial` post must
+      contain at least one code fence (` ``` `); an `opinion` post must contain
+      first-person stance markers. On violation, the guardrail returns a structured
+      `policy-violation` error to the agent loop and calls
+      `PostEntity.recordGuardrailBlock(phase, reason, checkedAt)` so the block is
+      visible in the UI's block-log strip and in the audit log. On accept, calls
+      `PostEntity.recordContentCleared(phase, checkedAt)` before the workflow writes
+      the phase result event.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Content-policy response guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

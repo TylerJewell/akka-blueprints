@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: wp-autotagger
+
+# ---- Purpose ----
+purpose:
+  primary_function: seo-tag-generation
+  sector: content-editorial
+  decisions_surface: automated
+  user_type: content-editor-or-publisher
+
+# ---- Data ----
+data:
+  inputs:
+    - wordpress-post-urls
+    - post-bodies
+    - tagging-configuration
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    credential-tokens: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  credential_tokens_redacted_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: automated
+  decision_subject: blog-post-taxonomy-tags
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_verdict_before_action: false
+
+# ---- Failure ----
+failure:
+  blast_radius: single-post
+  failure_modes:
+    - off-topic-tags
+    - tag-count-overflow
+    - wrong-post-id
+    - credential-leakage-via-llm
+    - malformed-tag-strings
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: content-editor
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - wordpress-api-write
+  rate_limit_per_post: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  post-content-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,90 @@
+schema_version: 1
+sample_id: bq-pipeline-builder
+coordination_pattern: planner-executor
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Vet every executor dispatch before DDL or DML is drafted
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The Planner has authority to dispatch steps that draft SQL or SQLX
+      artifacts destined for production BigQuery datasets. A single unchecked
+      `DROP TABLE` or unbounded `DELETE FROM` in a generated transformation
+      query could irreversibly destroy data in a downstream mart or reporting
+      layer before any human reviews the output. Because the Planner reasons
+      over natural-language descriptions of pipeline intent, it may propose
+      destructive DDL as a "cleanup" sub-step without recognising the blast
+      radius. A deterministic guardrail wired to the dispatch hook intercepts
+      the `BuildStepDecision` before any SQL text is produced and blocks it
+      on explicit pattern matches — ensuring the Planner must find a
+      non-destructive alternative or surface a clear failure rather than
+      silently generating harmful SQL.
+    implementation: |
+      `DdlGuardrail.vet(BuildStepDecision)` is called by `PipelineWorkflow`'s
+      `guardrailStep` between `proposeStep` and `dispatchStep`. The vetter
+      checks (a) the executor allow-list (only SCHEMA_ANALYST, SQL_COMPOSER,
+      DATAFORM_MODELER, VALIDATOR are permitted), (b) a per-executor content
+      policy: SQL_COMPOSER steps are rejected when the step text contains the
+      case-insensitive patterns `DROP TABLE`, `TRUNCATE TABLE`, `DELETE FROM`
+      without a WHERE clause, or `ALTER TABLE … DROP COLUMN`; DATAFORM_MODELER
+      steps are rejected when the target dataset is not in the allow-list
+      (raw, staging, mart, sandbox). On reject, `PipelineWorkflow` calls
+      `PipelineEntity.recordBlock(step, reason)`, which emits `StepBlocked`
+      and appends a `StepEntry` with verdict `BLOCKED_BY_GUARDRAIL` to the
+      step ledger. The workflow then loops back to `proposeStep` so the
+      Planner sees the blocker on its next `DECIDE_STEP` call.
+    regulation_anchors: []
+
+  - id: CI1
+    name: Gate every generated artifact through a deterministic validation suite before it enters the build manifest
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      Executors produce SQL queries, SQLX model definitions, and JavaScript
+      macros that are candidates for the final build manifest. Including a
+      malformed artifact — one with an undefined column reference, a missing
+      Dataform `config` block, or a bare `process.env` call in a JS macro —
+      propagates a defect downstream into every pipeline that depends on that
+      artifact. Running a deterministic validation suite synchronously inside
+      the workflow step means the defect is caught at generation time, the
+      Planner sees the precise failure on its next loop tick, and the artifact
+      never reaches the manifest. The gate does not require a live BigQuery
+      connection; it works purely against the fixture schemas loaded at
+      service startup.
+    implementation: |
+      `ValidationSuite.run(StepOutput)` is called by `PipelineWorkflow`'s
+      `ciGateStep` immediately after `dispatchStep` returns a `StepOutput`.
+      For ANALYZE_SCHEMA outputs it verifies the JSON envelope matches the
+      fixture schema format. For COMPOSE_SQL outputs it resolves every
+      column reference against the matching fixture schema and enforces
+      `snake_case` alias naming. For MODEL_DATAFORM outputs it checks that
+      every SQLX definition contains a `config` block, that every table
+      reference uses the `ref()` helper, and that no JS macro contains a
+      bare `process.env` call. For VALIDATE_OUTPUT outputs it deserialises
+      the embedded `ValidationReport` and propagates its `passed` flag.
+      On gate failure the workflow records a `StepEntry` with verdict
+      `CI_GATE_FAILED` (without calling `recordStep` on the entity — the
+      gate failure is itself the record), then loops back to `proposeStep`
+      so the Planner can revise the step. Three consecutive `CI_GATE_FAILED`
+      verdicts on the same `(executor, step)` pair exhaust the failure budget
+      and transition the pipeline to `FAILED`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: DDL dispatch guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: CI1
+    label: Artifact CI test gate
+    mechanism: CI Gate
+    implementation: test-gate (ValidationSuite — schema + SQLX + JS lint)
+    source: —

@@ -1,0 +1,96 @@
+# Eval Matrix for the job-posting-eeo Akka sample.
+#
+# This sample is in the hr-recruiting domain, where job-posting text is regulated
+# speech. The guardrail and sanitizer controls carry light equal-employment-
+# opportunity anchors; the documentation gate anchors to recordkeeping practice.
+# Deployers replace these with their own jurisdiction-specific obligations.
+
+schema_version: 1
+sample_id: job-posting-eeo
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: hr-recruiting
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Screen the drafted posting for discriminatory language
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: >
+      A job posting is the public, advertised expression of a hiring decision.
+      Discriminatory phrasing — age cues, gendered role language, exclusionary
+      requirements — is unlawful in advertised employment opportunities. A
+      before-agent-response guardrail stops such text before the draft is
+      persisted for downstream sanitizing and publication.
+    implementation: >
+      Wired on the PostingLead agent's before-agent-response hook inside
+      JobPostingWorkflow.draftStep. Runs a deterministic discriminatory-term
+      matcher plus an LLM judge with a 5-second timeout over the proposed
+      DraftPosting. On failure the workflow transitions the posting to BLOCKED
+      and emits PostingBlocked with the verdict reason.
+    regulation_anchors:
+      - "US EEOC — Title VII of the Civil Rights Act of 1964 (advertising)"
+      - "US ADEA — age references in job advertisements"
+
+  - id: S1
+    name: Sanitize encoded protected-class preferences from the draft
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: blocking
+    rationale: >
+      Even a draft that passes the discriminatory-language screen can encode a
+      protected-class preference indirectly (for example a coded preference for
+      a demographic). The sanitizer removes these special-category preference
+      terms so the cleared posting cannot signal a protected-class target.
+    implementation: >
+      ProtectedClassSanitizer runs in JobPostingWorkflow.sanitizeStep over the
+      DraftPosting body, matching against a configurable protected-class term
+      list, removing matches, and recording removedTerms on the SanitizedPosting.
+      The workflow then emits PostingSanitized. The raw draft is retained on the
+      entity for audit; only the sanitized body advances.
+    regulation_anchors:
+      - "US EEOC — protected-class non-preference in recruitment"
+
+  - id: C1
+    name: Verify hiring-policy documentation before publication
+    mechanism:
+      kind: ci-gate
+      flavor: documentation-gate
+    enforcement: build-gate
+    rationale: >
+      A posting cannot be cleared for publication unless it carries the required
+      equal-opportunity statement and the build ships the EEO-statement template
+      and the sanitizer term list. The documentation gate is the last check
+      before a posting leaves the system.
+    implementation: >
+      A CI test-gate fails the build if src/main/resources/eeo-statement.txt or
+      the protected-class term list is absent. The runtime analog is
+      JobPostingWorkflow.complianceStep, which verifies the sanitized posting's
+      eeoStatement is present and non-empty before emitting PostingCleared.
+    regulation_anchors:
+      - "US OFCCP — recruitment recordkeeping practice"
+
+simplified_view:
+  - id: G1
+    label: EEO output guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: EEOC Title VII / ADEA
+  - id: S1
+    label: Protected-class sanitizer
+    mechanism: Sanitizer
+    implementation: special-category
+    source: EEOC recruitment
+  - id: C1
+    label: Hiring-policy documentation gate
+    mechanism: CI gate
+    implementation: documentation-gate
+    source: OFCCP recordkeeping

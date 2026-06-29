@@ -1,0 +1,67 @@
+# Eval Matrix for the supervisor-workers Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (general domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: supervisor-workers
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Intercept every supervisor tool call before it executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-policy-enforcement
+    enforcement: blocking
+    rationale: >
+      The supervisor and its workers are granted access to search and code-execution-style
+      tools. Without a scoped policy at the call site, a misdirected routing decision or a
+      prompt-injection attempt inside a task description could cause a worker to invoke a
+      tool it has no business calling. The before-tool-call hook intercepts every invocation
+      before it leaves the agent runtime, so the permitted-tool list is enforced at the point
+      of action rather than in the prompt alone.
+    implementation: >
+      A before-tool-call guardrail is registered on TaskSupervisor. Before each tool
+      invocation the guardrail checks the requested tool name against the permitted list
+      [SEARCH, CHART_GENERATE]. If the call is not in the list, the guardrail returns a
+      blocked verdict immediately; CollaborationWorkflow.guardrailStep detects the verdict
+      and calls TaskEntity.blockTask, moving the task to BLOCKED with a failureReason.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score each completed task's synthesis decision
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The supervisor merges outputs from two workers with different tool modalities — search
+      results and chart data. Errors in that merge (e.g., chart series misattributed to a
+      finding, or a summary that inverts the chart trend) are not caught by the before-tool-call
+      guardrail, which only fires at call time. A periodic rubric evaluation of the completed
+      synthesis surfaces quality issues without blocking delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries TaskView for the oldest COMPLETED
+      task lacking an evalScore, runs a 1-5 rubric judge over the TaskResult, and calls
+      TaskEntity.recordEval(score, rationale), emitting TaskEvalScored. The score and
+      rationale appear beside the task row in the App UI.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Tool-call guardrail on the supervisor
+    mechanism: "guardrail · before-tool-call"
+    short: Block any tool invocation outside the permitted list before it executes.
+  - id: E1
+    name: Synthesis quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the supervisor's merged output after delivery.

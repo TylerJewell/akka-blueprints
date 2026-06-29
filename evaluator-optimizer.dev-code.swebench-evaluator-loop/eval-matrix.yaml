@@ -1,0 +1,102 @@
+schema_version: 1
+sample_id: swebench-evaluator-loop
+coordination_pattern: evaluator-optimizer
+domain: dev-code
+
+controls:
+  - id: C1
+    name: Gate every patch on structural correctness before the test evaluator runs
+    mechanism:
+      kind: ci-gate
+      hook: test-gate
+      flavor: test-gate
+    enforcement: blocking
+    rationale: |
+      A coding agent producing unified diffs can generate structurally invalid
+      output — missing hunk headers, binary content markers, or diffs so large
+      they would destabilise the test runner environment. Sending such output to
+      the TestEvaluatorAgent wastes an iteration budget and risks the evaluator
+      producing a misleading partial result. A deterministic gate that validates
+      diff structure before any test execution begins ensures the evaluator's
+      PASS/FAIL verdict is always a meaningful signal about code correctness,
+      never about patch formatting.
+    implementation: |
+      Wired as the `gateStep` of `SolvingWorkflow`, immediately after
+      `patchStep`. A pure-function check that (a) the diff starts with valid
+      `---` / `+++` hunk markers, (b) contains no binary content indicators,
+      and (c) `patch.lineCount() <= swebench.solving.max-diff-lines` (default 500).
+      On failure, emits `IterationGateVerdictRecorded` with `verdict.passed = false`
+      and `reasonCode = "MALFORMED_DIFF"` or `"EXCEEDS_LINE_BUDGET"`, then
+      transitions back to `patchStep` with a structured `TestFailureSummary`
+      whose `overallSummary` names the violation. The gate-blocked iteration
+      still counts toward `maxIterations`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every iteration's test outcome as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The TestEvaluatorAgent's pass/fail verdict and the accompanying pass/fail
+      counts are the highest-information signal the loop produces. Recording
+      each as a typed event gives operators a continuous quality stream —
+      iteration-by-iteration convergence rate, frequency of gate-blocked
+      patches, distribution of failing test counts at each attempt — without
+      modifying the workflow control flow. This data is also the raw material
+      for offline benchmark scoring against the SWE-Bench ground truth.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `IssuesView.getAllIssues`, finds iterations that have been evaluated but
+      do not yet have a matching `EvalRecorded` event, and calls
+      `IssueEntity.recordEval(iterationNumber, verdict, passCount, failCount,
+      gateBlocked)`. The call is idempotent on `(issueId, iterationNumber)`.
+      The workflow itself also emits one `EvalRecorded` event on the terminal
+      transition (IssueSolved or IssueExhausted) carrying the loop-level
+      outcome — total iterations, final verdict, peak pass count.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the solving loop at iteration and token budget ceilings
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      An unconstrained patch-and-test loop is a runaway cost risk: token usage
+      grows with each revision because the full failure context is appended to
+      each subsequent prompt, and a hard-to-fix issue can drive unlimited LLM
+      spend. An iteration ceiling alone is insufficient if each iteration uses
+      more tokens than the last. The halt mechanism enforces both a maximum
+      iteration count and a cumulative token budget, whichever is reached first,
+      and ends the loop with a fully-preserved audit record rather than an
+      abrupt termination.
+    implementation: |
+      `SolvingWorkflow` reads `swebench.solving.max-iterations` (default 5) and
+      `swebench.solving.token-budget` (default 50000) at start. Before
+      scheduling the next `patchStep`, it checks `iterationCount < maxIterations`
+      AND `tokenUsage < tokenBudget`. If either ceiling is hit, the workflow
+      transitions to `exhaustStep`, which emits `IssueExhausted` with the
+      highest-passCount iteration's diff as best-of and a structured
+      `exhaustionReason` naming which ceiling was reached and the current counts.
+      `defaultStepRecovery(maxRetries(2).failoverTo(exhaustStep))` ensures any
+      unrecoverable agent failure also lands in `EXHAUSTED` rather than hanging.
+    regulation_anchors: []
+
+simplified_view:
+  - id: C1
+    label: CI gate · structural diff validation
+    mechanism: CI Gate
+    implementation: test-gate
+    source: —
+  - id: E1
+    label: Per-iteration eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: HT1
+    label: Halt at iteration and token budget
+    mechanism: Halt
+    implementation: automatic-safety-halt
+    source: —

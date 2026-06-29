@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: gitwikidemoagent
+coordination_pattern: single-agent
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Block push to wrong branch or namespace before tool executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: external-write-validator
+    enforcement: blocking
+    rationale: |
+      A wiki agent that can push to any branch or any path in a repository is a
+      single misconfiguration away from overwriting protected content or polluting
+      the wrong branch. The risk is asymmetric: a bad write is visible to every
+      reader of the repository within seconds and cannot be silently retried. The
+      before-tool-call hook is the only cut that prevents the push from executing
+      at all — a post-hoc check would already have written. Three properties are
+      verified: the target ref must equal the configured target_branch; the commit
+      author field must match the submitting user recorded in the update request
+      (preventing agent-authored commits from impersonating arbitrary identities);
+      and the page path must fall within the configured allowed namespace, so an
+      agent cannot be coerced into writing outside the wiki directory.
+    implementation: |
+      `GitPushGuardrail` is registered on `WikiEditorAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      push tool call it reads `akka.gitwiki.target-branch` and
+      `akka.gitwiki.allowed-namespace` from `application.conf`. It then checks
+      (1) target ref equals `target_branch`, (2) commit author matches
+      `PageUpdateRequest.author` from the active update, and (3) `pagePath` starts
+      with `allowed-namespace`. On any failure it returns `Guardrail.reject(reason)`,
+      which prevents the GitHub API call from executing. `GitPushConsumer` receives
+      the rejection and calls `PageEntity.recordPushResult(PushResult.rejected(reason))`,
+      transitioning the entity to `PUSH_REJECTED`. No retry path exists for a rejected
+      push — the deployer must correct configuration and resubmit.
+    regulation_anchors: []
+
+  - id: H1
+    name: Attest repo token and branch config at startup before accepting requests
+    mechanism:
+      kind: ci-gate
+      flavor: configuration-gate
+    enforcement: build-gate
+    rationale: |
+      A wiki service that starts successfully but is missing its GitHub token will
+      accept update requests, run the agent, and then fail silently at push time —
+      leaving updates in a permanent FAILED state with no actionable error message
+      for the user. Validating at startup shifts the failure earlier and makes it
+      unambiguous: the service either starts with a working push credential or does
+      not start at all. The configuration gate also verifies that a target branch is
+      explicitly named — preventing the common mistake of defaulting to the
+      repository's default branch (often a protected branch) when no override is set.
+    implementation: |
+      `StartupConfigGate` is called from `Bootstrap.java` before the Akka runtime
+      initializes. It reads `GITHUB_TOKEN` from the environment, reads
+      `akka.gitwiki.target-branch`, `akka.gitwiki.repo-owner`, and
+      `akka.gitwiki.repo-name` from the loaded `Config`. It then issues a
+      `GET https://api.github.com/repos/{owner}/{repo}` probe using JDK `HttpClient`
+      with the token in `Authorization: token {GITHUB_TOKEN}`. A 200 response confirms
+      the token is valid and the repo is accessible. A 401 or 403 response emits a
+      clear message: "StartupConfigGate: GITHUB_TOKEN is set but was rejected by
+      GitHub — check token scope and expiry." A 404 emits: "StartupConfigGate:
+      repository {owner}/{repo} not found — check akka.gitwiki.repo-owner and
+      akka.gitwiki.repo-name." On any check failure `StartupConfigGate.verify()`
+      throws `StartupConfigException`; `Bootstrap` rethrows, and the JVM exits
+      with code 1. On success, `StartupConfigGate.isHealthy()` returns `true`
+      throughout the service lifetime and `WikiUpdateWorkflow.configCheckStep`
+      delegates to this flag.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Push-target guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Token + branch config gate
+    mechanism: CI Gate
+    implementation: configuration-gate
+    source: —

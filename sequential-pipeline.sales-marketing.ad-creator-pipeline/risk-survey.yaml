@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: ad-creator-pipeline
+
+# ---- Purpose ----
+purpose:
+  primary_function: ad-copy-and-visual-generation-pipeline
+  sector: sales-marketing
+  decisions_surface: recommend-only
+  user_type: marketer-or-content-creator
+
+# ---- Data ----
+data:
+  inputs:
+    - user-supplied-product-url
+    - in-process-product-fixture-corpus
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: ad-copy-and-visual-spec
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_approves_before_publication: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-ad-job
+  failure_modes:
+    - disallowed-claim-in-copy
+    - scraping-policy-violation
+    - missing-attribute-grounding
+    - phase-violation
+    - brand-safety-rejection-budget-exhausted
+    - competitor-mention-in-copy
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: marketer-or-brand-manager
+  reviewer_approves_ad-package_before_publication: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_ad_job: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  advertising-standards-body-in-scope: TO_BE_COMPLETED_BY_DEPLOYER
+  product-page-scraping-terms-of-service-reviewed: TO_BE_COMPLETED_BY_DEPLOYER

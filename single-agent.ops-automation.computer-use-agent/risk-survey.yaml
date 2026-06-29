@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: computer-use-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: ops-automation-computer-use
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: autonomous-action-with-hitl-gates
+  user_type: operator-or-knowledge-worker
+
+# ---- Data ----
+data:
+  inputs:
+    - task-descriptions
+    - screenshots
+    - file-contents
+    - form-data
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  screenshots_retained_for_audit: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-with-confirmation-gates
+  decision_subject: computer-action
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+  high_impact_actions_require_human_approval: true
+
+# ---- Failure ----
+failure:
+  blast_radius: TO_BE_COMPLETED_BY_DEPLOYER
+  failure_modes:
+    - destructive-action-before-guard-fires
+    - confirmation-timeout-with-pending-action
+    - agent-loop-in-wrong-environment-context
+    - screenshot-misread-leading-to-wrong-target
+    - guardrail-bypass-via-crafted-payload
+    - out-of-scope-navigation
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: true
+  operator_can_halt_at_any_time: true
+  confirmation_gate_for_high_impact_actions: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion-with-vision
+    - environment-actions
+  max_iterations_per_task: 20
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  environments_permitted_for_ai_automation: TO_BE_COMPLETED_BY_DEPLOYER
+  action_audit_log_retained: true

@@ -1,0 +1,39 @@
+schema_version: 1
+sample_id: chroma-rag-agent
+coordination_pattern: single-agent
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Reject ungrounded citations before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: citation-groundedness-validator
+    enforcement: blocking
+    rationale: |
+      A RAG system that retrieves real passages can still fabricate citation IDs in its
+      structured output — the retrieval step does not prevent the LLM from naming a chunkId
+      that was never in the context window. If that fabricated citation reaches the entity
+      log and the UI, users will read authoritative-looking citations that do not exist in
+      the corpus. The before-agent-response hook is the correct cut point: validate every
+      cited chunkId against the list of chunks that were actually passed to the agent,
+      before any citation lands in storage.
+    implementation: |
+      `CitationGuardrail` is registered on `RagAgent` via the agent's guardrail-configuration
+      block, bound to the `before-agent-response` hook. On each candidate response it
+      (1) parses the response into `RagAnswer`, (2) cross-references every
+      `citations[].chunkId` against the `List<RetrievedChunk>` that `QueryWorkflow.answerStep`
+      embedded in the task instructions, and (3) asserts `citations` is non-empty when
+      `responseText` is longer than 20 characters and is not a known refusal phrase. On any
+      failure, returns a structured rejection naming the offending chunkId or the empty-
+      citations condition; the agent loop consumes one of its 3 iterations and retries.
+      Passing responses flow through to `answerStep`'s result-collection call.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Citation-groundedness guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

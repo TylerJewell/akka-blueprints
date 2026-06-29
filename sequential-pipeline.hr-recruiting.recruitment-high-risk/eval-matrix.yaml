@@ -1,0 +1,104 @@
+schema_version: 1
+sample_id: recruitment-high-risk
+coordination_pattern: sequential-pipeline
+domain: hr-recruiting
+
+controls:
+  - id: G1
+    name: Block sourcing calls to non-allowlisted domains
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: scope-enforcement
+    enforcement: blocking
+    rationale: |
+      Automated collection of candidate profiles from sites whose terms of
+      service forbid it creates legal exposure. Every sourcing tool call must be
+      checked against an allowlist before it runs so a forbidden domain never
+      reaches the network.
+    implementation: |
+      A before-tool-call guardrail on the SourcingAgent source-candidates tool
+      validates the target domain against the sourcing.allowlist in
+      application.conf. A non-allowlisted domain blocks the call; the
+      RecruitmentWorkflow writes SourcingBlocked and the CandidateEntity moves
+      to BLOCKED with the domain recorded.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact protected attributes before any candidate is scored
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: blocking
+    rationale: |
+      Candidate evaluation for employment is high-risk. Protected attributes
+      must not influence screening or scoring, so they are removed from the
+      sourced profile before either stage runs.
+    implementation: |
+      sanitizeStep runs ProfileSanitizer.redact on the sourced profile, removing
+      name, gender, age, ethnicity, photo, and marital-status signals. The
+      CandidateEntity records the redacted categories via ProfileSanitized;
+      ScreeningAgent and MatchingAgent only ever see redacted text.
+    regulation_anchors:
+      - framework: eu-ai-act
+        citation: Annex III(4) — AI systems used in recruitment and selection
+      - framework: gdpr
+        citation: Art. 9 — processing of special categories of personal data
+
+  - id: HT1
+    name: Honor an operator or regulator halt on new evaluations
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      A regulator or operator may demand an immediate stop to a high-risk hiring
+      system. The platform must stop new evaluations without a redeploy.
+    implementation: |
+      SystemControlEntity (KeyValueEntity) holds a halted flag toggled by
+      /api/system/halt and /api/system/resume. RequisitionConsumer checks it
+      before starting a workflow, and RecruitmentWorkflow's first step checks it
+      before sourcing; a halt writes EvaluationHalted and ends the run.
+    regulation_anchors:
+      - framework: eu-ai-act
+        citation: Art. 26 — obligations of deployers of high-risk AI systems
+
+  - id: HO1
+    name: Aggregate outcome metrics for deployer monitoring
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: non-blocking
+    rationale: |
+      A deployer of a hiring system must monitor its operation. Aggregated
+      outcome metrics let a human on the loop spot anomalies in pass, reject,
+      and match-score patterns.
+    implementation: |
+      DeployerMonitor (TimedAction, every 60 s) queries CandidatesView and
+      computes evaluated, matched, rejected, and blocked counts plus the average
+      match score, surfaced at /api/monitoring and on the App UI monitoring panel.
+    regulation_anchors:
+      - framework: eu-ai-act
+        citation: Art. 26(5) — deployer monitoring of high-risk AI operation
+
+simplified_view:
+  - id: G1
+    label: Sourcing domain guard
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: EU AI Act Annex III(4)
+  - id: S1
+    label: Special-category redaction
+    mechanism: Sanitizer
+    implementation: special-category
+    source: GDPR Art. 9
+  - id: HT1
+    label: Operator/regulator halt
+    mechanism: Halt
+    implementation: operator-regulator-stop
+    source: EU AI Act Art. 26
+  - id: HO1
+    label: Deployer monitoring
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring
+    source: EU AI Act Art. 26(5)

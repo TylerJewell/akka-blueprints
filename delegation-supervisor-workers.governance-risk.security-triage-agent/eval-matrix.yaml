@@ -1,0 +1,72 @@
+# Eval Matrix for the security-triage-agent Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (governance-risk domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: security-triage-agent
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: governance-risk
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Require officer approval before executing any mitigation action
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      A triage report produced by AI workers carries inherent uncertainty: vulnerability
+      scores may be imprecise and threat-actor attribution may be incomplete. Routing the
+      mitigationPlan through a named security officer before any remediation action executes
+      ensures that a human with operational authority and contextual knowledge makes the
+      consequential decision. The workflow parks at AWAITING_APPROVAL and will not proceed
+      to MITIGATED unless a real officer identity is recorded alongside the approval.
+    implementation: >
+      TriageWorkflow.approvalStep transitions IncidentEntity to AWAITING_APPROVAL and
+      writes an ApprovalRequested event to ApprovalEntity, keyed by incidentId. The
+      workflow parks there until IncidentEndpoint receives POST /api/incidents/{id}/approve
+      or .../reject, which calls ApprovalEntity.approve or .deny. ApprovalEntity emits
+      ApprovalGranted or ApprovalDenied and sends a resume signal to the parked workflow.
+      No mitigation command reaches IncidentEntity until ApprovalGranted is confirmed.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample each completed triage for accuracy and risk-level quality
+    mechanism:
+      kind: eval-event
+      hook: ~
+      flavor: on-incident-reporter
+    enforcement: non-blocking
+    rationale: >
+      The SecurityCoordinator's TRIAGE task merges two independently gathered payloads
+      into a single prioritised report. Inaccuracies in risk-level assignment (e.g.,
+      rating a CRITICAL vulnerability as MODERATE) may delay the correct operational
+      response. A periodic eval captures those assignments against a rubric and surfaces
+      a quality score on the App UI, enabling operators to identify systematic
+      under- or over-rating without blocking incident delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries IncidentView.getAllIncidents,
+      filters client-side for the oldest MITIGATED incident without an evalScore, runs a
+      1–5 rubric judge over the TriageReport (assessing summary completeness, riskLevel
+      accuracy relative to the attached VulnerabilityBundle, and mitigationPlan specificity),
+      then calls IncidentEntity.recordEval(score, rationale), emitting TriageEvalScored.
+      The App UI renders the score beside the incident row without reloading.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Officer approval gate
+    mechanism: "hitl · application"
+    short: Park the workflow at AWAITING_APPROVAL; no mitigation executes without a named officer's sign-off.
+  - id: E1
+    name: Triage quality eval
+    mechanism: "eval-event · on-incident-reporter"
+    short: Rubric-score the coordinator's triage decision after each mitigated incident.

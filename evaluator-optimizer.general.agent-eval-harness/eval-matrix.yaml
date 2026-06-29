@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: agent-eval-harness
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: E1
+    name: Record accuracy snapshot after every run reaches a terminal state
+    mechanism:
+      kind: eval-periodic
+      hook: on-decision-eval
+      flavor: continuous-accuracy
+    enforcement: non-blocking
+    rationale: |
+      An eval harness that does not record its own output accuracy over time
+      cannot detect model drift, prompt regression, or dataset distribution
+      shift. Recording a typed AccuracySnapshot event per completed run gives
+      operators a continuous accuracy time-series — pass rate per suite, trend
+      across runs, correlation with model or prompt changes — without requiring
+      a separate monitoring pipeline. The event is non-blocking: a failure in
+      snapshot recording never terminates a run or blocks the CI gate check.
+    implementation: |
+      AccuracySampler (TimedAction) fires every 60 s. Queries
+      EvalRunsView.getAllRuns, finds runs that have reached a terminal state
+      (PASSED or FAILED) but do not yet carry an AccuracySnapshot event, and
+      calls EvalRunEntity.recordAccuracySnapshot(passRate, passCount, failCount,
+      suiteName). The call is idempotent per runId. The workflow itself also
+      emits one AccuracySnapshot on the terminal transition (RunPassed or
+      RunFailed) carrying the run's final accuracy figures. Both paths write
+      the same AccuracySnapshot event shape so the UI timeline can render
+      either source identically.
+    regulation_anchors: []
+
+  - id: G1
+    name: Gate run completion on configured accuracy threshold
+    mechanism:
+      kind: ci-gate
+      hook: before-terminal-transition
+      flavor: test-gate
+    enforcement: blocking
+    rationale: |
+      An eval harness whose pass/fail outcome is decoupled from an explicit
+      accuracy threshold cannot be wired into a deployment pipeline or
+      sign-off workflow — any result looks equivalent. Requiring that
+      passRate >= passingThreshold before a RunPassed event is emitted makes
+      the gate's decision visible in the entity's event log and observable
+      through the SSE stream. When the gate fires, the GateFailed event
+      records the exact figures (passRate, threshold, failCount) so an
+      operator can audit the decision without re-running the suite.
+    implementation: |
+      EvalRunWorkflow.aggregateStep computes passRate = passCount / totalCases
+      after all CaseEvaluated events are recorded. Before transitioning to
+      passStep, it checks passRate >= passingThreshold (read from
+      agent-eval-harness.eval.default-passing-threshold, defaulting to 0.8,
+      overridable per-run in the POST /api/runs body). If the check fails,
+      the workflow emits GateFailed{passRate, threshold, failCount} on
+      EvalRunEntity, then emits RunFailed with failureReason =
+      "accuracy gate: passRate=X below threshold=Y (failCount=Z)".
+      No RunPassed event is ever emitted for a gate-failing run.
+      defaultStepRecovery(maxRetries(2).failoverTo(failStep)) ensures any
+      unrecoverable agent failure in invokeStep or judgeStep also lands in
+      FAILED rather than leaving the run in RUNNING indefinitely.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Accuracy snapshot · per run
+    mechanism: Eval · periodic
+    implementation: on-decision-eval
+    source: —
+  - id: G1
+    label: CI accuracy gate
+    mechanism: CI Gate
+    implementation: test-gate
+    source: —

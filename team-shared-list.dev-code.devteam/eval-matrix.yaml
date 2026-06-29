@@ -1,0 +1,101 @@
+# Eval Matrix for the dev-team-task-board Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community developer-tooling sample (dev-code domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: dev-team-task-board
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: team-shared-list
+  domain: dev-code
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Refuse destructive workspace tool calls before they run
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: |
+      Developer agents write files and would, in a production analog, run shell
+      commands and call external services. Those capabilities include
+      irreversible operations — deleting files outside the task workspace,
+      recursive deletes, force-push, dropping a datastore. A self-organising team
+      claiming work on its own must not be able to take a destructive action
+      without a gate in front of it. The guardrail fires before the side-effecting
+      tool call, so the operation never executes.
+    implementation: |
+      A before-tool-call guardrail registered on `DeveloperAgent` inspects each
+      tool call. It refuses the call when the target path is outside the task's
+      workspace, when the command matches a destructive pattern (recursive
+      delete, force-push, datastore drop), or when `SystemControl` reports the
+      team is halted. On a refusal the `DeveloperWorkflow.workStep` calls
+      `TaskEntity.block(reason)` so the task is recorded `BLOCKED` with the
+      guardrail reason; the developer returns to polling for other work.
+    regulation_anchors: []
+
+  - id: A1
+    name: Pass a test gate before a task counts as done
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      Code an agent produces should not be marked done on the agent's say-so. A
+      task is only `DONE` once its artifact passes a test gate, which keeps a
+      self-organising team from accumulating untested work on the board. The same
+      gate runs at build time so the project cannot ship with a red suite.
+    implementation: |
+      `TestRunner` is a deterministic pure function (not an LLM call) over a
+      `CodeArtifact`: it passes when every `CodeFile` has a non-blank path and
+      content, the summary is non-empty, and no file carries a `TODO` or an
+      unimplemented stub; otherwise it returns a `TestReport` listing each
+      failure. `DeveloperWorkflow.testGateStep` calls it; only a pass drives
+      `TaskEntity.passTest` (-> `DONE`), and after a fixed retry budget a
+      persistent failure drives `TaskEntity.block`. The Maven `test` phase
+      enforces the same gate end-to-end and must be green before any deploy.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Operator halt of the whole developer team
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      A self-organising team with destructive-action capability needs a single
+      operator stop. If an incident is detected, the operator must be able to
+      freeze every developer at once — both new claims and any tool call already
+      in flight — without redeploying.
+    implementation: |
+      `SystemControl` is a `KeyValueEntity` holding a `halted` flag with a reason
+      and an actor. `POST /api/control/halt` sets it; `POST /api/control/resume`
+      clears it. `DeveloperWorkflow.pollStep` reads the flag and pauses claiming
+      while halted, and the G1 before-tool-call guardrail reads the same flag and
+      refuses every tool call while halted. The App UI exposes a Halt / Resume
+      control and shows the current state.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Destructive-tool guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: A1
+    label: Test gate before done
+    mechanism: CI gate
+    implementation: test-gate
+    source: —
+  - id: HT1
+    label: Operator team halt
+    mechanism: Halt
+    implementation: operator-regulator-stop
+    source: —

@@ -1,0 +1,63 @@
+schema_version: 1
+sample_id: live-eval-harness
+coordination_pattern: continuous-monitor
+domain: governance-risk
+
+controls:
+  - id: E1
+    name: Score every agent decision against rubric on arrival
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Production agent systems accumulate silent failures — outputs that are
+      technically parseable but factually wrong, biased, or out of policy. Per-decision
+      scoring gives the operator a timestamped, immutable record of quality for every
+      output before it is acted upon. Without this, quality evidence only exists when
+      an end user complains.
+    implementation: |
+      `EvalOrchestrationWorkflow` starts for every `DecisionSanitized` event. Its
+      `evalStep` calls `RubricEvalAgent` (typed Agent, stepTimeout 20 s) with the
+      sanitized decision payload and the operator's rubric definition. On return,
+      the workflow emits `EvalScored` on `DecisionEntity` carrying the full
+      `EvalResult` including per-dimension breakdowns. If the step times out, a
+      sentinel `EvalScored{overallScore=1, summary="eval-timeout"}` is emitted so
+      the lifecycle always terminates.
+    regulation_anchors: []
+
+  - id: E2
+    name: Detect quality and fairness drift over rolling windows
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      A per-decision eval catches individual failures but not gradual distributional
+      shifts — for example, one demographic subgroup receiving consistently lower
+      scores, or model accuracy eroding after a silent model version update. The
+      periodic drift watch catches patterns that are invisible at the single-decision
+      level and raises an alarm before the trend becomes a compliance finding.
+    implementation: |
+      `DriftSampler` TimedAction fires every 15 minutes. It queries `EvalView` for the
+      50 most recent scored decisions, computes `ScoreWindow{meanScore, stdDev,
+      meanPerDimension}`, and calls `DriftWatchAgent` (AutonomousAgent,
+      maxIterationsPerTask=3). The agent returns `DriftAssessment{status, narrative,
+      flaggedDimensions}`. `DriftSampler` then calls `DriftSnapshotEntity.recordAssessment`
+      which emits `DriftAssessed`, `DriftAlarm` (if status==ALARM), or `DriftResolved`
+      (if status recovers from ALARM to OK). The current drift status is surfaced on the
+      UI's App UI drift panel and exposed at `GET /api/evals/drift`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: On-decision rubric eval
+    mechanism: Eval · on-decision
+    implementation: on-decision-eval
+    source: —
+  - id: E2
+    label: Rolling drift-fairness watch
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —

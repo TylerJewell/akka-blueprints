@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: multiformat-hybrid-rag
+
+# ---- Purpose ----
+purpose:
+  primary_function: research-question-answering
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: informational
+  user_type: researcher-or-analyst
+
+# ---- Data ----
+data:
+  inputs:
+    - natural-language-research-questions
+    - mixed-format-corpus-chunks
+  data_classes:
+    pii: false
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  corpus_contains_confidential_content: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: informational
+  decision_subject: research-question
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  user_acts_on_answer_without_further_review: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Failure ----
+failure:
+  blast_radius: single-query
+  failure_modes:
+    - hallucinated-citation
+    - unretrieved-claim
+    - no-result-suppressed
+    - format-misattribution
+    - relevance-ranking-mismatch
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: researcher-or-analyst
+  user_verifies_citations_before_acting: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_query: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  corpus-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

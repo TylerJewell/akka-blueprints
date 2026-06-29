@@ -1,0 +1,71 @@
+schema_version: 1
+sample_id: sql-gen-validator-loop
+
+# ---- Purpose ----
+purpose:
+  primary_function: sql-generation-from-natural-language
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: draft-only
+  user_type: developer
+
+# ---- Data ----
+data:
+  inputs:
+    - free-text-question
+    - schema-name-string
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: draft-only
+  decision_subject: sql-query
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+
+# ---- Failure ----
+failure:
+  blast_radius: single-user
+  failure_modes:
+    - schema-reference-impossible-to-satisfy
+    - mutating-keyword-in-generated-sql
+    - ambiguous-join-condition-loop
+    - schema-version-mismatch
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: monthly
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+    synthetic-media: false
+    content-generation: true
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,2419 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-06-26",
+  "total_entries": 417,
+  "rules_version": 1,
+  "buckets": [
+    {
+      "id": "agent",
+      "description": "Single Agent, no Workflow needed"
+    },
+    {
+      "id": "agent+workflow",
+      "description": "Workflow orchestrates Agents in a fixed sequence"
+    },
+    {
+      "id": "autonomous-agent",
+      "description": "Single AutonomousAgent with model-driven loop, no Workflow needed"
+    },
+    {
+      "id": "autonomous-agent+workflow",
+      "description": "AutonomousAgent with model-driven coordination; Workflow may wrap for outer determinism"
+    }
+  ],
+  "summary": {
+    "agent": 122,
+    "agent+workflow": 116,
+    "autonomous-agent": 19,
+    "autonomous-agent+workflow": 160,
+    "agent_total": 238,
+    "autonomous_agent_total": 179,
+    "workflow_used": 276,
+    "workflow_not_used": 141
+  },
+  "by_pattern": {
+    "single-agent": {
+      "agent": 122,
+      "agent+workflow": 0,
+      "autonomous-agent": 19,
+      "autonomous-agent+workflow": 0
+    },
+    "sequential-pipeline": {
+      "agent": 0,
+      "agent+workflow": 60,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 0
+    },
+    "continuous-monitor": {
+      "agent": 0,
+      "agent+workflow": 20,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 0
+    },
+    "human-in-loop-gate": {
+      "agent": 0,
+      "agent+workflow": 22,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 0
+    },
+    "evaluator-optimizer": {
+      "agent": 0,
+      "agent+workflow": 1,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 40
+    },
+    "delegation-supervisor-workers": {
+      "agent": 0,
+      "agent+workflow": 13,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 42
+    },
+    "handoff-routing": {
+      "agent": 0,
+      "agent+workflow": 0,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 22
+    },
+    "planner-executor": {
+      "agent": 0,
+      "agent+workflow": 0,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 31
+    },
+    "team-shared-list": {
+      "agent": 0,
+      "agent+workflow": 0,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 7
+    },
+    "debate-multi-perspective": {
+      "agent": 0,
+      "agent+workflow": 0,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 6
+    },
+    "moderation-turn-taking": {
+      "agent": 0,
+      "agent+workflow": 0,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 5
+    },
+    "composite-multi-team": {
+      "agent": 0,
+      "agent+workflow": 0,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 7
+    }
+  },
+  "by_source": {
+    "AWS Bedrock agent samples (GitHub)": {
+      "agent": 10,
+      "agent+workflow": 2,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 16
+    },
+    "AWS Strands samples (GitHub)": {
+      "agent": 15,
+      "agent+workflow": 7,
+      "autonomous-agent": 3,
+      "autonomous-agent+workflow": 15
+    },
+    "Anthropic Cookbook": {
+      "agent": 0,
+      "agent+workflow": 0,
+      "autonomous-agent": 1,
+      "autonomous-agent+workflow": 1
+    },
+    "Anthropic Engineering": {
+      "agent": 0,
+      "agent+workflow": 2,
+      "autonomous-agent": 1,
+      "autonomous-agent+workflow": 3
+    },
+    "AutoGen (Microsoft Research)": {
+      "agent": 0,
+      "agent+workflow": 0,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 1
+    },
+    "AutoGen (Microsoft)": {
+      "agent": 2,
+      "agent+workflow": 1,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 5
+    },
+    "CrewAI Examples (archived)": {
+      "agent": 2,
+      "agent+workflow": 12,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 7
+    },
+    "Glean Marketplace": {
+      "agent": 3,
+      "agent+workflow": 2,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 3
+    },
+    "Inngest AgentKit": {
+      "agent": 0,
+      "agent+workflow": 2,
+      "autonomous-agent": 1,
+      "autonomous-agent+workflow": 2
+    },
+    "LangGraph examples": {
+      "agent": 1,
+      "agent+workflow": 1,
+      "autonomous-agent": 2,
+      "autonomous-agent+workflow": 13
+    },
+    "LlamaIndex Docs": {
+      "agent": 1,
+      "agent+workflow": 7,
+      "autonomous-agent": 2,
+      "autonomous-agent+workflow": 8
+    },
+    "Mastra": {
+      "agent": 3,
+      "agent+workflow": 0,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 2
+    },
+    "Microsoft AppSource / Copilot Studio": {
+      "agent": 2,
+      "agent+workflow": 0,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 0
+    },
+    "Microsoft AppSource / Dynamics 365": {
+      "agent": 1,
+      "agent+workflow": 1,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 1
+    },
+    "Microsoft AppSource / Microsoft 365": {
+      "agent": 0,
+      "agent+workflow": 1,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 0
+    },
+    "Microsoft AppSource / Planner": {
+      "agent": 0,
+      "agent+workflow": 1,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 0
+    },
+    "Salesforce AgentExchange": {
+      "agent": 3,
+      "agent+workflow": 0,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 3
+    },
+    "ServiceNow Store": {
+      "agent": 3,
+      "agent+workflow": 1,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 1
+    },
+    "ServiceNow Store (Accenture/Deloitte/HCLTech partner)": {
+      "agent": 0,
+      "agent+workflow": 1,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 0
+    },
+    "Vercel": {
+      "agent": 1,
+      "agent+workflow": 2,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 1
+    },
+    "VoltAgent": {
+      "agent": 2,
+      "agent+workflow": 3,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 3
+    },
+    "agno": {
+      "agent": 3,
+      "agent+workflow": 1,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 2
+    },
+    "akka-samples/autonomous-agent-playground": {
+      "agent": 3,
+      "agent+workflow": 3,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 7
+    },
+    "crewai-marketplace": {
+      "agent": 0,
+      "agent+workflow": 9,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 5
+    },
+    "dapr-agents": {
+      "agent": 6,
+      "agent+workflow": 2,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 0
+    },
+    "dspy": {
+      "agent": 0,
+      "agent+workflow": 0,
+      "autonomous-agent": 3,
+      "autonomous-agent+workflow": 0
+    },
+    "google-adk": {
+      "agent": 30,
+      "agent+workflow": 23,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 23
+    },
+    "langchain-ai/agents-from-scratch": {
+      "agent": 0,
+      "agent+workflow": 1,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 0
+    },
+    "langchain4j-examples": {
+      "agent": 2,
+      "agent+workflow": 3,
+      "autonomous-agent": 1,
+      "autonomous-agent+workflow": 5
+    },
+    "letta": {
+      "agent": 1,
+      "agent+workflow": 1,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 5
+    },
+    "llama-agents GitHub": {
+      "agent": 1,
+      "agent+workflow": 2,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 1
+    },
+    "n8n": {
+      "agent": 9,
+      "agent+workflow": 13,
+      "autonomous-agent": 1,
+      "autonomous-agent+workflow": 7
+    },
+    "pydantic-ai": {
+      "agent": 1,
+      "agent+workflow": 2,
+      "autonomous-agent": 2,
+      "autonomous-agent+workflow": 2
+    },
+    "semantic-kernel": {
+      "agent": 1,
+      "agent+workflow": 0,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 5
+    },
+    "smolagents": {
+      "agent": 9,
+      "agent+workflow": 1,
+      "autonomous-agent": 2,
+      "autonomous-agent+workflow": 3
+    },
+    "spring-ai-examples": {
+      "agent": 1,
+      "agent+workflow": 3,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 3
+    },
+    "temporal": {
+      "agent": 6,
+      "agent+workflow": 6,
+      "autonomous-agent": 0,
+      "autonomous-agent+workflow": 7
+    }
+  },
+  "classifications": [
+    {
+      "id": "akka.playground.helloworld",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "akka.playground.pipeline",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "akka.playground.docreview",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "akka.playground.dynamic",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "akka.playground.research",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "akka.playground.consulting",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "akka.playground.support",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "akka.playground.publishing",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "akka.playground.debate",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "debate-multi-perspective: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "akka.playground.negotiation",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "moderation-turn-taking: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "akka.playground.peerreview",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "debate-multi-perspective: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "akka.playground.devteam",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "team-shared-list: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "akka.playground.editorial",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "composite-multi-team: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "crewai.flows.self-evaluation-loop",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "crewai.flows.write-a-book",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "composite-multi-team: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "crewai.flows.meeting-assistant",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.flows.lead-score",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "crewai.flows.email-auto-responder",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "crewai.flows.content-creator",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.teams.game-builder",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.teams.instagram-post",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.teams.landing-page-generator",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.teams.marketing-strategy",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "crewai.teams.screenplay-writer",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.teams.job-posting",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "crewai.teams.prep-for-meeting",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "crewai.teams.recruitment",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.teams.stock-analysis",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "crewai.teams.match-profile-to-positions",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.teams.meta-quest-knowledge",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "crewai.teams.markdown-validator",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "crewai.teams.surprise-trip",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "crewai.teams.trip-planner",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "crewai.teams.industry-agents",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "crewai.marketplace.sales-offer-generator-team",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.marketplace.prospect-analysis-team",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "crewai.marketplace.lead-scoring-and-strategy-team",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.marketplace.customer-fraud-flagging-team",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "crewai.marketplace.marketing-strategy",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "crewai.marketplace.landing-page-generator",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.marketplace.content-creator-flow",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "composite-multi-team: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "crewai.marketplace.email-auto-responder-flow",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "crewai.marketplace.lead-score-flow",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "crewai.marketplace.meeting-assistant-flow",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.marketplace.game-builder-team",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "crewai.marketplace.instagram-post-team",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.marketplace.screenplay-writer",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "crewai.marketplace.recruitment-team",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "autogen.samples.agentchat-chess-game",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "moderation-turn-taking: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "autogen.samples.agentchat-graphrag",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "autogen.samples.core-async-human-in-the-loop",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "autogen.samples.core-distributed-group-chat",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "moderation-turn-taking: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "autogen.samples.core-semantic-router",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "autogen.samples.core-streaming-handoffs-fastapi",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "autogen.samples.gitty",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "autogen.samples.task-centric-memory",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "autogen.magentic-one",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "anthropic.patterns.prompt-chaining",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "anthropic.patterns.routing",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "anthropic.patterns.parallelization",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "anthropic.patterns.orchestrator-workers",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor is a model deciding which workers to call dynamically."
+    },
+    {
+      "id": "anthropic.patterns.evaluator-optimizer",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "anthropic.patterns.autonomous-agent",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "anthropic.cookbook.sub-agents",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "anthropic.cookbook.customer-service-agent",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "langgraph.templates.customer-support",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "langgraph.templates.code-assistant",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "langgraph.templates.plan-and-execute",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "langgraph.templates.llm-compiler",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "langgraph.templates.rewoo",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "langgraph.templates.lats",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "langgraph.templates.reflection",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "langgraph.templates.reflexion",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "langgraph.templates.self-discover",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "langgraph.templates.multi-agent",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "langgraph.templates.rag",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "langgraph.templates.web-navigation",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "langgraph.templates.chatbot-simulation-evaluation",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "langgraph.templates.human-in-the-loop",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "langgraph.templates.extraction",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "langgraph.templates.usaco",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "langgraph.templates.chatbots",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "langgraph.agents-from-scratch.email-assistant",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "llamaindex.agent.function-calling-agent",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "llamaindex.agent.react-agent",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "llamaindex.agent.codeact-agent",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "llamaindex.agent.multi-agent-workflow",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "llamaindex.workflow.human-in-loop-story-crafting",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "llamaindex.workflow.reliable-structured-generation",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "llamaindex.workflow.query-planning",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "llamaindex.workflow.corrective-rag",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "llamaindex.workflow.self-discover",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "llamaindex.workflow.sub-question-query",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "llamaindex.workflow.router-query",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "llamaindex.workflow.text-to-sql",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "llamaindex.workflow.multi-step-query",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "llamaindex.workflow.long-rag",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "llamaindex.workflow.multi-strategy",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "debate-multi-perspective: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "llamaindex.llama-agents.document-agents-finance-triage",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "llamaindex.llama-agents.workflow-server",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "llamaindex.llama-agents.dbos-durable",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "llamaindex.llama-agents.observability",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "llamaindex.workflow.basic-rag",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "llamaindex.workflow.citation-query",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "llamaindex.workflow.json-query-engine",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "smolagents.examples.agent-from-any-llm",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "smolagents.examples.async-agent",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "smolagents.examples.gradio-ui",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "smolagents.examples.inspect-multiagent-run",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "smolagents.examples.multi-llm-agent",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "smolagents.examples.multiple-tools",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "smolagents.examples.open-deep-research",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "smolagents.examples.plan-customization",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "smolagents.examples.rag",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "smolagents.examples.rag-using-chromadb",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "smolagents.examples.sandboxed-execution",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "smolagents.examples.server",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "smolagents.examples.smolagents-benchmark",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "smolagents.examples.structured-output-tool",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "smolagents.examples.text-to-sql",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.industry.finance-assistant-swarm",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "aws-strands.industry.genai-financial-advisor",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "aws-strands.industry.personal-finance-assistant",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.industry.whatsapp-fintech",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.industry.medical-doc-processing",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "aws-strands.industry.airline-assistant",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "aws-strands.industry.ai-ads-crypto",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "aws-strands.industry.startup-advisor-mcp",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-strands.industry.email-assistant",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.industry.personal-assistant",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "aws-strands.industry.research-agent",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "aws-strands.industry.scrum-master",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.industry.restaurant-assistant",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.industry.dataprocessing-agent",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "aws-strands.industry.aws-assistant-mcp",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.industry.aws-audit-assistant",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "aws-strands.industry.code-assistant",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.industry.data-warehouse-optimizer",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "aws-strands.industry.lambda-error-analysis",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "aws-strands.industry.sre-incident-response",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "aws-strands.tech.library-book-renewal",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.tech.pokemon-team-advisor",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "aws-strands.tech.rag",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.eval.ab-testing-models",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "aws-strands.eval.multi-agent-eval",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "aws-strands.eval.multi-turn-actor-sim",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "aws-strands.eval.trajectory-eval",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "aws-strands.ux.ag-ui-copilotkit",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.ux.human-in-loop-approval",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "aws-strands.ux.hvac-analytics",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.ux.slack-assistant",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.ux.triage-agent",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "aws-strands.ux.video-games-sales",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.edge.strands-spot",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-strands.learn.swarm",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "team-shared-list: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "aws-strands.learn.graph",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "aws-strands.learn.agents-as-tools",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-strands.learn.hitl",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "aws-strands.learn.self-improving",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "aws-strands.learn.guardrails",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-bedrock.agent.code-interpretation",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-bedrock.agent.guardrails",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-bedrock.agent.knowledge-base",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-bedrock.agent.long-term-memory",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-bedrock.agent.computer-use",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-bedrock.agent.connected-house",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-bedrock.agent.custom-orchestration",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "aws-bedrock.agent.hitl",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "aws-bedrock.agent.inline",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-bedrock.agent.user-confirmation",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "aws-bedrock.agent.ragas-eval",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "aws-bedrock.mac.hello-world",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.mac.contract-assistant",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.mac.devops",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.mac.energy-efficiency",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.mac.financial-assistant",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.mac.investment-research",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.mac.mortgage-assistant",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.mac.portfolio-assistant",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.mac.real-estate",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.mac.startup-advisor",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.mac.support",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "aws-bedrock.mac.team-poems",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "team-shared-list: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "aws-bedrock.mac.trip-planner",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.mac.voyage-virtuoso",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "aws-bedrock.ux.foursquare-location",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-bedrock.ux.hr-assistant",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "aws-bedrock.ux.video-games-sales",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.rag",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.academic-research",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "google-adk.adk-ae-oauth",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.agent-observability-bq",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "google-adk.agent-skills-tutorial",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.ai-security-agent",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "google-adk.airflow-upgrade",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "google-adk.ambient-expense",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.antom-payment",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.auto-insurance",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "google-adk.bidi-demo",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.blog-writer",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.brand-aligned-presentations",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "google-adk.brand-aligner",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "google-adk.brand-search-optimization",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.camel",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "moderation-turn-taking: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "google-adk.claim-adjudication",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.currency-agent",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.customer-service",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.cyber-guardian",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "google-adk.data-engineering",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "google-adk.data-science",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "google-adk.deep-search",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "google-adk.earth-engine",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.economic-research",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "google-adk.financial-advisor",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.fomc-research",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.fun-facts",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.gemini-fullstack",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.gemma-food-tour",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.genmedia-commerce",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.global-kyc",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.google-trends",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.hierarchical-workflow",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "composite-multi-team: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "google-adk.high-volume-docs",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "google-adk.image-scoring",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "google-adk.incident-management",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "google-adk.invoice-processing",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.llm-auditor",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "google-adk.ml-engineering",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "google-adk.marketing-agency",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "google-adk.medical-preauth",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.memory-bank",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.multiformat-rag",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.nexshift",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.nurse-handover",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.on-brand-genmedia",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "google-adk.order-processing",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "google-adk.parallel-decomposition",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "google-adk.personalized-shopping",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.plumber-de-assistant",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "google-adk.podcast-transcript",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.policy-as-code",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.product-catalog-ads",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.realtime-conversational",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.retail-location",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "google-adk.safety-plugins",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.sdlc-task-planner",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "google-adk.sdlc-technical-designer",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.sdlc-user-story-refiner",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "google-adk.short-movie",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.small-business-loan",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.software-bug-assistant.python",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.story-teller",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.supply-chain",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "google-adk.swe-benchmark",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.tau2-benchmark",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.travel-concierge",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "google-adk.travel-planner-maps",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.workflow-concurrent-research-writer",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "google-adk.workflow-morning-email",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "google-adk.workflows-HITL-concierge",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "google-adk.workflows-sequential",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "google-adk.youtube-analyst",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.java.software-bug-assistant",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "google-adk.java.time-series-forecasting",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "dapr-agents.quickstart.llm-client",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "dapr-agents.quickstart.durable-agent-workflow",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "dapr-agents.quickstart.durable-agent-http",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "dapr-agents.quickstart.durable-agent-pubsub",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "dapr-agents.quickstart.workflow-llm-activities",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "dapr-agents.quickstart.workflow-multi-agent",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "dapr-agents.quickstart.tracing-zipkin",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "dapr-agents.quickstart.hot-reload",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "temporal.bedrock.basic",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "temporal.bedrock.signals-queries",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "temporal.bedrock.entity",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "temporal.openai-agents.handoffs",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "temporal.openai-agents.research-bot",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "temporal.openai-agents.financial-research",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "temporal.openai-agents.customer-service",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "temporal.openai-agents.input-guardrails",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "temporal.openai-agents.llm-as-judge",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "temporal.openai-agents.routing",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "temporal.openai-agents.parallelization",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "temporal.openai-agents.agents-as-tools",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor is a model deciding which workers to call dynamically."
+    },
+    {
+      "id": "temporal.openai-agents.deterministic-pipeline",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "temporal.strands.human-in-the-loop",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "temporal.strands.activity-interrupt",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "temporal.strands.hooks",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "temporal.langgraph.functional",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "temporal.langgraph.graph-api",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "temporal.google-adk",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "letta.cookbook.multi-agent-async",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "team-shared-list: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "letta.cookbook.hello-world",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "letta.cookbook.sleeptime",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "letta.cookbook.shared-memory",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "team-shared-list: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "letta.cookbook.customer-crm",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "composite-multi-team: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "letta.cookbook.self-improving-deep-research",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "letta.cookbook.letta-code",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "mastra.examples.agent",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "mastra.examples.durable-agents",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "mastra.examples.evals-with-memory",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "mastra.examples.inngest",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "mastra.examples.voice",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "vercel.templates.ai-chatbot",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "vercel.templates.lead-qualification-agent",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "vercel.templates.sales-call-analyzer",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "vercel.templates.assistloop-support",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "inngest.agentkit.code-assistant-agentic",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "inngest.agentkit.deep-research",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "inngest.agentkit.support-agent-human-in-the-loop",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "inngest.agentkit.swebench",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "inngest.agentkit.reddit-search-browserbase",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "voltagent.examples.with-subagents",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "voltagent.examples.with-youtube-to-blog",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "voltagent.examples.with-research-assistant",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "team-shared-list: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "voltagent.examples.with-planagents",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "voltagent.examples.with-guardrails",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "voltagent.examples.with-live-evals",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "voltagent.examples.with-whatsapp",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "voltagent.examples.with-ad-creator",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "pydantic-ai.examples.bank-support",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "pydantic-ai.examples.flight-booking",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "pydantic-ai.examples.medical-agent-delegation",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor-workers: modern interpretation is model-driven."
+    },
+    {
+      "id": "pydantic-ai.examples.sql-gen",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "pydantic-ai.examples.slack-lead-qualifier",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "pydantic-ai.examples.weather-agent",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "pydantic-ai.examples.rag",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "agno.cookbook.demo.localwiki",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "agno.cookbook.demo.gitwiki",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "agno.cookbook.demo.codesearch",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "agno.cookbook.teams.multi-agent-coordination",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "team-shared-list: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "agno.cookbook.workflows.orchestration",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "agno.cookbook.evals.framework",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "semantic-kernel.demos.assistants-group-chat",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "moderation-turn-taking: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "semantic-kernel.demos.booking-restaurant",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "semantic-kernel.demos.document-generator",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "semantic-kernel.demos.guided-conversations",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "semantic-kernel.demos.process-with-dapr",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "composite-multi-team: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "semantic-kernel.agents.handoff",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "dspy.tutorials.customer-service-agent",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "dspy.tutorials.mem0-react-agent",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "dspy.tutorials.math-wiki-react",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "spring-ai.agentic-patterns.chain-workflow",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "spring-ai.agentic-patterns.evaluator-optimizer",
+      "bucket": "agent+workflow",
+      "rationale": "evaluator-optimizer with fixed N iterations."
+    },
+    {
+      "id": "spring-ai.agentic-patterns.orchestrator-workers",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "spring-ai.agentic-patterns.parallelization",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "debate-multi-perspective: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "spring-ai.agentic-patterns.routing",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "spring-ai.agents.reflection",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "spring-ai.misc.claude-skills-demo",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.basic-agent",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.sequential-workflow",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.loop-workflow",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.parallel-workflow",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "debate-multi-perspective: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.conditional-workflow",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.composed-workflow",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "composite-multi-team: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.supervisor-orchestration",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "supervisor is a model deciding which workers to call dynamically."
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.non-ai-agents",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "langchain4j.agentic-tutorial.human-in-the-loop",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "langchain4j.customer-support-agent",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "langchain4j.mcp-github",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "n8n.templates.web-scraper-agent",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "n8n.templates.stock-analysis-team",
+      "bucket": "agent+workflow",
+      "rationale": "pre-determined parallel fan-out to workers."
+    },
+    {
+      "id": "n8n.templates.competitor-research-exa-notion",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "n8n.templates.social-media-amplifier",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "n8n.templates.blog-writer-ollama",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "n8n.templates.claude-content-generator",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "n8n.templates.discord-router-bot",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "n8n.templates.instagram-dm-agent",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "n8n.templates.supportflow-lite",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "n8n.templates.lead-mgmt-erpnext",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "n8n.templates.candidate-shortlist-erpnext",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "n8n.templates.pipedrive-reply-qualifier",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "n8n.templates.pdf-extract-claude-gemini",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "debate-multi-perspective: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "n8n.templates.pdf-extract-hitl-cradl",
+      "bucket": "agent+workflow",
+      "rationale": "human-in-loop-gate: Workflow pause-for-human step."
+    },
+    {
+      "id": "n8n.templates.chat-with-pdf-cited",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "n8n.templates.info-monitor-openai-slack",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "n8n.templates.sentiment-tracking-linear-slack",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "n8n.templates.chatbot-memory-tool-routing",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "n8n.templates.line-assistant-calendar-gmail",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "n8n.templates.zoom-meeting-assistant",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "n8n.templates.inbox-zero-lite",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "n8n.templates.leadpilot-lite",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "n8n.templates.agentic-telegram-langchain",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "n8n.templates.notion-ai-assistant-generator",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "n8n.templates.wordpress-autotag",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "n8n.templates.conversational-interview-form",
+      "bucket": "autonomous-agent",
+      "rationale": "single-agent with iterative tool-use / model-driven loop."
+    },
+    {
+      "id": "n8n.templates.postgres-nl-query",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "n8n.templates.siem-alert-enrichment",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "n8n.templates.gitlab-code-review",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "n8n.templates.todoist-ai-organizer",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "salesforce.agentforce.service-agent",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "salesforce.agentforce.sdr",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "salesforce.agentforce.sales-coach",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "salesforce.agentforce.campaign-optimizer",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "salesforce.agentforce.merchandiser",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "salesforce.agentforce.employee-agent",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "classifier/triage agent uses model to pick handoff target."
+    },
+    {
+      "id": "microsoft.copilot.case-management",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "microsoft.copilot.supplier-comms",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "microsoft.copilot.finance-reconciliation",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "microsoft.copilot.scheduling-ops",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "microsoft.copilot.wellness-check",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "microsoft.copilot.facilitator",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "microsoft.copilot.project-manager",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "servicenow.now-assist.itsm-change-mgmt",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "planner-executor: model-driven coordination is intrinsic."
+    },
+    {
+      "id": "servicenow.now-assist.incident-categorization",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "servicenow.now-assist.post-incident-review",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "servicenow.now-assist.hrsd",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "servicenow.now-assist.secops-triage",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "servicenow.partner.customer-churn",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    },
+    {
+      "id": "glean.engineering.spec-to-pr",
+      "bucket": "agent+workflow",
+      "rationale": "sequential-pipeline: fixed-order Workflow steps."
+    },
+    {
+      "id": "glean.engineering.pr-review",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "glean.crossfunc.ghostwriter",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "glean.sales.deal-strategy",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "glean.support.ticket-next-steps",
+      "bucket": "agent",
+      "rationale": "single LLM call request/response."
+    },
+    {
+      "id": "glean.marketing.seo-evaluator",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "evaluator-optimizer: critic decides convergence."
+    },
+    {
+      "id": "glean.it.helpdesk",
+      "bucket": "autonomous-agent+workflow",
+      "rationale": "handoff-routing: defaulting to model-driven classification."
+    },
+    {
+      "id": "glean.crossfunc.intelligent-reminders",
+      "bucket": "agent+workflow",
+      "rationale": "continuous-monitor: Timer/Consumer + Agent deterministic loop."
+    }
+  ]
+}

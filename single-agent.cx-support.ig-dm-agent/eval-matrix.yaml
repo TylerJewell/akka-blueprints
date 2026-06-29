@@ -1,0 +1,69 @@
+schema_version: 1
+sample_id: ig-dm-agent
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Reject non-compliant DM replies before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: brand-safety-validator
+    enforcement: blocking
+    rationale: |
+      A brand-managed Instagram inbox is a public-facing channel where every outgoing reply
+      is permanently associated with the brand. A single reply containing a prohibited term,
+      a competitor mention, or an out-of-scope commitment (price guarantee, delivery promise)
+      can generate regulatory exposure or reputational damage before any human sees it.
+      The before-agent-response hook is the right interception point: catch non-compliant
+      drafts before they leave the agent loop, force a retry within the same task, and let
+      only brand-approved text reach the workflow. Blocking at this layer means the entity
+      event log never contains a policy-violating reply.
+    implementation: |
+      `ReplyGuardrail` is registered on `DmReplyAgent` via the agent's guardrail-configuration
+      block, bound to the `before-agent-response` hook. On each candidate response it (1) loads
+      the `BrandProfile` for the message's `profileId` from an in-memory registry, (2) checks
+      `replyText` for any term in `prohibitedTerms`, (3) checks `replyText` for any name in
+      `competitorNames`, (4) verifies `replyText.length() <= maxReplyChars`, and (5) runs a
+      keyword-pattern scan for out-of-scope commitment phrases (guaranteed, we promise, by
+      [date], full refund). On any failure it returns `Guardrail.reject(<structured-error>)`
+      naming the violated rule; the agent loop consumes one iteration and retries. Passing
+      responses flow through to `DmWorkflow.replyStep`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip PII from inbound DMs before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Customers routinely include personal details in Instagram DMs — order confirmation
+      emails, phone numbers for callbacks, or home addresses for delivery queries. Processing
+      those identifiers through a third-party LLM without stripping them first violates most
+      privacy policies and several data-protection frameworks. The sanitizer runs in a Consumer
+      between the raw message and the agent invocation; the raw text is preserved on the entity
+      for customer-service audit purposes but is never the payload the model receives.
+    implementation: |
+      `MessageSanitizer` Consumer subscribes to `MessageReceived` events emitted by `DmEntity`.
+      It runs a pipeline of regex stages (email addresses, phone numbers, URLs, payment-card-
+      like tokens) followed by a heuristic stage (full-name patterns, government-identifier
+      patterns). Outputs a `SanitizedMessage` carrying the stripped text plus the list of
+      PII categories found. Calls `DmEntity.attachSanitized(sanitized)`. `DmWorkflow.replyStep`
+      then passes `sanitized.sanitizedText` as the `DmReplyAgent` task attachment; the raw
+      text remains accessible only via `inbound.rawText` on the entity, never on the wire to
+      the model.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Brand-safety reply guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: PII stripping before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

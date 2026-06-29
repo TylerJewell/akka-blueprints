@@ -1,0 +1,59 @@
+# Eval Matrix for the research Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (research-intel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: research
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: research-intel
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Vet the synthesised brief before it reaches the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The synthesised research brief is the user-facing artifact. An output guardrail
+      catches hallucinated citations and explicit policy violations before the brief is
+      returned, so a flawed synthesis never reaches the reader.
+    implementation: >
+      A before-agent-response guardrail on ResearchCoordinator runs a deterministic vetter
+      plus an LLM judge over the SynthesisedBrief in ResearchWorkflow.guardrailStep. On
+      failure the workflow calls ResearchBriefEntity.block and the brief enters BLOCKED.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the coordinator synthesis decision for quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The coordinator's synthesis decision merges two independent worker outputs into one
+      brief. Sampling that decision with a rubric judge surfaces a quality score that the
+      reader sees beside the brief, without blocking delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries ResearchView for the oldest
+      SYNTHESISED brief lacking an evalScore, runs a 1-5 rubric judge over the synthesised
+      content, and calls ResearchBriefEntity.recordEval(score, rationale), emitting EvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Brief output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a brief with hallucinated citations or policy violations.
+  - id: E1
+    name: Synthesis quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's synthesis decision.

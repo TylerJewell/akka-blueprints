@@ -1,0 +1,121 @@
+schema_version: 1
+sample_id: triage-expert-multi-agent-workflow
+coordination_pattern: sequential-pipeline
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block non-compliant expert recommendations before they reach the customer
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      The ExpertAgent's recommendation is the output that a customer or support
+      agent reads and acts on. A recommendation that contains a diagnostic
+      promise, a price quote, or a competitor reference creates legal exposure
+      and erodes trust — even if the underlying guidance is sound. The
+      before-agent-response hook is the right cut: the guardrail intercepts the
+      typed Recommendation before it is written onto SupportCaseEntity, while
+      the agent's iteration budget still allows the agent to self-correct within
+      the same task run. Catching the violation at the agent-response boundary
+      (rather than post-hoc in the evaluator) ensures no non-compliant text
+      escapes the service.
+    implementation: |
+      `RecommendationGuardrail` is registered on `ExpertAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On every task completion of `COMPOSE_RECOMMENDATION` the guardrail reads
+      `Recommendation.guidanceText` and applies three disallowed-content checks:
+      (1) no-diagnostic-promise (regex `/will fix|guaranteed to resolve|your
+      issue is definitely/i`); (2) no-price-quote (regex `/\$\d|\d+\.\d\d|free
+      of charge/i`); (3) no-competitor-reference (configurable list loaded from
+      `src/main/resources/config/competitors.txt`). On any match the guardrail
+      returns a structured `policy-violation: <rule>` reason to the agent loop
+      and calls `SupportCaseEntity.recordGuardrailBlock(rule, excerpt)` so the
+      block appears in the UI's guardrail-block log strip and in the audit log.
+      On all-pass, the result proceeds to `SupportCaseWorkflow.recommendStep`
+      and is written onto the entity. The agent loop retries within its
+      3-iteration budget.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub customer PII from the triage summary before handing off to the expert agent
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: system-level
+    rationale: |
+      `TriageAgent` collects structured customer data — name, email, account ID,
+      phone — during its GATHER phase. That data is necessary for triage but
+      should not propagate into `ExpertAgent`'s context: the expert agent needs
+      the issue summary and category to compose a recommendation, not the
+      customer's personal identifiers. Passing PII across the agent boundary
+      unnecessarily widens the data-exposure surface: the expert agent's
+      conversation memory, any LLM provider logging, and any future downstream
+      agent would all inherit that data. The sanitizer runs as a dedicated
+      workflow step between the triage and expert phases, ensuring the agent
+      boundary is also a data-minimization boundary.
+    implementation: |
+      `PiiSanitizer` runs as `sanitizeStep` inside `SupportCaseWorkflow`,
+      between `summarizeStep` and `recommendStep`. It is a pure in-process
+      class (no LLM call, no external service). It applies four deterministic
+      regex scrub passes to `IssueSummary.problemStatement` and each item in
+      `IssueSummary.keyFacts`: name → `[CUSTOMER_NAME]`, email → `[EMAIL]`,
+      accountId → `[ACCOUNT_ID]`, phone → `[PHONE]`. It uses the live
+      `CustomerInfo` values as the match targets. The result is a
+      `SanitizedSummary` whose `redactedTokens` list records which token types
+      were replaced (not the original values). The original `IssueSummary`
+      remains on `SupportCaseEntity` for authorized audit access. Only the
+      `SanitizedSummary` is forwarded to `ExpertAgent` as the task instruction
+      context.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every recommendation for citation grounding and category alignment
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      An expert recommendation can pass the guardrail's disallowed-content
+      checks while still being poorly grounded — citing a non-existent article,
+      citing no articles at all, or addressing a different issue category than
+      the one the customer raised. An on-decision evaluator catches these
+      patterns without blocking the recommendation, giving support operations a
+      fast signal about which cases warrant human review before customer contact.
+      The non-blocking design is intentional: a recommendation that scores low
+      may still be useful; the score informs the support agent's review
+      decision, it does not automate it.
+    implementation: |
+      `RecommendationScorer` runs inside `SupportCaseWorkflow.evalStep`,
+      fired immediately after `RecommendationComposed` lands. The scorer is
+      deterministic and rule-based (no LLM call). Three checks, each worth one
+      point over a base of 1: (1) article citation —
+      `recommendation.citedArticles` is non-empty; (2) article provenance —
+      every `ArticleRef.articleId` cited exists on disk in
+      `src/main/resources/knowledge-base/articles/`; (3) category alignment —
+      `recommendation.category` equals `sanitizedSummary.category`. A bonus
+      point is awarded when `requiresHumanEscalation` is `true` and urgency is
+      `CRITICAL` or `HIGH`. Score = `Math.min(1 + checks_passed + bonus, 5)`.
+      Rationale names the first failing check, or "all checks passed" if
+      score == 5. Emits `EvaluationScored{score: 1-5, rationale: String}`.
+      Recommendations scoring ≤ 2 are flagged in the UI with a red card border.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Expert response guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: Triage-to-expert PII sanitizer
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: E1
+    label: Recommendation grounding eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

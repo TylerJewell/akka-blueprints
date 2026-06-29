@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: llm-judge-loop
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: E1
+    name: Record every cycle's judgment as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The judge's accept-or-revise verdict is the primary quality signal the
+      loop produces. Each judgment carries a numeric score and a structured
+      feedback payload that, when recorded durably per attempt, lets operators
+      measure pass rate at attempt number N, track score drift across revisions,
+      and detect systematic weaknesses in the generator's outputs — all without
+      instrumenting the workflow itself or storing raw LLM completions.
+    implementation: |
+      `JudgeSampler` (TimedAction) fires every 30 s. It queries
+      `EvaluationsView.getAllEvaluations`, finds attempts that have been judged
+      but do not yet have a matching `JudgmentRecorded` event on
+      `EvaluationEntity`, and calls
+      `EvaluationEntity.recordJudgmentEvent(attemptNumber, verdict, score,
+      guardrailFailed)`. The call is idempotent on `(evaluationId, attemptNumber)`.
+      The `EvaluationWorkflow` also emits one `JudgmentRecorded` event on the
+      terminal transition (`EvaluationAccepted` or `EvaluationRejectedFinal`)
+      carrying the whole loop's outcome. Events are surfaced in the App UI's
+      per-attempt timeline and via `GET /api/evaluations/{id}`.
+    regulation_anchors: []
+
+  - id: G1
+    name: Gate each generated answer against structural requirements before judging
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: after-llm-response
+    enforcement: blocking
+    rationale: |
+      The judge's rubric is designed for complete, substantive answers. Sending
+      a trivially short response or a refusal sentinel to the judge wastes a
+      cycle and risks the judge returning subjective feedback that obscures the
+      real problem — the generator did not produce a valid output at all. A
+      deterministic pre-judge guardrail catches structural failures, returns a
+      typed feedback note to the generator, and keeps the judge's attention on
+      substance rather than form.
+    implementation: |
+      Wired as the `guardrailStep` of `EvaluationWorkflow`, immediately after
+      `generateStep`. A pure-function check on two conditions:
+      `answer.tokenCount() >= minTokens` (configured via
+      `llm-judge-loop.evaluation.min-token-count`, default 50) AND
+      `!answer.text().contains(REFUSED_SENTINEL)` (the sentinel is the literal
+      string `"[REFUSED]"` that `GeneratorAgent` is instructed to emit on a
+      hard refusal). On failure, emits `AttemptGuardrailVerdictRecorded` with
+      `verdict.passed = false` and `reasonCode = "STRUCTURAL_FAIL"`, then
+      transitions back to `generateStep` with a fixed
+      `JudgeFeedback("Answer did not meet structural requirements; provide a
+      complete response.")`. The cycle still counts toward `maxAttempts`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-attempt judgment recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: G1
+    label: Output guardrail · structural check
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —

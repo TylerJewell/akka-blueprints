@@ -1,0 +1,61 @@
+# Eval Matrix for the lead-scoring-strategy Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires
+# regulation_anchors on each control. This is a community-content sample
+# (sales-marketing domain) with no industry- or jurisdiction-bound anchors, so
+# regulation_anchors is intentionally an empty list across all controls.
+
+schema_version: 1
+sample_id: lead-scoring-strategy
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: sequential-pipeline
+  domain: sales-marketing
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: S1
+    name: Sanitize lead form PII before storage and model calls
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Lead form responses carry personal contact information. PII is redacted
+      and normalized before it is stored or placed in an agent prompt, so raw
+      contact data never reaches a model provider as the lead flows through the
+      intake, research, scoring, and strategy agents.
+    implementation: >
+      PiiSanitizer runs inside intakeStep before LeadEntity.recordIntake and
+      before any agent prompt is built; contactName and formResponses are stored
+      only in their sanitized form.
+    regulation_anchors: []
+
+  - id: E1
+    name: Auto-evaluate every lead score for accuracy and fairness
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The lead score is a decision artifact that prioritizes outreach. An
+      automatic eval on each score surfaces an accuracy/fairness result so a
+      low-confidence or biased rationale is visible rather than silent.
+    implementation: >
+      ScoreEvalConsumer subscribes to LeadEntity LeadScored events, checks the
+      score range and rationale, flags references to protected attributes, and
+      records the eval result on the lead via LeadEntity.recordEvaluation
+      without changing the lifecycle status.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: PII sanitizer
+    mechanism: "sanitizer · pii"
+    short: Redact contact PII before storage and model calls.
+  - id: E1
+    name: Score auto-eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Run an accuracy/fairness eval on every lead score.

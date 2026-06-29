@@ -1,0 +1,96 @@
+schema_version: 1
+sample_id: autonomous-agent-pattern
+
+# ---- Purpose ----
+purpose:
+  primary_function: autonomous-code-repair
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: supervised-autonomous
+  user_type: software-engineer-or-platform-operator
+
+# ---- Data ----
+data:
+  inputs:
+    - github-issue-body
+    - repository-source-files
+    - shell-command-output
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    source-code-proprietary: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Capabilities ----
+capabilities:
+  code-execution: true
+  file-system-write: true
+  network-calls: true
+  shell-access: true
+  tool-allowlist-enforced: true
+  workspace-path-confined: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: supervised-autonomous
+  decision_subject: source-code-patch
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-with-vcs
+  human_approves_plan_before_writes: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-repository-workspace
+  failure_modes:
+    - unconfined-shell-execution
+    - plan-hallucination
+    - runaway-tool-loop
+    - partial-patch-commit
+    - path-traversal-via-file-tool
+    - rate-spike-resource-exhaustion
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: true
+  reviewer_role: software-engineer-or-platform-operator
+  human_approves_plan_before_any_write: true
+  operator_can_halt_running_loop: true
+  runtime_monitor_deployed: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - github-rest-api
+    - llm-completion
+    - file-system-read
+    - file-system-write
+    - shell-command-execution
+    - codebase-search
+  rate_limit_per_task: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+  max_iterations_per_task: 12
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  repository-access-permission-granted: TO_BE_COMPLETED_BY_DEPLOYER

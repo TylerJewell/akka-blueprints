@@ -1,0 +1,138 @@
+# Eval Matrix for the per-tenant-agent-fleet Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community cx-support sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list across
+# all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: per-tenant-agent-fleet
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: composite-multi-team
+  domain: cx-support
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: S1
+    name: Sanitize PII from every inbound customer payload
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: system-level
+    rationale: |
+      Each customer registration and each chat message can carry personal data the user
+      typed directly — raw email addresses, account numbers, national identifiers, or
+      phone numbers pasted into a free-text field. A fleet that stores every chat turn
+      durably in an event-sourced entity must never let raw sensitive identifiers reach
+      the workflow state or the agent's context window. The sanitizer runs at the service
+      boundary before any downstream component sees the payload, so the risk of PII
+      leaking into agent memory, view rows, or SSE events is eliminated at the point of
+      entry rather than audited after the fact.
+    implementation: |
+      `PiiSanitizer` is a deterministic pure function (no LLM call) called at two points:
+      at `FleetEndpoint` on every `POST /api/customers` body and every `POST
+      /api/customers/{id}/chat` body, and at the top of `AgentFleetWorkflow.registerStep`
+      before the workflow state is written. The function matches configured regex patterns
+      (SSN-like, card-number-like, raw phone numbers) and replaces matches with a redacted
+      placeholder. The sanitized string replaces the original in the workflow input; the
+      raw value is never passed to `CustomerRegistry`, `AgentMemoryEntity`, or any agent.
+    regulation_anchors: []
+
+  - id: G1
+    name: Gate every outbound email tool call before dispatch
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: |
+      The `sendWelcomeEmail` tool is the only channel through which the fleet contacts
+      real customers. An agent that is personalized per customer — and reads that customer's
+      profile to craft its message — could, if unguarded, be steered by a crafted profile
+      into sending mail to unauthorized domains, producing oversized messages that violate
+      the ESP's payload limits, or using templates the deployer has marked restricted. A
+      guardrail on every tool call is the right chokepoint: it runs once per dispatch
+      attempt, is stateless, and blocks the operation before the email infrastructure
+      receives it rather than relying on downstream filtering.
+    implementation: |
+      A before-tool-call guardrail registered on `ChatResponder` and on
+      `AgentFleetWorkflow` (for the welcome dispatch) inspects each `CustomerTools.
+      sendWelcomeEmail` call. It refuses a call whose `recipientEmail` domain is in the
+      configured blocked list, whose body length exceeds the size cap, or whose
+      `templateId` is flagged restricted. On a refusal during the welcome step,
+      `AgentFleetWorkflow.welcomeStep` calls `AgentMemoryEntity.recordWelcomeBlock(reason)`
+      and proceeds to `readyStep` without sending; the fleet card shows the block reason.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Surface fleet health to the deployer for runtime oversight
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: non-blocking
+    rationale: |
+      A fleet of long-lived per-customer agents accumulates divergent state over time:
+      some customers become dormant, some agents may accumulate anomalous eval scores, and
+      the deployer needs a consolidated view to decide on outreach or remediation. Unlike
+      a single-pipeline system where a human can review each run, a fleet operating at
+      scale requires a monitoring layer that summarizes health continuously. The deployer
+      needs to be on the loop — informed and able to act — without every health observation
+      blocking the agents' operation.
+    implementation: |
+      `StaleAgentMonitor` (TimedAction) runs every 5 minutes, queries
+      `FleetStatusView.getAllCustomers`, identifies customers whose `lastInteractionAt` is
+      older than the configured window (default 7 days), and records a DORMANT-flagged
+      `FleetEval` in `AgentMemoryEntity` for each. The summaries are returned by
+      `GET /api/fleet/health` and surfaced in the App UI's fleet-health panel. The monitor
+      never modifies `CustomerStatus` or alters agent state; it informs the deployer who
+      decides on next steps.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every welcome and chat interaction as it completes
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      A fleet of agents operating autonomously per customer can degrade silently: welcome
+      emails blocked at unusual rates, chat replies consistently too short, profiles
+      missing key facts. Detecting these patterns requires continuous measurement tied
+      to each interaction event, not a periodic batch job that lags behind the live fleet.
+      Scoring each interaction at the event level lets the deployer see quality trends
+      per customer and fleet-wide without adding latency to the agent pipeline.
+    implementation: |
+      `FleetEvalConsumer` subscribes to `AgentMemoryEntity` events and fires on
+      `WelcomeRecorded` and `ChatTurnAppended`. For each it runs `FleetEvaluator` — a
+      deterministic pure function, not an LLM call — that returns a `FleetEval{stage,
+      score, flags, evaluatedAt}` (e.g., a blocked welcome flagged, a chat reply under
+      the minimum-length floor, a profile with fewer than three key facts). The eval is
+      recorded via `AgentMemoryEntity.recordFleetEval` and projected into `FleetStatusView`
+      as `latestEvalScore`. Scores are shown per customer in the App UI and aggregated in
+      the fleet-health panel; they never gate the workflow.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII sanitizer on inbound payloads
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Outbound email tool guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: HO1
+    label: Fleet runtime health monitor
+    mechanism: Human on the loop
+    implementation: deployer-runtime-monitoring
+    source: —
+  - id: E1
+    label: Per-interaction quality eval
+    mechanism: Eval periodic
+    implementation: performance-monitor
+    source: —

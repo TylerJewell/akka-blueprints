@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: entity-workflow-chat
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Redact PII from user messages before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Customer-support conversations accumulate PII across many turns — email addresses,
+      phone numbers, account identifiers, payment-card tokens, and person names appear
+      routinely in billing disputes and account inquiries. A long-lived workflow that
+      keeps history in the agent context window is a particularly high-risk surface:
+      any PII that enters the context on turn one is re-sent to the model on every
+      subsequent turn. Redaction in the MessageSanitizer Consumer, before the turn enters
+      the workflow, ensures the model never receives customer identifiers regardless of
+      conversation length. The raw message text is preserved on the entity turn log for
+      support audit.
+    implementation: |
+      `MessageSanitizer` Consumer subscribes to `MessageReceived` events emitted by
+      `ConversationEntity`. It runs a pipeline of regex stages (well-known formats such
+      as RFC-5321 email, E.164 phone, Luhn-valid card numbers), a heuristic stage
+      (person names, postal addresses), and an account-id-token stage. Outputs a
+      `SanitizedMessage` carrying the redacted text plus the list of categories found.
+      Calls `ConversationEntity.attachSanitized(messageId, sanitized)`. The
+      `ChatWorkflow.agentStep` assembles the context package using only sanitized
+      turn text from `ConversationEntity.getConversation()`; raw text remains accessible
+      only via the entity's turn log, never placed on the wire to the model.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require an explicit user turn to advance each agent call
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: system-level
+    rationale: |
+      Customer-support interactions carry expectations about who is in control: the
+      customer should drive the conversation pace and should not receive unsolicited
+      agent messages. An autonomous loop that advances without a new user message would
+      send follow-up replies the customer did not request and could expose the customer
+      to stale or confusing output if the agent's context drifts between an implicit
+      re-entry and the customer's actual next intent. Structuring the workflow so that
+      `awaitTurnStep` genuinely pauses execution until a new user message arrives makes
+      the human-in-the-loop property architectural rather than advisory — there is no
+      code path through which the agent fires without a live customer trigger.
+    implementation: |
+      `ChatWorkflow` pauses at `awaitTurnStep` by calling `Workflow.pause()` after each
+      completed turn. The workflow resumes only when `ChatEndpoint.sendMessage` receives a
+      `POST /api/conversations/{id}/messages` request and signals the workflow with the
+      new sanitized message id. The `MessageSanitizer` Consumer triggers the resume after
+      writing the sanitized form to the entity. The `agentStep` is therefore always
+      preceded by a real user action — it is not reachable from a timer, a background
+      task, or any internal event. The `ConversationEntity` status transitions to
+      `AGENT_THINKING` only after `MessageSanitized` lands, which is itself gated on a
+      user `POST`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: H1
+    label: User-turn gate before agent call
+    mechanism: HITL
+    implementation: application
+    source: —

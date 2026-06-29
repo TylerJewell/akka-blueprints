@@ -1,0 +1,55 @@
+schema_version: 1
+sample_id: competitor-research-pipeline
+coordination_pattern: sequential-pipeline
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Validate every Notion write for phase order, schema conformance, and database scope
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      This pipeline terminates in a write to an external Notion database that analysts
+      treat as a shared source of truth. A malformed write — missing required fields,
+      wrong field types, or a write aimed at the wrong database — corrupts records that
+      are expensive to clean up manually and that may propagate to downstream CRM exports
+      or briefing decks before anyone notices. The before-tool-call hook catches three
+      distinct failure classes before any network call is made: (1) phase ordering —
+      a PUBLISH-phase tool called before SummaryProduced has been recorded degrades the
+      pipeline to an uncontrolled single-step agent loop; (2) schema conformance — a
+      Notion page payload missing "Pricing Model" or carrying a select value where a
+      rich_text is expected will either be silently dropped by the Notion API or raise a
+      400 that surfaces late and obscurely; (3) scope — writing to an unintended Notion
+      database (e.g., a staging database left in the environment) creates phantom records
+      that are hard to trace. Catching all three at the agent-tool boundary, before the
+      network call, is cheaper and more auditable than post-hoc reconciliation.
+    implementation: |
+      `NotionWriteGuardrail` is registered on `ResearchAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. Each
+      function-tool class (`SearchTools`, `SummarizeTools`, `PublishTools`) carries a
+      `ResearchPhase` constant on its methods, stored in a phase registry built at startup.
+      On every tool call the guardrail first applies the phase-gate accept matrix:
+      `SEARCH` tools require `status ∈ {CREATED, SEARCHING}`; `SUMMARIZE` tools require
+      `status ∈ {SEARCHED, SUMMARIZING}` AND `searchResults.isPresent()`; `PUBLISH` tools
+      require `status ∈ {SUMMARIZED, PUBLISHING}` AND `summary.isPresent()`. If the
+      phase gate passes and the tool is `writeToNotion`, the guardrail runs three
+      additional checks against `NotionSchema` constants: (a) every key in
+      `NotionSchema.REQUIRED_FIELDS` is present in the payload, (b) each present field's
+      runtime type matches the declared type in `NotionSchema.FIELD_TYPES`, and (c) the
+      `databaseId` in the payload equals `NotionSchema.ALLOWED_DATABASE_ID` (sourced from
+      `${?NOTION_DATABASE_ID}` at startup). On any reject, `Guardrail.reject(...)` is
+      returned with a structured message (`phase-violation:`, `schema-violation:`, or
+      `scope-violation:`) and `CompetitorEntity.recordGuardrailRejection(phase, tool,
+      reason)` is called so the rejection is visible in the UI's rejection-log strip and
+      in the audit log. On accept, the call proceeds.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Notion write guardrail (phase + schema + scope)
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

@@ -1,0 +1,81 @@
+schema_version: 1
+sample_id: cold-outreach
+
+# ---- Purpose ----
+purpose:
+  primary_function: personalized-cold-email-pipeline
+  sector: sales-marketing
+  decisions_surface: execute
+  user_type: sales-or-marketing-rep
+
+# ---- Data ----
+data:
+  inputs:
+    - prospect-contact-email
+    - prospect-company-name
+    - in-process-firmographic-corpus
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: execute
+  decision_subject: outbound-email-send
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: irreversible
+  reviewer_approves_every_draft_before_send: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-prospect-per-pipeline-run
+  failure_modes:
+    - send-without-approval
+    - compliance-violation
+    - hallucinated-personalization
+    - reviewer-sla-exceeded
+    - misordered-tool-call
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: sales-manager-or-compliance-officer
+  reviewer_must_approve_before_send: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+    - in-process-file-send-log
+  rate_limit_per_prospect: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  prospect-list-origin-permitted-for-cold-outreach: TO_BE_COMPLETED_BY_DEPLOYER
+  can-spam-compliant-unsubscribe-mechanism: true
+  gdpr-article-21-opt-out-mechanism: TO_BE_COMPLETED_BY_DEPLOYER

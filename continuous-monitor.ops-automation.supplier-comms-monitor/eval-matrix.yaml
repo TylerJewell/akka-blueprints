@@ -1,0 +1,92 @@
+schema_version: 1
+sample_id: supplier-comms-monitor
+coordination_pattern: continuous-monitor
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Block sendSupplierEmail unless send-eligible
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: scope-enforcement
+    enforcement: blocking
+    rationale: |
+      Supplier emails are external business communications that can create or
+      modify contractual obligations. Once an email reaches a supplier, it is
+      difficult to retract. The guardrail reads the PO's current entity state
+      before every call to the `sendSupplierEmail` tool stub, confirming the
+      PO is in a send-eligible state and that any required buyer approval has
+      been recorded. This defence ensures that even if the workflow branching
+      logic is altered in a future change, an unsanctioned outbound message
+      cannot slip through.
+    implementation: |
+      Wired on the `sendSupplierEmail(poId, body)` tool's `before-tool-call` hook
+      inside `PoOrderWorkflow`'s finalise step. Reads `PurchaseOrderEntity.getOrder(poId)`,
+      requires either `status == OUTREACH_SENT` already set by the HITL path (for
+      buyer-approved POs) or `outreachDraft.requiresBuyerApproval == false` with
+      `status == OUTREACH_DRAFTED` (for routine non-material outreach). Any other state
+      rejects the call with a structured error that names the blocking condition.
+    regulation_anchors: []
+
+  - id: H1
+    name: Buyer approval required before material outreach is sent
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Purchase order modifications — date changes, quantity adjustments, or
+      any commitment that the supplier could hold the buyer to — require a
+      human buyer to confirm before an outreach is dispatched. The agent
+      is not authorised to commit the organisation to delivery terms on its
+      own. This gate is the primary control; the before-tool-call guardrail
+      is the defence-in-depth backstop.
+    implementation: |
+      `PoOrderWorkflow` sets `requiresBuyerApproval = true` for all CRITICAL-tier
+      POs and for any AT_RISK draft that carries a date or quantity change flag.
+      The workflow transitions those POs to AWAITING_BUYER_APPROVAL and polls
+      `PurchaseOrderEntity` every 5 seconds. The workflow advances only when a
+      `BuyerDecision` event is present, which can only be emitted by
+      `PoOrderEndpoint.approve` or `PoOrderEndpoint.escalate`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Periodic accuracy evaluation of delivery-risk predictions
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      The `DeliveryRiskAgent` makes predictions that drive outreach decisions
+      across a continuous stream of purchase orders. Prediction accuracy can
+      degrade as supplier patterns and commodity conditions change. Measuring
+      precision — predicted tier versus actual delivery outcome — on closed POs
+      provides an ongoing signal that surfaces model drift before it meaningfully
+      impacts procurement operations. Scores feed a quality dashboard visible to
+      the procurement team.
+    implementation: |
+      `AccuracyEvalRunner` TimedAction fires every 60 minutes. Queries
+      `PoOrderView.getAllOrders`, filters for CLOSED POs without an `accuracyScore`,
+      picks up to 5 oldest. For each, calls `AccuracyJudge` (LLM with a precision
+      rubric comparing `predictedTier` to `actualOutcome`) and emits `AccuracyEvaluated`
+      with `predictionCorrect`, `evalRationale`, and a running precision rate. Surfaces
+      on the UI's App UI tab per-card and in the Eval Matrix tab's aggregate view.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: sendSupplierEmail guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Buyer approval gate
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: E1
+    label: Delivery-prediction accuracy eval
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

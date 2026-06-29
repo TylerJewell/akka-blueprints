@@ -1,0 +1,132 @@
+schema_version: 1
+sample_id: airline-triage-router
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Strip PNR and passenger PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Airline passenger requests routinely carry PNR locators (six-character booking
+      references), passport and national-ID numbers, frequent-flyer membership numbers,
+      and email addresses. None of these identifiers are needed by the intent classifier
+      or the specialist agents to understand or resolve the passenger's issue. Redaction
+      happens inside a Consumer before the request enters the workflow, so no LLM call
+      ever processes a raw PNR or identity document number. This is the first line of
+      defence against PII leakage into model context windows or generated responses.
+    implementation: |
+      `PnrSanitizer` Consumer subscribes to `PassengerRequestQueue` events. For each
+      `InboundPassengerRequestReceived` it runs a regex stage that matches six-character
+      alphanumeric PNR locators (`[A-Z]{6}\b`), passport numbers (`[A-Z]{1,2}\d{6,9}`),
+      frequent-flyer numbers (`FF-\w+`), email addresses, and phone numbers; it then
+      applies a heuristic stage for address-shaped lines and greeting-position names.
+      The result is a `SanitizedPassengerRequest` carrying the redacted text plus the list
+      of PII categories found. The categories list is retained for the audit record; only
+      the redacted text is forwarded to `IntentRouter`, `BookingSpecialist`,
+      `ChangeSpecialist`, `BaggageSpecialist`, `StatusSpecialist`, `RoutingJudge`,
+      `ToolCallGuardrail`, and `ResponseGuardrail`.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block destructive tool calls that exceed fare-rule authority
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: fare-rule-policy
+    enforcement: blocking
+    rationale: |
+      Specialist agents for change and cancellation requests can propose tool actions —
+      such as cancelling a booking or rebooking onto a different fare class — that are
+      irreversible for the passenger and carry direct financial consequences. Cancelling
+      a non-refundable fare without policy authorisation, or applying a change outside
+      the permitted change window, cannot be undone once the airline's PSS accepts the
+      command. The before-tool-call guardrail intercepts these actions before they fire
+      and checks them against a fare-rule policy matrix, blocking any action the specialist
+      does not have authority to execute and routing the request to an operator for review.
+    implementation: |
+      `ToolCallGuardrail` is a typed Agent. When a specialist is about to execute a
+      destructive action (cancellation, rebook, refund initiation), the `FlightRequestWorkflow`
+      invokes `ToolCallGuardrail` with the `SanitizedPassengerRequest` and a plain-text
+      description of the proposed action. The guardrail returns `ToolCallVerdict { allowed,
+      denialReason }`. On `allowed=false`, the specialist halts, `FlightRequestEntity`
+      receives `ToolCallVerdictAttached` with the denial, and the workflow transitions the
+      request to `BLOCKED`. The operator can unblock via `POST /api/requests/{id}/unblock`
+      or leave the request blocked for escalation.
+    regulation_anchors: []
+
+  - id: G2
+    name: Block specialist drafts that violate the passenger-response rubric
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: response-rubric
+    enforcement: blocking
+    rationale: |
+      A specialist agent can produce a syntactically valid `AirlineResolution` whose content
+      violates customer-facing policy — for example, a draft that echoes a PNR locator token
+      that was not fully redacted by the sanitizer, promises a compensation amount beyond
+      published limits, or offers legal guidance on fare-dispute litigation. These errors
+      are not caught by schema validation. The before-agent-response guardrail checks the
+      draft against a policy rubric before it is published to the passenger, and blocks it
+      when any rule fires. Blocked drafts do not reach the passenger; they surface in the
+      operator queue with the violation list.
+    implementation: |
+      `ResponseGuardrail` is a typed Agent. `FlightRequestWorkflow.responseGuardrailStep`
+      invokes it with the `SanitizedPassengerRequest` and the specialist's `AirlineResolution`
+      draft. The agent returns `ResponseVerdict { allowed, violations, rubricVersion }`. On
+      `allowed=false` the workflow emits `ResponseBlocked` (terminal `BLOCKED`) and the
+      operator can either unblock via `POST /api/requests/{id}/unblock` or leave the request
+      blocked. The full audit record — including the blocked draft and the violation list —
+      is preserved on `FlightRequestEntity`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every intent classification inline
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The intent classification is the most consequential step of the routing: a passenger
+      asking to change a flight who is instead routed to `BaggageSpecialist` receives an
+      irrelevant response and must contact support again. An on-decision eval gives a
+      continuous, per-request quality signal independent of manual spot checks. Low scores
+      surface immediately in the App UI as per-request score chips, making classifier
+      regressions visible across a session. In a deployed setting, sustained low scores
+      would feed a system-level alert; in the sample, they give the operator a quick read
+      on whether the classifier's prompt needs tightening for a particular intent category.
+    implementation: |
+      `RoutingEvalScorer` Consumer subscribes to `FlightRequestEntity` events. On every
+      `IntentClassified` it calls `RoutingJudge` (typed Agent) with the
+      `SanitizedPassengerRequest` and the `IntentDecision`. The judge returns
+      `RoutingScore { score: 1–5, rationale }`. The Consumer then calls
+      `FlightRequestEntity.recordRoutingScore` which emits `RoutingScored`. The score is
+      non-blocking — a low score does not affect the workflow's routing or the specialist's
+      execution; it surfaces on the App UI tab and populates the per-request score chip.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PNR and passenger PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Before-tool-call fare-rule guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: G2
+    label: Before-response passenger-output guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision intent-routing eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

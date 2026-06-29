@@ -1,0 +1,95 @@
+# Eval Matrix for the hitl-approval-agent Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (ops-automation domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: hitl-approval-agent
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: ops-automation
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human approval gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Operations automation executes consequential changes — scaling resources,
+      modifying configurations, triggering runbooks — that are difficult or
+      impossible to reverse without downtime or data loss. An operator approval gate
+      between the proposal and execution phases is the defining control of the
+      human-in-loop-gate pattern; no action reaches the execution step without an
+      explicit human decision.
+    implementation: >
+      ApprovalWorkflow pauses in awaitApprovalStep, polling ActionEntity status on
+      a 5-second timer. POST /api/actions/{id}/approve and POST
+      /api/actions/{id}/deny transition the entity via approve and deny commands;
+      the workflow resumes on the next poll and either advances to executeStep or
+      ends with DENIED.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the execution tool unless the action is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      The execution step calls a tool that applies an operational change to a
+      target system. If the workflow polling loop or a replay edge case advances
+      past awaitApprovalStep without a confirmed APPROVED status, the
+      before-tool-call guardrail prevents the tool from running. This keeps the
+      entity state and the real-world effect in agreement: an action can never be
+      executed unless a human explicitly approved it.
+    implementation: >
+      before-tool-call guardrail on ExecutionAgent re-reads ActionEntity.status.
+      When status is APPROVED, the simulated execution tool proceeds. Any other
+      status — PROPOSED, DENIED, or EXECUTED — causes the guardrail to block the
+      call and return an error to the workflow, which surfaces the failure.
+    regulation_anchors: []
+
+  - id: G2
+    name: Verify proposal completeness before human review
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-validation
+    enforcement: blocking
+    rationale: >
+      An incomplete proposal — missing the action type, target system, rationale,
+      or impact estimate — forces operators to approve or deny without enough
+      information, undermining the gate. The output guardrail on ProposalAgent
+      confirms all four fields are non-empty before the ActionProposal is persisted
+      on ActionEntity for review. A proposal that fails this check is retried up to
+      the agent's maxIterationsPerTask limit rather than surfaced to the operator.
+    implementation: >
+      before-agent-response guardrail on ProposalAgent inspects the returned
+      ActionProposal record. All four fields (actionType, target, rationale,
+      estimatedImpact) must be non-blank strings. If any field is missing or empty,
+      the guardrail rejects the response; the agent retries. On success,
+      recordProposal writes the validated ActionProposal to ActionEntity.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for operator approve/deny.
+  - id: G1
+    name: Guard execution tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block execution unless status is APPROVED.
+  - id: G2
+    name: Proposal completeness gate
+    mechanism: "guardrail · before-agent-response"
+    short: Reject incomplete proposals before they reach the operator.

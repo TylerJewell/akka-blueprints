@@ -1,0 +1,49 @@
+# Eval Matrix for the energy-management-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (ops-automation domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: energy-management-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: ops-automation
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Gate every building control action before it executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: >
+      Building control actions — changing HVAC setpoints, dimming lighting circuits, shifting
+      equipment loads — can affect occupant comfort and physical safety if applied outside
+      acceptable operating bands. A before-tool-call guardrail on each specialist agent
+      intercepts every proposed action before the underlying control tool executes, checks it
+      against configured safety and comfort thresholds, and either approves or rejects it.
+      Rejected actions are logged in the subsystem report with blockedByGuardrail = true so
+      the consolidated report reflects which actions were blocked and why. This prevents a
+      misaligned model output from reaching physical infrastructure.
+    implementation: >
+      A before-tool-call guardrail registered on HvacSpecialist, LightingSpecialist, and
+      EquipmentSpecialist intercepts each control-action tool call. The guardrail evaluates the
+      proposed parameter values (setpoint delta, lux target, load-shift magnitude) against a
+      safety envelope defined in application.conf. On rejection, the specialist marks the
+      EquipmentAction or SetpointRecommendation as blockedByGuardrail = true and continues
+      processing remaining actions. OptimizationWorkflow.consolidateStep receives the full
+      specialist report including blocked entries; EnergyCoordinator's consolidation prompt
+      instructs it to omit blocked actions from the physical execution list.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Building control action guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Block any control action that exceeds safe operating limits before it reaches physical infrastructure.

@@ -1,0 +1,90 @@
+schema_version: 1
+sample_id: siem-enrichment
+coordination_pattern: sequential-pipeline
+domain: governance-risk
+
+controls:
+  - id: G1
+    name: Reject ticket-creation tool calls until enrichment has been recorded
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      In a SIEM enrichment pipeline, opening a Zendesk triage ticket for an
+      unenriched alert would route a raw, uncontextualised event to a security
+      analyst — missing the ATT&CK technique mappings, derived severity, and
+      team-assignment logic that make the ticket actionable. The Zendesk write
+      is an external side-effect that cannot be undone cheaply; it is the one
+      operation in the pipeline that must never fire prematurely. The
+      before-tool-call hook is the right enforcement point: it intercepts the
+      openZendeskTicket call before the tool body runs, verifies that
+      EnrichmentProduced has been recorded on AlertEntity, and returns a
+      structured scope-violation error to the agent if not. The agent retries
+      within its iteration budget rather than propagating a bad ticket outward.
+    implementation: |
+      `TicketScopeGuardrail` is registered on `AlertEnrichmentAgent` via the
+      agent's guardrail-configuration block, bound to the `before-tool-call`
+      hook. Each function-tool class (`FetchTools`, `EnrichTools`,
+      `TicketTools`) carries a `Phase` constant on its methods. On every tool
+      call the guardrail reads the candidate's `Phase` and the current
+      `AlertEntity.status` (looked up via the `alertId` carried in the
+      in-flight `TaskDef.metadata`) and applies the accept matrix:
+      `FETCH` tools require `status ∈ {RECEIVED, FETCHING}`;
+      `ENRICH` tools require `status ∈ {FETCHED, ENRICHING}` AND
+      `alertDetail.isPresent()`; `TRIAGE` tools require
+      `status ∈ {ENRICHED, TRIAGING}` AND `enrichedAlert.isPresent()`. On
+      reject, the guardrail returns a structured `scope-violation` error to
+      the agent loop and calls `AlertEntity.recordGuardrailRejection` so the
+      rejection is visible in the UI's rejection-log strip and in the audit
+      log. On accept, the call proceeds.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every emitted triage ticket for ATT&CK coverage and routing completeness
+    mechanism:
+      kind: eval-event
+      flavor: on-incident-reporter
+    enforcement: non-blocking
+    rationale: |
+      A triage ticket that references an unrecognised MITRE technique ID, or
+      whose severity does not match the highest-confidence attack pattern, or
+      that has no assigned team, reaches the SOC analyst in a state that
+      requires manual correction before the alert can be acted on. These gaps
+      do not block ticket creation — the on-incident evaluator surfaces them
+      after the fact so the SOC lead can triage by score rather than opening
+      every ticket for inspection. A score of 1 or 2 is an immediate signal
+      that the enrichment step produced low-quality output and the ticket
+      should be reviewed before any response playbook is triggered.
+    implementation: |
+      `TriageQualityScorer` runs inside `AlertEnrichmentWorkflow.evalStep`,
+      fired immediately after `TicketCreated` lands. The scorer is
+      deterministic and rule-based (no LLM call — keeping the single-agent
+      sequential-pipeline invariant honest). Four checks, one point per check
+      satisfied, on a base of 1:
+      (1) ATT&CK technique presence — every `AttackPattern` in the ticket's
+      `attackPatterns` list has a non-empty `techniqueId`.
+      (2) Technique validity — every `techniqueId` resolves against the
+      bundled in-process ATT&CK technique registry
+      (`src/main/resources/sample-data/mitre-techniques.json`).
+      (3) Severity accuracy — `TriageTicket.severity` equals the
+      `derivedSeverity` field on the upstream `EnrichedAlert`.
+      (4) Routing completeness — `TriageTicket.assignedTeam` is non-empty.
+      Emits `EvaluationScored{score: 1-5, rationale: String}` with a
+      rationale sentence naming the largest gap. Tickets with score ≤ 2 are
+      flagged on the App UI card for human inspection before any automated
+      response is triggered.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Ticket-scope write guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Triage ticket quality eval
+    mechanism: Eval · event
+    implementation: on-incident-reporter
+    source: —

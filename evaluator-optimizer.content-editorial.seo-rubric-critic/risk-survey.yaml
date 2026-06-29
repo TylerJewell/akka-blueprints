@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: seo-rubric-critic
+
+# ---- Purpose ----
+purpose:
+  primary_function: content-quality-evaluation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: editorial-recommendation
+  user_type: content-author
+
+# ---- Data ----
+data:
+  inputs:
+    - free-text-article-body
+    - article-title
+    - target-keyword
+    - word-count-ceiling-integer
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: editorial-recommendation
+  decision_subject: blog-post-content
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+
+# ---- Failure ----
+failure:
+  blast_radius: single-article
+  failure_modes:
+    - rubric-threshold-too-high-to-satisfy
+    - over-ceiling-revision-loop
+    - keyword-stuffing-by-optimizer
+    - score-drift-across-checklist-updates
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: monthly
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+    synthetic-media: false
+    content-generation: true
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER

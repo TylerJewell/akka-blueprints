@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: ambient-expense-agent
+coordination_pattern: single-agent
+domain: finance-analysis
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Expense receipts are among the densest sources of PII in enterprise data flows. A
+      single hotel folio may contain the employee's full name, room number, credit card
+      partial number, home address (if billed), and phone number — none of which belong
+      in an LLM prompt body. Redaction runs in a Consumer between the raw submission
+      event and the agent invocation so the model operates exclusively on amounts,
+      merchants, dates, and category hints; the raw receipt is preserved on the entity
+      for audit purposes but never travels to the model.
+    implementation: |
+      `ReceiptSanitizer` Consumer subscribes to `ReceiptSubmitted` events emitted by
+      `ExpenseEntity`. It runs a pipeline of regex stages covering payment-card number
+      patterns (16-digit PANs, partial card tokens ending in XXXX), phone numbers,
+      street address patterns, and account-id-like tokens, plus a heuristic stage for
+      person names. Outputs a `SanitizedReceipt` carrying the redacted text and the list
+      of PII categories found. Calls `ExpenseEntity.attachSanitized(sanitized)`.
+      `ExpenseWorkflow.captureStep` then passes `sanitized.redactedText` as the
+      `ExpenseCaptureAgent` task attachment; the raw receipt remains accessible only
+      via `request.rawReceiptText` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block non-compliant line-item submissions before the tool executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: policy-validator
+    enforcement: blocking
+    rationale: |
+      An expense-capture agent that can submit arbitrary amounts and categories to an
+      ERP system without validation is a direct financial control risk. The
+      before-tool-call hook is the correct enforcement point: the guardrail intercepts
+      every tool call the agent would make to write a line item, validates it against
+      the company's expense policy (category taxonomy, per-category amount limits,
+      currency whitelist, merchant-name presence), and either allows it through or
+      returns a structured rejection that the agent must address before the tool
+      executes. Items the agent cannot correct within its iteration budget are marked
+      BLOCKED and surfaced to the submitter for human resolution — no silent pass-
+      throughs and no policy-limit bypasses via prompt manipulation.
+    implementation: |
+      `SubmissionGuardrail` is registered on `ExpenseCaptureAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      candidate line-item tool call it checks: (1) `categoryId` is present in the
+      approved taxonomy loaded from `expense-categories.jsonl`; (2) `amount` does not
+      exceed the `maxAmountUsd` for the matched category; (3) `currencyCode` is a valid
+      ISO 4217 three-letter code; (4) `merchantName` is non-empty. On any failure it
+      returns a structured rejection naming the specific check that failed, along with
+      the submitted values. The agent loop receives the rejection, may correct the item
+      or set `lineStatus = BLOCKED`, and continues to the next line item. Items that
+      remain non-compliant after the iteration budget is exhausted cause the workflow's
+      `captureStep` to fail over to the error step.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Expense policy guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

@@ -1,0 +1,84 @@
+schema_version: 1
+sample_id: reply-classifier
+
+# ---- Purpose ----
+purpose:
+  primary_function: sales-email-reply-classification
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: automated-crm-update
+  user_type: sales-representative-or-sdm
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-email-reply-text
+    - deal-id
+    - sender-email
+    - email-subject
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_before_llm: false
+  pii_note: |
+    Inbound replies may contain personal names, email addresses, and phone numbers.
+    No pre-LLM redaction is applied in this baseline — a deployer handling regulated
+    personal data should add a sanitization step before the agent call.
+
+# ---- Decisions ----
+decisions:
+  authority_level: automated-with-guardrail
+  decision_subject: crm-deal-stage
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-by-sales-rep
+  reviewer_reads_every_update_before_action: false
+
+# ---- Failure ----
+failure:
+  blast_radius: single-deal
+  failure_modes:
+    - misclassified-intent
+    - wrong-stage-transition
+    - unsubscribe-not-honoured
+    - guardrail-exhaustion-leaves-deal-unchanged
+    - stale-deal-stage-at-time-of-check
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: sales-representative
+  reviewer_reviews_crm_updates_periodically: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - pipedrive-api-update
+  rate_limit_per_reply: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  email-content-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

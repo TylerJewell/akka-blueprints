@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: gemma-food-tour-guide
+coordination_pattern: single-agent
+domain: planning-travel
+
+controls:
+  - id: G1
+    name: Reject malformed itineraries before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A food tour itinerary that references an out-of-range day index, an
+      unrecognized meal slot, or misses a requested dietary category is not
+      merely unhelpful — it is broken output that would reach the traveler
+      and the UI. The before-agent-response hook is the right interception
+      point: catch structural violations before the itinerary leaves the
+      agent's loop, force a retry within the same task, and only allow
+      well-formed itineraries to reach the workflow. In the planning-travel
+      domain the user's dietary requirements carry safety implications
+      (allergens, religious restrictions), so a guardrail that catches
+      silent omissions is load-bearing, not cosmetic.
+    implementation: |
+      `ItineraryGuardrail` is registered on `FoodTourAgent` via the
+      agent's guardrail-configuration block, bound to the
+      `before-agent-response` hook. On each candidate response it (1)
+      parses the response into `TourItinerary`, (2) asserts every
+      `stops[].mealSlot` is a member of `{BREAKFAST, LUNCH, DINNER, SNACK,
+      MARKET}`, (3) asserts every `dayIndex` in `days` falls between 1 and
+      the requested `durationDays`, and (4) asserts that at least one
+      `VenueStop.dietaryCategory` in the full itinerary matches each value
+      in `ValidatedPreferences.normalizedCategories`. On any failure it
+      returns a structured rejection naming the failed check and the
+      offending value; the agent loop consumes one of its 3 iterations and
+      retries. Passing responses flow through to `generateStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every itinerary for dietary and variety coverage
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A structurally valid itinerary can still be coverage-thin — three
+      consecutive days of identical meal slots, stop descriptions that are
+      single words, or a vegetarian traveler whose itinerary contains no
+      vegetarian stops because the guardrail only checks that a category
+      label is present somewhere in the plan. An on-decision evaluator
+      surfaces these patterns immediately without blocking the itinerary
+      itself, giving travelers and platform operators a fast signal about
+      which plans deserve a second look before the traveler departs. In the
+      planning-travel domain, a low-quality itinerary has real downstream
+      cost: a missed dining window in a foreign city is not easily undone.
+    implementation: |
+      `CoverageScorer` runs inside `TourWorkflow.evalStep`, fired
+      immediately after `ItineraryRecorded` lands. The scorer is
+      deterministic and rule-based (no LLM call — keeping the single-agent
+      invariant honest): it checks that every category in
+      `ValidatedPreferences.normalizedCategories` is matched by at least
+      one `VenueStop.dietaryCategory` in the full plan (-1 point per
+      missing category), that no individual `DayPlan` has all stops sharing
+      the same `mealSlot` (-1 point for a single-slot day), and that every
+      `VenueStop.description` exceeds 20 characters (-1 point per trivial
+      description, capped at 1 deduction total). Base score is 5; minimum
+      is 1. Emits `CoverageScored` with the resulting score and a one-line
+      rationale. The score is surfaced on the App UI tab; tours with score
+      ≤ 2 are flagged for re-generation or manual review.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Itinerary structure guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision coverage eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

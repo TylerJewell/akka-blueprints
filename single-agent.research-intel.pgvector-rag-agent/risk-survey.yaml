@@ -1,0 +1,82 @@
+schema_version: 1
+sample_id: pgvector-rag-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: documentation-corpus-question-answering
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: informational
+  user_type: researcher-or-developer
+
+# ---- Data ----
+data:
+  inputs:
+    - submitted-questions
+    - ingested-documentation-corpus
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    proprietary-documentation: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  corpus_contains_public_documentation_only: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: informational
+  decision_subject: documentation-lookup-and-synthesis
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  researcher_reads_every_answer_before_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-question
+  failure_modes:
+    - hallucinated-citation
+    - out-of-context-answer
+    - missed-passage
+    - citation-mismatch
+    - insufficient-context-false-negative
+    - low-relevance-retrieval
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: researcher-or-developer
+  reviewer_must_validate_citations_before_action: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - text-embedding
+  external_infrastructure:
+    - pgvector-postgres
+  rate_limit_per_question: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  corpus-documents-licensed-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

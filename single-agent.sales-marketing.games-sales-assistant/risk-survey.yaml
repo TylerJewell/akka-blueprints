@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: games-sales-assistant
+
+# ---- Purpose ----
+purpose:
+  primary_function: retail-sales-assistant
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-only
+  user_type: retail-shopper
+
+# ---- Data ----
+data:
+  inputs:
+    - shopper-questions
+    - shopper-session-context
+    - video-games-catalog
+    - order-history
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  catalog_is_internal_only: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: retail-product-recommendation
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  shopper_can_ignore_recommendation: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-session
+  failure_modes:
+    - off-catalog-title-in-recommendation
+    - stale-price-in-recommendation
+    - forbidden-topic-in-response
+    - hallucinated-promotional-claim
+    - order-history-mismatch
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  guardrail_blocks_forbidden_responses: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_session: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  age-gating-for-mature-titles: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  catalog-data-licensed-for-ai-use: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: code-agent-chat-ui
+
+# ---- Purpose ----
+purpose:
+  primary_function: general-purpose-code-agent-chat
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: direct-response
+  user_type: developer-or-knowledge-worker
+
+# ---- Data ----
+data:
+  inputs:
+    - user-chat-messages
+    - web-search-results
+    - code-execution-outputs
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  conversation_history_stored_on_entity: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: direct-response
+  decision_subject: user-question-or-task
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  user_reads_response_before_acting: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-session
+  failure_modes:
+    - hallucinated-code-output
+    - tool-call-sandbox-escape
+    - prompt-injection-via-search-result
+    - response-echoing-context-material
+    - plan-loop-without-progress
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: end-user
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - web-search-simulated
+    - code-execution-sandboxed
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  code-execution-environment-isolated: true
+  web-search-domain-allowlist-enforced: true

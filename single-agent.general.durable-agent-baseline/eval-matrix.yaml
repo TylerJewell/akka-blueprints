@@ -1,0 +1,72 @@
+schema_version: 1
+sample_id: durable-agent-baseline
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: M1
+    name: Monitor running agents for stalls and resource over-runs
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: non-blocking
+    rationale: |
+      A long-running agent that processes multi-step work orders can stall in
+      the middle of a step without surfacing an error — the workflow's step
+      timeout catches eventual exhaustion, but it fires only after a full 120 s
+      window. For durable workloads operators need earlier, lower-threshold
+      visibility: a stall alert at 90 s per step and a resource alert when
+      iteration count exceeds the per-step cap. Neither alert kills the run;
+      both land in the entity log and surface in the UI so a human on loop can
+      intervene or let it run depending on the work order's priority.
+    implementation: |
+      `RuntimeMonitor` Consumer subscribes to `WorkOrderEntity` events. On
+      each `StepStarted` it opens a timed window keyed by (workOrderId, stepId).
+      On `StepCompleted` or `StepFailed` it closes the window. Every 30 s the
+      Consumer scans open windows; any window older than 90 s triggers a
+      `WorkOrderEntity.recordAlert` call with `kind = STALL`. It also counts
+      entity events per workOrderId; when the count exceeds 50 it writes a
+      `RESOURCE_OVER_RUN` alert. On JVM restart `RuntimeMonitor` re-reads
+      the entity's current state via `getWorkOrder` before committing to any
+      threshold check, so no alert is lost or double-fired across a bounce.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score each completed work order for execution performance
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      Durable agents that survive restarts can accumulate subtle latency
+      regressions: a step that averages 8 s in development silently degrades
+      to 45 s under load. A per-completion performance score surfaces these
+      patterns without requiring external APM tooling. Because the evaluator
+      is deterministic and fires inside the workflow immediately after every
+      completion, the score is always present on the work order record —
+      operators can sort by score to find the slowest or most retry-heavy
+      runs at a glance. Runs scoring ≤ 2 are flagged for human review, giving
+      the on-loop team a ranked triage list rather than raw logs.
+    implementation: |
+      `PerformanceEvaluator` runs inside `WorkOrderWorkflow.evalStep`, fired
+      immediately after `WorkOrderCompleted` lands. The scorer is deterministic
+      and rule-based (no LLM call — keeping the single-agent invariant honest):
+      awards points for low average latency per step (≤ 15 s on average = +2),
+      no step retried more than once (+1), no stall alerts (+1), and
+      `resolution == COMPLETED` (+1). Minimum score is 1. Emits
+      `PerformanceEvaluated{score, rationale, evaluatedAt}` via
+      `WorkOrderEntity.recordEvaluation`. Scores are surfaced as a chip on
+      every App UI card; the Eval Matrix tab aggregates scores across all runs.
+    regulation_anchors: []
+
+simplified_view:
+  - id: M1
+    label: Runtime stall + resource monitor
+    mechanism: HOTL · Runtime
+    implementation: deployer-runtime-monitoring
+    source: —
+  - id: E1
+    label: Per-completion performance score
+    mechanism: Eval · Periodic
+    implementation: performance-monitor
+    source: —

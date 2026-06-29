@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: web-navigation-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: web-navigation-automation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: fully-autonomous
+  user_type: operations-or-qa-engineer
+
+# ---- Data ----
+data:
+  inputs:
+    - task-goal-text
+    - page-screenshots
+    - operator-provided-credentials-if-any
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  screenshots_retained_for_audit: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: fully-autonomous
+  decision_subject: web-page-interaction
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+  high_stakes_actions_require_hitl_approval: true
+
+# ---- Failure ----
+failure:
+  blast_radius: TO_BE_COMPLETED_BY_DEPLOYER
+  failure_modes:
+    - unintended-form-submission
+    - navigation-to-disallowed-domain
+    - runaway-session-no-halt
+    - hitl-timeout-session-stuck
+    - credential-exposure-in-screenshot
+    - action-budget-exhausted-without-goal-completion
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  hitl_fires_for: high-stakes-actions
+  operator_halt_available: true
+  halt_persists_across_restarts: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  model_requires_vision_input: true
+  external_tool_calls:
+    - llm-completion-with-vision
+    - headless-browser-page-load
+    - headless-browser-screenshot
+  max_steps_per_session: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  allowed_domains_configured: TO_BE_COMPLETED_BY_DEPLOYER
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  terms-of-service-compliance-for-target-sites: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER

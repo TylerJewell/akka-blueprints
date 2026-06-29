@@ -1,0 +1,100 @@
+schema_version: 1
+sample_id: inbox-watcher
+coordination_pattern: continuous-monitor
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound customer messages routinely contain emails, phone numbers,
+      addresses, account IDs, and occasionally payment data. The model has
+      no business seeing any of it. Redaction happens inside a Consumer
+      before the message enters the workflow.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `MessageReceived` events. Applies a
+      pipeline: regex stage (well-known formats), heuristic stage (names,
+      addresses, account-like tokens), and a configurable allow-list for
+      enterprise-specific identifiers. Emits `MessageSanitized` carrying the
+      redacted payload plus a list of categories found. The categories list is
+      kept for audit; redacted text is what reaches the LLM.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block sendReply unless approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: scope-enforcement
+    enforcement: blocking
+    rationale: |
+      Even if a future change wires `DraftReplyAgent` with a real outbound
+      send tool, the guardrail enforces "drafts must remain drafts until a
+      human approves". Defence in depth — the HITL gate is the primary
+      mechanism, this guardrail is the redundancy.
+    implementation: |
+      Wired on the `sendReply(messageId, body)` tool's `before-tool-call`
+      hook. Reads `InboxMessageEntity.state(messageId)`, requires
+      `decision.approved == true` and `status == SENT` already emitted via the
+      HITL path. Otherwise rejects the call with a structured error.
+    regulation_anchors: []
+
+  - id: H1
+    name: Human approval required before send
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      The system's stated promise: no reply is ever sent without a human
+      clicking Approve. This is the primary control — the guardrail is the
+      defence-in-depth backstop.
+    implementation: |
+      `InboxWorkflow` transitions every drafted message to AWAITING_APPROVAL
+      and polls `InboxMessageEntity` every 5 seconds. The workflow advances
+      only when an `ApprovalDecision` event is present, which can only be
+      emitted by `InboxEndpoint.approve` or `InboxEndpoint.reject`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Periodic eval of sent replies
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      A long-running auto-reply system needs throughput + quality monitoring
+      over time. Sampling sent replies gives a continuous quality signal
+      separate from per-message governance.
+    implementation: |
+      `EvalRunner` TimedAction fires every 30 minutes. Picks up to 5 SENT
+      messages without `evalScore`, oldest-first. For each, calls `EvalJudge`
+      (LLM with a tight rubric) and emits `EvalScored` with score 1–5 and a
+      one-sentence rationale. Surfaces on the UI's App UI tab.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: sendReply scope guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Approve-to-send gate
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: E1
+    label: Sent-reply eval
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

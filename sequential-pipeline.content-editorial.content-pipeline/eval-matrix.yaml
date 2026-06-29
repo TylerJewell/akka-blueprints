@@ -1,0 +1,81 @@
+# Eval Matrix for the content-pipeline Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (content-editorial domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: content-pipeline
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: sequential-pipeline
+  domain: content-editorial
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Restrict the research web-search tool to an allowed-domain list
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      The research agent calls an external-style web-search tool. Sources outside
+      a known allowed list should never enter the brief, so the guard fires before
+      the tool call rather than filtering after.
+    implementation: >
+      before-tool-call guardrail on ResearchAgent checks each requested source
+      URL/domain against src/main/resources/allowed-domains.txt; off-list domains
+      are blocked and excluded from the returned ResearchBrief.
+    regulation_anchors: []
+
+  - id: G2
+    name: Run a terminal style and safety check on generated content
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The drafted article is published-facing. A terminal check on length,
+      profanity, and topic adherence keeps unsafe or off-topic output from
+      reaching the publish stage.
+    implementation: >
+      before-agent-response guardrail on WriterAgent evaluates the draft before it
+      is returned; a failing draft blocks the write step, which fails over and
+      writes ArticleFailed with a reason.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score each draft with a self-critique pass before publishing
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      Before publishing, a self-critique pass scores the draft and notes
+      weaknesses. Informational; it surfaces quality context in the UI but does
+      not block the pipeline.
+    implementation: >
+      ContentPipelineWorkflow critiqueStep calls CritiqueAgent.critique on the
+      draft, records ArticleCritiqued with score and notes on ArticleEntity, and
+      the UI shows the score before the published URL appears.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Allowed-domain search guard
+    mechanism: "guardrail · before-tool-call"
+    short: Block research sources outside the allowed-domain list.
+  - id: G2
+    name: Published-content safety gate
+    mechanism: "guardrail · before-agent-response"
+    short: Block drafts that fail the style/safety check.
+  - id: E1
+    name: Self-critique eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Score every draft before publishing; non-blocking.

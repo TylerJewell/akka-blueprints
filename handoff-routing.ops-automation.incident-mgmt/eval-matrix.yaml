@@ -1,0 +1,67 @@
+schema_version: 1
+sample_id: incident-management
+coordination_pattern: handoff-routing
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Block specialist remediation plans that violate the ops policy rubric
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: policy-rubric
+    enforcement: blocking
+    rationale: |
+      An incident management specialist has elevated authority — it can propose actions
+      that directly affect production systems (restarts, rollbacks, scale events). A
+      well-formed RemediationPlan is not necessarily a safe one: the specialist might
+      propose a critical-tier host restart during peak traffic hours, perform a
+      destructive action without an open change record, or echo a raw alert token into
+      a customer-visible summary. The before-tool-call guardrail intercepts the plan
+      before any external write executes, so policy violations never reach the affected
+      systems.
+    implementation: |
+      `ToolCallGuardrail` is a typed Agent. `IncidentWorkflow.guardrailStep` invokes it
+      with the `EnrichedReport` (which carries `serviceTier` and `hostGroup`) and the
+      specialist's `RemediationPlan`. The agent returns `GuardrailVerdict { allowed,
+      violations, rubricVersion }`. On `allowed=false` the workflow emits
+      `RemediationBlocked` (terminal `BLOCKED`) and the operator can either approve via
+      `POST /api/incidents/{id}/unblock` or leave the incident blocked for manual
+      resolution.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every routing decision as it is reported
+    mechanism:
+      kind: eval-event
+      flavor: on-incident-reporter
+    enforcement: non-blocking
+    rationale: |
+      The routing decision is the most consequential step of the handoff: sending an
+      infrastructure incident to the application specialist (or vice versa) means the
+      wrong runbook, wrong authority limits, and wrong escalation path. An
+      on-incident-reporter eval provides a continuous, per-incident quality signal that
+      operates outside the critical path — it cannot delay remediation — while giving
+      operators an observable track record of classifier accuracy over time.
+    implementation: |
+      `RoutingEvalScorer` Consumer subscribes to `IncidentEntity` events. On every
+      `IncidentClassified` it calls `RoutingJudge` (typed Agent) with the
+      `EnrichedReport` and the `ClassificationDecision`. The judge returns
+      `RoutingScore { score: 1–5, rationale }`. The Consumer then calls
+      `IncidentEntity.recordRoutingScore` which emits `RoutingScored`. The score is
+      non-blocking — a low score does not change the workflow flow; it appears on the
+      App UI tab and (in a deployed setting) would feed a system-level alert when the
+      rolling average drops below a threshold.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-tool-call ops policy guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: On-incident routing eval
+    mechanism: Eval · event
+    implementation: on-incident-reporter
+    source: —

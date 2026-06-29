@@ -1,0 +1,101 @@
+schema_version: 1
+sample_id: llm-compiler-dag
+coordination_pattern: planner-executor
+domain: general
+
+controls:
+  - id: G1
+    name: Vet every frontier tool call before parallel dispatch fires
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The Task Fetching Unit dispatches multiple tool calls in parallel, meaning
+      a single bad node in the frontier multiplies its impact across concurrent
+      branches. A write-capable or unsafe call (e.g., a CODE_EVAL node importing
+      Runtime, or a LOOKUP targeting a system path) that reaches execution cannot
+      be recalled mid-flight across sibling branches. The guardrail wired to the
+      frontier evaluation step stops each offending node before any branch is
+      spawned, keeping the blast radius of a malformed plan contained to the
+      revise-and-retry cycle rather than a live parallel execution.
+    implementation: |
+      `DispatchGuardrail.vet(ToolCall)` is called by `TaskFetchingUnit`'s
+      `guardStep` for every node in the current frontier before
+      `parallelDispatchStep` fires. The vetter checks (a) the tool allow-list
+      (SEARCH, CALCULATOR, LOOKUP, CODE_EVAL), (b) per-tool argument constraints:
+      SEARCH query length ≤ 500 chars; CALCULATOR expression matched against
+      `/^[\d\s\+\-\*\/\(\)\.]+$/`; LOOKUP key must not start with `/` or `~`;
+      CODE_EVAL code must not contain `Runtime` or `ProcessBuilder`. Rejected
+      nodes emit `ToolCallBlocked` on `JobEntity` and are marked `SKIPPED` in
+      the DAG. The remaining approved nodes proceed to parallel dispatch.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Let the operator pause frontier dispatch without aborting in-flight parallel branches
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: blocking
+    rationale: |
+      Parallel fan-out makes it impossible to retract individual tool branches
+      once they are running. An operator who sees an unexpected pattern in the
+      compilation plan or in early results needs a way to stop the next wave of
+      dispatches without disrupting the branches that are already executing —
+      aborting them mid-flight would produce partial results and leave the job
+      entity in an inconsistent state. The halt mechanism drains at the batch
+      boundary: the current parallel batch finishes, then no new frontier is
+      evaluated or dispatched.
+    implementation: |
+      `SystemControlEntity` (single instance keyed by literal `"global"`) holds
+      the halt flag. The App UI tab exposes Halt / Resume buttons backed by
+      `POST /api/control/halt` and `POST /api/control/resume`. Every
+      `TaskFetchingUnit` reads the flag in its `checkHaltStep` at the top of
+      each loop iteration, after the previous parallel batch has completed and
+      results have been recorded. On `halted=true`, the workflow emits
+      `JobHaltedOperator` on `JobEntity` and ends with the job in `HALTED`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub secret-shaped strings from every tool result before they reach the Joiner
+    mechanism:
+      kind: sanitizer
+      flavor: secret
+    enforcement: blocking
+    rationale: |
+      Tool results flow directly into the Joiner's synthesis prompt and into
+      the SSE feed the UI consumes. If a LOOKUP fixture or a CODE_EVAL output
+      contains an API key, a JWT, or a bearer token, that material lands in
+      every subsequent LLM call and in the browser. Because tool calls run in
+      parallel, multiple results may arrive within the same batch; each must be
+      scrubbed before being recorded on the `JobEntity` and before any is handed
+      to the Joiner. The sanitizer makes redaction unconditional, deterministic,
+      and batch-safe.
+    implementation: |
+      `SecretScrubber.scrub(String)` runs in `TaskFetchingUnit`'s `sanitizeStep`
+      after all parallel branches return and before `recordStep`. It applies
+      labelled-replacement regexes (AWS access key, GitHub token, JWT, OpenAI
+      key, generic bearer token) plus a high-entropy fallback for tokens ≥ 32
+      characters whose Shannon entropy exceeds 4.5 bits/char. Replacements are
+      tagged: `[REDACTED:aws-access-key]`, `[REDACTED:github-token]`,
+      `[REDACTED:jwt]`, etc. The scrubbed output is what lands on each
+      `ToolCallResolved` event and what the Joiner receives in the `ResultSet`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Frontier dispatch guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: HO1
+    label: Operator runtime monitoring
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring (SystemControlEntity + dashboard)
+    source: —
+  - id: S1
+    label: Secret sanitizer
+    mechanism: Sanitizer
+    implementation: secret (regex + entropy redactor applied per parallel batch)
+    source: —

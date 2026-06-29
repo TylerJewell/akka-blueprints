@@ -1,0 +1,65 @@
+# Eval Matrix for the economic-research-agent Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (finance-analysis domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: economic-research-agent
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Vet the synthesised report before it reaches the reader
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      Economic analysis reports carry an elevated risk of speculative investment claims and
+      missing disclaimers that could mislead readers into financial decisions. A
+      before-agent-response guardrail intercepts every synthesised report and verifies that
+      no unsupported price targets, buy/sell recommendations, or unqualified forecasts are
+      present before the report is surfaced. A report that fails this check is held in
+      BLOCKED rather than being delivered.
+    implementation: >
+      A before-agent-response guardrail on EconomicsCoordinator runs a deterministic rule
+      vetter (regex-based pattern for common speculative phrases) followed by an LLM judge
+      in AnalysisWorkflow.guardrailStep. On failure the workflow calls
+      AnalysisReportEntity.block and the report enters BLOCKED with a failureReason.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the coordinator synthesis decision for quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The coordinator merges quantitative indicators and economic interpretation into one
+      report. That synthesis decision is high-stakes: errors in weighting or framing can
+      produce misleading conclusions. Sampling the decision periodically with a rubric judge
+      surfaces a quality score that readers can inspect, without blocking delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries AnalysisView for the oldest
+      PUBLISHED report lacking an evalScore, runs a 1-5 rubric judge over the synthesised
+      content, and calls AnalysisReportEntity.recordEval(score, rationale), emitting
+      ReportEvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Report output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a report with speculative investment claims or missing financial disclaimers.
+  - id: E1
+    name: Synthesis quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's economic synthesis decision.

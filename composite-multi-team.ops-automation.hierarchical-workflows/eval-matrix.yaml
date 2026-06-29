@@ -1,0 +1,138 @@
+# Eval Matrix for the hierarchical-workflow-automation Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community ops-automation sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list across
+# all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: hierarchical-workflow-automation
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: composite-multi-team
+  domain: ops-automation
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Vet the final operations report before it is delivered
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: |
+      The operations report is the authoritative record of what the automation did
+      across target systems. Everything upstream — discovery scans, task execution
+      results, validation notes — is intermediate working material, but the report is
+      what operators and auditors read to understand and verify the outcome. A guardrail
+      on the orchestrator's REPORT response before it is persisted ensures that a report
+      lacking documented outcomes, a preparedBy attribution, or minimum substance never
+      reaches completed status. In a cross-system automation context, an incomplete or
+      misleading report is an audit and accountability risk, not just a quality issue.
+    implementation: |
+      A before-agent-response guardrail registered on `Orchestrator` inspects the
+      `OpsReport` produced by the REPORT task. It refuses a report shorter than a
+      minimum length, one with an empty `preparedBy` field, or one whose body
+      documents no task outcomes. On a refusal `WorkflowInstance.reportStep` calls
+      `WorkflowEntity.recordReportBlock(reason)` and ends with the workflow left
+      `VALIDATED`; nothing is completed and the guardrail reason is shown in the UI.
+    regulation_anchors: []
+
+  - id: G2
+    name: Gate every cross-system action before it executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: |
+      Three teams of agents — system scanners, task executors, validators — all act
+      on external systems through `SystemTools`. Those calls are stateful side effects
+      on real infrastructure: a stray write could act on the wrong request's targets,
+      overwrite task results another executor owns, or issue a command against a
+      workflow that has already completed. Cross-system automation agents operating
+      over shared infrastructure need a gate in front of every tool call, so an action
+      never lands when it is out of scope. The before-tool-call position ensures the
+      check happens before any network call or state mutation, not after.
+    implementation: |
+      A before-tool-call guardrail registered on `SystemScanner`, `TaskExecutor`, and
+      `Validator` inspects each `SystemTools` call. It refuses a call whose target
+      `requestId` or `taskId` is not the one the agent was assigned, a call to a
+      request whose status is already `COMPLETED`, or a payload over a size cap. A
+      refused call records the stage with the guardrail reason and the agent returns
+      without a partial side effect; for a task the `ExecutorWorkflow` releases the
+      claim so another executor can pick it up.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every stage result as it lands
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Each stage of the pipeline produces an evaluable result — a discovery summary,
+      an execution summary, a validation verdict. Scoring those results as they land
+      gives operators a running read on pipeline quality without holding up execution,
+      and surfaces weak stages (a thin discovery with few findings, an execution
+      summary with no completed tasks, a validation that triggered a retry) beside
+      the request in the UI. In ops automation, a low stage score is a signal for
+      human review even when the pipeline proceeds.
+    implementation: |
+      `AuditEvalConsumer` subscribes to `WorkflowEntity` events and fires on
+      `DiscoverySynthesized`, `ExecutionSummarized`, and `ValidationCompleted`. For
+      each it runs `ResultEvaluator` — a deterministic pure function, not an LLM call
+      — that returns an `AuditEval{stage, score, flags}` (e.g., a discovery summary
+      with fewer than three key findings, an execution summary with no completed tasks,
+      a validation with any RETRY axis). The eval is recorded on the workflow entity
+      and shown in the App UI; it never gates the pipeline.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Allow post-execution compliance review of completed workflows
+    mechanism:
+      kind: hotl
+      flavor: live-compliance-review
+    enforcement: non-blocking
+    rationale: |
+      Compliance review of automated operations is often better conducted after the
+      fact — an operator or auditor reviewing completed workflow reports for actions
+      that fall outside policy or warrant follow-up. This reviewer is on the loop,
+      not in it: the workflow completes without waiting for a human sign-off, and
+      the post-execution review is recorded against it for audit trail and potential
+      escalation rather than gating the automation run. This pattern is appropriate
+      when the automation's actions are reversible or low-stakes enough to proceed
+      and review after, but the organization still requires a compliance record.
+    implementation: |
+      `POST /api/requests/{id}/compliance-review` accepts a `ComplianceReview`
+      (`reviewedBy`, `outcome` of `CLEARED` or `FLAGGED`, `comments`) only when the
+      workflow status is `COMPLETED`; otherwise it returns `409`.
+      `WorkflowEntity.recordComplianceReview` emits `ComplianceReviewRecorded` and
+      stores the review without changing the `COMPLETED` status. The App UI shows a
+      compliance box on every completed request and the recorded outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Final-report output guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: G2
+    label: Cross-system action guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Per-stage audit eval
+    mechanism: Eval event
+    implementation: on-decision-eval
+    source: —
+  - id: HO1
+    label: Post-execution compliance review
+    mechanism: Human on the loop
+    implementation: live-compliance-review
+    source: —

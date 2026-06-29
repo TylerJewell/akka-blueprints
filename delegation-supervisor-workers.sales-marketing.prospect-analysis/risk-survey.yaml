@@ -1,0 +1,61 @@
+schema_version: 1
+sample_id: prospect-analysis
+
+purpose:
+  primary_function: Research a target company, identify decision-makers, and draft an outreach strategy
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: draft-only
+  user_type: sales or marketing operator
+
+data:
+  inputs:
+    - target company name
+    - optional company domain
+    - canned company facts from the research surface
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+decisions:
+  authority_level: draft-only
+  decision_subject: prospective customer company and its named contacts
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+
+failure:
+  blast_radius: single-customer
+  failure_modes:
+    - off-domain research fetch
+    - leaked contact details
+    - stalled analysis
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: sales operator reviewing the drafted strategy before outreach
+  audit_frequency: weekly
+
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - scoped web research tool (domain allow-list)
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER

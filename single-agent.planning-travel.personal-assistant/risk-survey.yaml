@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: personal-assistant
+
+# ---- Purpose ----
+purpose:
+  primary_function: personal-calendar-and-task-management
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: execute
+  user_type: individual-end-user
+
+# ---- Data ----
+data:
+  inputs:
+    - natural-language-requests
+    - calendar-event-snapshots
+    - task-list-snapshots
+  data_classes:
+    pii: true
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: true
+    contact-data: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: execute
+  decision_subject: calendar-event-or-task-item
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+  user_reviews_change_set_in_ui: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-user-context
+  failure_modes:
+    - wrong-date-write
+    - cross-context-write
+    - pii-leakage-via-llm
+    - no-action-when-action-needed
+    - spurious-duplicate-event
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: end-user
+  user_reviews_change_set_before_confirming: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_request: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  contact-data-processing-lawful-basis: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,70 @@
+schema_version: 1
+sample_id: sales-roleplay-coach
+coordination_pattern: evaluator-optimizer
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Block prohibited content in rep turns before the buyer simulator responds
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      A sales rep practicing a pitch may inadvertently include claims that would
+      be harmful in a real interaction: competitor brand assertions that could
+      expose the deploying organization to legal liability, or pricing figures
+      that contradict the official price book and would mislead prospects if
+      repeated verbatim. Catching these in the coaching loop — before the buyer
+      simulator validates them by responding to them — ensures the rep never
+      receives positive reinforcement for prohibited patterns. The check is
+      deterministic and does not require a second LLM call.
+    implementation: |
+      Wired as the `guardrailStep` of `SessionWorkflow`, immediately after
+      `repTurnStep` delivers a rep turn. A pure-function check scans
+      `repTurn.text()` against a configurable prohibited-patterns list loaded
+      from `src/main/resources/prohibited-patterns.txt`. On failure, emits
+      `TurnGuardrailVerdictRecorded` with `verdict.passed = false` and
+      `reasonCode = "PROHIBITED_CONTENT"`, then transitions back to the
+      `repTurnStep` wait state with structured feedback
+      `CoachingNotes("Turn contains prohibited content; remove competitor brand
+      claims and unverified pricing before resubmitting.")`. The turn still
+      counts toward `maxTurns`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every coached turn as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The coach's accept-or-revise verdict per turn is the primary quality signal
+      the coaching loop produces. Recording it as a typed event per turn gives
+      enablement managers a continuous stream of rep-performance data — pass rate
+      by turn number, drift in average score per deal stage, frequency of
+      guardrail blocks — without instrumenting the workflow itself. The same
+      stream drives future automated manager dashboards and individual rep
+      progress reports.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `SessionsView.getAllSessions`, finds turns that have been coached but
+      do not yet have a matching `EvalRecorded` event, and calls
+      `SessionEntity.recordEval(turnNumber, decision, score, guardrailFlagged)`.
+      The call is idempotent on `(sessionId, turnNumber)`. The workflow itself
+      also emits one `EvalRecorded` event on the terminal transition
+      (SessionPassed or SessionExhausted) carrying the whole session's outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · prohibited content
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: E1
+    label: Per-turn eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

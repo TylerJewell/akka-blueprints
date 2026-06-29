@@ -1,0 +1,60 @@
+# Eval Matrix for the async-hitl-tool-gate Akka sample.
+#
+# Schema note: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a general-domain community sample with no industry- or jurisdiction-bound
+# anchors, so regulation_anchors is intentionally an empty list across all controls.
+
+schema_version: 1
+sample_id: async-hitl-tool-gate
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Pause for human approval before tool execution
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      The pipeline pauses after planning and before any side-effecting tool call until a
+      human approves or rejects the planned action. Blocking human approval before tool
+      execution is the defining characteristic of the human-in-loop-gate pattern.
+    implementation: >
+      ApprovalWorkflow pauses in awaitApprovalStep, polling ActionEntity.getAction and
+      re-arming a 5-second resume timer while status is PLANNED. POST /api/actions/{id}/approve
+      and POST /api/actions/{id}/reject transition the workflow to executeStep or a terminal
+      REJECTED state.
+    regulation_anchors: []
+
+  - id: G1
+    name: Refuse the tool call unless the action is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      A pre-execution policy check complements the human gate: even if the workflow reaches
+      executeStep, the tool must not run unless the action's status is APPROVED. This guards
+      against a resumed-but-unapproved transition.
+    implementation: >
+      A before-tool-call guardrail on ExecutorAgent reads ActionEntity status and blocks the
+      simulated tool invocation unless the status is APPROVED, returning a refusal the
+      workflow records as a failed executeStep.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/reject before the tool runs.
+  - id: G1
+    name: Approved-only tool call
+    mechanism: "guardrail · before-tool-call"
+    short: Block tool execution unless status is APPROVED.

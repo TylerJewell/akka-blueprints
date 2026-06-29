@@ -1,0 +1,70 @@
+schema_version: 1
+sample_id: tsforecast
+coordination_pattern: single-agent
+domain: finance-analysis
+
+controls:
+  - id: G1
+    name: Reject structurally invalid forecast results before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      Forecasting agents can produce interval inversions (lower bound above the point
+      forecast), horizon-count mismatches, or null point values when the model loses
+      track of the required output schema mid-generation. In a finance context these
+      silent errors propagate silently into downstream systems — a risk engine consuming
+      an inverted confidence interval may treat a bullish signal as bearish. Catching
+      structural violations before the result leaves the agent loop prevents any
+      malformed data from reaching the entity log or the UI.
+    implementation: |
+      `ForecastGuardrail` is registered on `ForecastingAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate response it (1) parses the response into `ForecastResult`, (2) asserts
+      every `steps[].pointForecast` is non-null and numeric, (3) asserts every
+      `HorizonStep` satisfies `lowerBound <= pointForecast <= upperBound`, and (4) asserts
+      the `steps` list count matches the requested `horizonDays` divided by the
+      granularity factor. On any failure it returns a structured rejection naming the
+      failed check; the agent loop consumes one of its 3 iterations and retries. Passing
+      responses flow through to `forecastStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every forecast result for distributional drift
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      A well-formed forecast can still be systematically wrong if the underlying
+      series has shifted distribution — a revenue model trained on pre-crisis patterns
+      producing STABLE-labelled intervals during a structural break is more dangerous
+      than a forecast that simply fails validation. The drift-fairness-watch evaluator
+      surfaces this degradation automatically on every result without blocking delivery,
+      giving analysts a MAPE-backed signal to escalate before downstream consumers act
+      on stale calibration.
+    implementation: |
+      `DriftEvaluator` runs inside `ForecastWorkflow.driftEvalStep`, fired immediately
+      after `ForecastCompleted` lands. The evaluator is deterministic and rule-based (no
+      LLM call — keeping the single-agent invariant honest): it computes mean absolute
+      percentage error (MAPE) between the forecast's first `min(14, horizonDays)` steps
+      and the last matching actuals window from `submission.historicalData`. MAPE < 0.10
+      → `STABLE`; 0.10–0.25 → `WATCH`; > 0.25 → `ALERT`. Emits `DriftEvaluated` with
+      `driftStatus`, the raw `mape` value (0.0–1.0), and a one-line rationale. The UI
+      card border turns red on `ALERT`; the analyst knows to investigate the series
+      before relying on the forecast.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Forecast-structure guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Drift-fairness watch
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —

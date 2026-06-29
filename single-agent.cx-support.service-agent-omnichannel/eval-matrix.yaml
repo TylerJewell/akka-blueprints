@@ -1,0 +1,132 @@
+schema_version: 1
+sample_id: service-agent-omnichannel
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Redact customer PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound customer support messages routinely contain email addresses, phone
+      numbers, account numbers, payment-card-like tokens, postal addresses, and
+      personal names. Support channels that accept free-text messages — particularly
+      WhatsApp and web chat — amplify the risk because customers often include
+      sensitive identifiers without prompting. The sanitizer runs in a Consumer
+      between the raw message submission and the agent invocation; the raw message
+      is preserved on the entity for audit but never forms the input seen by the
+      model.
+    implementation: |
+      `MessageSanitizer` Consumer subscribes to `MessageReceived` events emitted by
+      `CaseEntity`. It runs a pipeline of regex stages (well-known formats: email,
+      phone, payment-card, account-id-like tokens), a heuristic stage (person names,
+      postal addresses), and emits a `SanitizedMessage` carrying the redacted text
+      plus the list of categories found. Calls `CaseEntity.attachSanitized(sanitized)`.
+      `CaseWorkflow.handleStep` then passes `sanitized.redactedMessage` as the
+      `ServiceAgent` task attachment; the raw payload remains accessible only via
+      `message.rawMessage` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject non-conforming agent replies before delivery
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A customer-facing reply that contains prohibited phrasing, an invalid channel
+      format, or an out-of-enum resolution intent can reach a real customer before
+      any human review occurs. The before-agent-response hook is the right interception
+      point: catch the bad reply inside the agent loop, force a retry within the same
+      task, and only let policy-compliant replies propagate to the entity and the
+      downstream channel adapter.
+    implementation: |
+      `ReplyGuardrail` is registered on `ServiceAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On
+      each candidate response it (1) asserts `replyText` is non-empty and within the
+      per-channel character ceiling (160 chars for `sms-short`, unlimited for
+      `voice-ssml` and `chat-markdown`), (2) asserts `channelFormat` is one of
+      `{sms-short, voice-ssml, chat-markdown}`, (3) asserts `resolutionIntent` is one
+      of `{RESOLVED, NEEDS_FOLLOW_UP, ESCALATE}`, and (4) scans `replyText` against a
+      prohibited-phrases list (competitor names, unauthorized price guarantees, medical
+      or legal advice). On any failure returns a structured rejection naming the failed
+      check; the agent loop consumes one of its 3 iterations and retries. Passing
+      responses flow through to `handleStep`.
+    regulation_anchors: []
+
+  - id: G2
+    name: Gate CRM case writes before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-validator
+    enforcement: blocking
+    rationale: |
+      The service agent has permission to create, update, and close CRM cases on
+      behalf of a customer. A write with an invalid priority, missing required fields,
+      or mismatched channel ownership can corrupt case records and mis-route follow-up
+      work. The before-tool-call hook runs inside the agent loop before each tool
+      invocation, blocking bad writes before they touch the CRM stub — or, in a
+      production deployment, the real CRM API.
+    implementation: |
+      `CrmWriteGuardrail` is registered on `ServiceAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. For each
+      tool-call request it (1) asserts the tool name is in the approved set
+      `{case.create, case.update, case.close}`, (2) asserts the `priority` argument is
+      one of `{LOW, NORMAL, HIGH, URGENT}`, (3) asserts `caseId`, `customerId`, and
+      `summary` are all non-empty, and (4) asserts the `channel` field on the proposed
+      write matches the `InboundChannel` of the case currently being handled. On any
+      failure returns `Guardrail.reject(<structured-error>)` with a `tool-rejected`
+      code; the agent corrects the payload and retries within its iteration budget.
+    regulation_anchors: []
+
+  - id: H1
+    name: Transfer to human agent on escalation
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: non-blocking
+    rationale: |
+      Not every support interaction can or should be resolved autonomously. Multi-party
+      billing disputes, regulatory complaints, accessibility requests, and situations
+      where the customer explicitly asks for a human representative require a live
+      agent. The HITL path ensures the system never suppresses an escalation request —
+      once the agent returns `resolutionIntent = ESCALATE`, the workflow transitions
+      the case to `ESCALATED` state and places it in a visible human queue. No further
+      agent replies are generated for that case.
+    implementation: |
+      When `CaseWorkflow.handleStep` receives an `AgentReply` with
+      `resolutionIntent = ESCALATE`, it calls both `CaseEntity.recordReply(reply)`
+      (preserving the agent's last message for audit) and `CaseEntity.escalate(reason)`
+      (emitting `CaseEscalated` and transitioning to `ESCALATED`). The `evalStep` still
+      runs, scoring the escalation decision. `CaseView` surfaces the `ESCALATED` status;
+      the App UI shows a human-queue chip on the case card. The operator handles the
+      case outside the system — the blueprint does not wire a real queue adapter, but
+      the `CaseEscalated` event carries all fields a downstream handler needs.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Reply content guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: G2
+    label: CRM write guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Human escalation path
+    mechanism: HITL
+    implementation: application
+    source: —

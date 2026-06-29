@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: query-planner-parallel-executor
+coordination_pattern: planner-executor
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Vet every sub-query before the retrieval executor runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      Each sub-query in this system hits a retrieval endpoint — a document
+      corpus, a web fixture index, or a keyword knowledge base. The Planner can
+      produce sub-queries that name disallowed hosts, request document categories
+      outside the configured research scope, or carry prompt-injection content
+      embedded in the query text itself. Because all sub-queries in a round are
+      dispatched in parallel, a single bad sub-query can fan out simultaneously
+      to multiple executors before any human can react. A deterministic guardrail
+      wired at the dispatch hook intercepts each sub-query individually before
+      its executor receives it, blocking out-of-policy retrieval and preventing
+      the blocked text from ever reaching an executor's prompt.
+    implementation: |
+      `SubQueryGuardrail.vet(SubQuery)` is called by `QueryWorkflow`'s
+      `fanOutStep` for each sub-query before the matching executor agent
+      (`CorpusSearchExecutor`, `WebLookupExecutor`, or `KnowledgeBaseExecutor`)
+      is invoked. The vetter checks (a) that the strategy is one of the three
+      allowed values, (b) for WEB sub-queries — that the referenced host is on
+      the allow-list, (c) for CORPUS sub-queries — that the document category is
+      in the configured scope, (d) that the query text does not match
+      prompt-injection patterns. On rejection, `QueryWorkflow` emits a
+      `SubQueryBlocked` event on `QuerySessionEntity` and records the blocker
+      reason; the sub-query is excluded from the results passed to the next
+      `ASSESS_COVERAGE` call so the Planner can account for it.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score plan quality before committing retrieval resources
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A parallel fan-out that fires many retrieval executor calls simultaneously
+      is expensive to retract once in flight. A low-quality plan — one where
+      sub-queries are near-duplicates of each other, all queries hit the same
+      retrieval strategy, or the plan is too shallow to cover the question —
+      wastes resources and produces low-value synthesis output. Evaluating plan
+      quality before the first fan-out surfaces this risk as an observable event,
+      gives the Planner a chance to revise, and keeps the evaluation record on
+      the session's event log for downstream audit regardless of whether the plan
+      passes or fails.
+    implementation: |
+      `PlanQualityEvaluator.score(QueryPlan)` runs in `QueryWorkflow`'s
+      `evalStep` after every `planStep` or plan-revision call and before
+      `fanOutStep`. It scores the plan on three deterministic dimensions:
+      sub-query independence (penalises near-duplicate queries), strategy
+      diversity (rewards use of all three retrieval strategies), and coverage
+      completeness (requires at least three sub-queries). The result is a
+      `PlanEvaluation { score, passing, rationale }` recorded as a `PlanEvaluated`
+      event on `QuerySessionEntity` regardless of outcome. When `passing=false`,
+      the workflow requests a revised plan from `PlannerAgent.DECOMPOSE` and
+      re-evaluates; after two consecutive failing evaluations the session moves
+      to `FAILED`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Sub-query retrieval guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Plan-quality evaluation
+    mechanism: Eval-Event
+    implementation: on-decision-eval (PlanQualityEvaluator before fan-out)
+    source: —

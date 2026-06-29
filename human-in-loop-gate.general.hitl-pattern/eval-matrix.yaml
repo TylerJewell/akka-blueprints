@@ -1,0 +1,90 @@
+# Eval Matrix for the hitl-pattern Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain educational sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list
+# across all controls.
+
+schema_version: 1
+sample_id: hitl-pattern
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: general
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human approval gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Automated task processing carries the risk of acting on an incorrect or
+      low-quality recommendation without any human check. Inserting a mandatory
+      approval gate between the processing phase and the finalization phase ensures
+      that no consequential action is taken until a person has reviewed and
+      explicitly accepted the agent's output. This gate is the defining
+      characteristic of the human-in-loop-gate coordination pattern and the primary
+      governance control this sample demonstrates.
+    implementation: >
+      ApprovalWorkflow pauses in awaitApprovalStep, polling TaskEntity status every
+      5 seconds. POST /api/tasks/{id}/approve and POST /api/tasks/{id}/reject
+      transition the entity; the workflow resumes on the next poll and either
+      continues to finalizeStep or ends.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the finalize tool unless the task is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Finalization is an externally observable, potentially irreversible action in
+      any production analogue of this pattern. A before-tool-call guardrail prevents
+      TaskFinalizerAgent from invoking the finalize tool if the task has not reached
+      APPROVED status, ensuring the approval gate cannot be bypassed by a workflow
+      race or a mis-sequenced API call.
+    implementation: >
+      A before-tool-call guardrail on TaskFinalizerAgent re-reads TaskEntity.status
+      before allowing the simulated finalize tool to execute. If the status is
+      anything other than APPROVED, the tool call is blocked and the workflow step
+      fails fast without producing a FinalizedTask.
+    regulation_anchors: []
+
+  - id: G2
+    name: Quality-check the recommendation before human review
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      A reviewer's time is wasted when they receive a recommendation that is too
+      short, incoherent, or off-topic to act on. A before-agent-response guardrail
+      on TaskProcessorAgent catches low-quality outputs before they are persisted
+      and presented, raising the quality floor of every recommendation that enters
+      the human review queue.
+    implementation: >
+      A before-agent-response guardrail on TaskProcessorAgent checks minimum length
+      and basic topic adherence of the ProcessedTask.recommendation field. Outputs
+      that fail the check are not persisted; the agent is asked to retry within the
+      same task iteration.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/reject before finalization.
+  - id: G1
+    name: Guard finalize tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block finalization unless status is APPROVED.
+  - id: G2
+    name: Recommendation quality gate
+    mechanism: "guardrail · before-agent-response"
+    short: Block low-quality recommendations from reaching the reviewer.

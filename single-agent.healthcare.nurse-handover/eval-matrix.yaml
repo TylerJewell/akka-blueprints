@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: nurse-handover
+coordination_pattern: single-agent
+domain: healthcare
+
+controls:
+  - id: S1
+    name: Redact PHI before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: blocking
+    rationale: |
+      Clinical shift reports are rich with protected health information: patient
+      MRNs, dates of birth, insurance identifiers, and the names of attending
+      clinicians who can be reverse-mapped to specific patients. Sending any of
+      these to an LLM API creates a disclosure risk that is incompatible with
+      HIPAA minimum-necessary principles and the typical BAA a healthcare operator
+      holds with their LLM provider. Redaction runs in a Consumer that fires on
+      every ReportSubmitted event, before the HandoverWorkflow's summarizeStep
+      is allowed to call the agent. The raw report is preserved on the entity for
+      the audit log but is structurally separated from the agent's input.
+    implementation: |
+      `ReportSanitizer` Consumer subscribes to `ReportSubmitted` events emitted by
+      `HandoverEntity`. It runs a regex stage targeting MRN patterns (e.g. numeric
+      sequences following "MRN", "Medical Record"), a DOB stage (ISO-8601 and
+      common locale formats), an insurance-ID stage (payer-ID-like tokens), a phone
+      stage, a provider-name heuristic, and a room-number heuristic. Outputs a
+      `SanitizedReport` carrying the redacted text plus the list of PHI categories
+      found. Calls `HandoverEntity.attachSanitized(sanitized)`.
+      `HandoverWorkflow.summarizeStep` then passes `sanitized.redactedReport` as the
+      `HandoverAgent` task attachment; the raw payload remains accessible only via
+      `request.rawReport` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require clinical sign-off before sealing a handover
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: non-blocking
+    rationale: |
+      A handover summary produced by an AI agent carries the same liability as any
+      clinical communication: if an incoming clinician acts on an unsigned summary,
+      accountability is unclear and patient safety may be compromised. The sign-off
+      gate ensures that a named clinician has read the summary and attested to it
+      before the handover transitions to SIGNED_OFF. The gate does not block the
+      workflow's progress — the summary is visible in AWAITING_SIGNOFF — but it does
+      prevent the handover from being sealed without an explicit human action. A
+      second sign-off attempt is rejected with 409 Conflict so the record remains
+      single-attested.
+    implementation: |
+      `HandoverWorkflow.awaitSignoffStep` polls `HandoverEntity.getHandover` every
+      5 seconds with a step timeout of 14 400 seconds (4 hours). When
+      `handover.signoff().isPresent()` returns true, the workflow calls
+      `HandoverEntity.completeSignoff()` and terminates. The clinician triggers this
+      by calling `PATCH /api/handovers/{id}/signoff` with a `{ signedOffBy }` body
+      via `HandoverEndpoint`, which calls `HandoverEntity.requestSignoff(signedOffBy)`.
+      `requestSignoff` is idempotent on a fresh handover but returns a 409 rejection
+      if the entity's status is already SIGNED_OFF or FAILED.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PHI redaction before LLM
+    mechanism: Sanitizer
+    implementation: phi
+    source: —
+  - id: H1
+    label: Clinical sign-off gate
+    mechanism: HITL
+    implementation: application
+    source: —

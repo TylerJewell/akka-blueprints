@@ -1,0 +1,70 @@
+# Eval Matrix for the deep-research-supervisor Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (research-intel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: deep-research-supervisor
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: research-intel
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Vet the synthesised report for citation grounding before surfacing it
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The deep-research report is assembled from multiple worker outputs across several
+      subqueries. That assembly process creates specific risk: the supervisor may synthesise
+      a claim that no worker subquery actually retrieved, either by bridging across
+      unrelated findings or by fabricating a citation. An after-llm-response guardrail
+      on ResearchSupervisor inspects each citation in the SynthesisedReport against the
+      collected PassageBundles before the report is returned to the caller. A report that
+      fails this check is never surfaced to the user; it transitions to BLOCKED instead.
+    implementation: >
+      An after-llm-response guardrail on ResearchSupervisor runs inside
+      DeepResearchWorkflow.guardrailStep. The step receives the SynthesisedReport returned
+      by synthesiseStep and verifies each Citation.source against the sourcePassageId fields
+      in the collected ClaimsBundles. An LLM judge performs a secondary grounding pass.
+      On failure the workflow calls ResearchReportEntity.block and the report enters BLOCKED
+      with a failureReason describing the first unverifiable citation.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score the supervisor synthesis decision for citation grounding quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The supervisor's synthesis merges summaries from multiple parallel subquery pipelines
+      into one executive summary and citation list. Errors in this merge — dropped citations,
+      unsupported generalisations, or inconsistent subquery weighting — affect report quality
+      without necessarily tripping the blocking guardrail. A periodic rubric-based eval
+      surfaces a 1–5 citation-grounding score alongside each report so readers can gauge
+      confidence, and gives operators a quality signal over time without blocking delivery.
+    implementation: >
+      CitationEvalSampler (TimedAction, every 5 minutes) queries ReportView for the oldest
+      SYNTHESISED report lacking an evalScore, runs a 1-5 rubric judge that checks executive-
+      summary claim coverage against SubquerySummary content, and calls
+      ResearchReportEntity.recordEval(score, rationale), emitting ReportEvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Synthesis citation guardrail
+    mechanism: "guardrail · after-llm-response"
+    short: Block a report whose citations cannot be traced to retrieved passages.
+  - id: E1
+    name: Citation-grounding quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the supervisor's synthesis for citation coverage and accuracy.

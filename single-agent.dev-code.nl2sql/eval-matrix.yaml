@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: nl2sql
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Reject unsafe SQL before the database tool fires
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: sql-safety-validator
+    enforcement: blocking
+    rationale: |
+      A natural-language-to-SQL agent translates free-form text into executable
+      database statements. Without a pre-execution check, a mistranslation or an
+      adversarial prompt could generate a write or DDL statement that mutates or
+      destroys production data. The before-tool-call hook is the right cut: inspect
+      the SQL argument before QueryExecutionTool fires, reject anything containing
+      write or DDL keywords (INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE,
+      MERGE), and also reject SELECT * queries without an explicit LIMIT that could
+      scan the entire table. Rejection forces the agent to self-correct within its
+      iteration budget rather than terminating the task outright — allowing the
+      common case of an overly broad first draft to be narrowed without user
+      intervention.
+    implementation: |
+      `SqlSafetyGuardrail` is registered on `SqlQueryAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      `QueryExecutionTool` invocation it extracts the `sql` argument and runs a
+      case-insensitive keyword scan for the forbidden mutation and DDL tokens, then
+      checks for SELECT * without LIMIT. Any match returns
+      `Guardrail.reject(<structured-error>)` naming the forbidden pattern. The agent
+      loop consumes one of its four iterations and retries with a corrected query.
+      Passing calls flow through to the Postgres connection.
+    regulation_anchors: []
+
+  - id: H1
+    name: Halt the task immediately on write or DDL detection
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      The before-tool-call guardrail (G1) gives the agent a chance to self-correct,
+      but a self-correcting loop is only appropriate when the error is an innocent
+      over-breadth. A write or DDL statement in a read-only query system is never
+      an innocent draft — it signals either a severe misunderstanding of the task
+      or an attempted prompt injection. Allowing any number of retries on a DELETE
+      or DROP TABLE is inappropriate. The automatic-safety-halt is therefore a
+      second, independent check on the same event: if the SQL contains a write or DDL
+      keyword, the task is terminated immediately with a clear explanation recorded on
+      the entity. No database call is made. The entity transitions to HALTED, and the
+      user sees the exact keyword that triggered the stop.
+    implementation: |
+      `SqlSafetyHalt` is registered on `SqlQueryAgent` as a halt handler, also bound
+      to the before-tool-call event. It applies the same write/DDL keyword scan as
+      `SqlSafetyGuardrail`. On detection it throws `HaltException` with a message
+      naming the keyword and the position in the SQL string. `QueryWorkflow`'s
+      `translateAndRunStep` catches `HaltException` and calls
+      `QueryEntity.halt(reason)`. The entity emits `QueryHalted` and moves to the
+      terminal `HALTED` state. G1 fires before H1 on the same event; if G1 passes a
+      query that H1 would halt (e.g. a syntactically unusual mutation form G1 missed),
+      H1 acts as the backstop.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: SQL write/DDL guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Unsafe-mutation safety halt
+    mechanism: Halt
+    implementation: automatic-safety-halt
+    source: —

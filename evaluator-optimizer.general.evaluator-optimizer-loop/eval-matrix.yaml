@@ -1,0 +1,70 @@
+schema_version: 1
+sample_id: evaluator-optimizer-loop
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: G1
+    name: Enforce per-job token ceiling before the evaluator runs
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      The optimization loop's quality signal depends on the evaluator scoring
+      candidates that actually fit within the stated constraints. A candidate
+      that exceeds the token ceiling is structurally non-conforming regardless
+      of its content quality — sending it to the evaluator wastes a cycle and
+      risks producing subjective feedback that masks a deterministic violation.
+      A blocking post-generation guardrail catches the violation, returns
+      structured feedback to the Generator, and keeps the evaluator's attention
+      on substantive quality dimensions.
+    implementation: |
+      Wired as the `guardrailStep` of `OptimizationWorkflow`, immediately
+      after `generateStep`. A pure-function check on
+      `candidate.tokenCount() <= job.tokenCeiling`. On failure, emits
+      `AttemptGuardrailVerdictRecorded` with `verdict.passed = false` and
+      `reasonCode = "OVER_CEILING"`, then transitions back to `generateStep`
+      with a fixed `EvaluationNotes("Candidate exceeds the configured token
+      ceiling; shorten and resubmit.")`. The Generator's next call sees the
+      structured feedback as the prior evaluation. The cycle still counts
+      toward `maxAttempts`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every cycle's verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The evaluator's accept-or-revise verdict is the highest-information
+      signal the optimization loop produces. Recording it as a typed event per
+      attempt gives operators a continuous quality stream — pass rate per
+      attempt number, drift in average score, frequency of over-ceiling
+      candidates — without requiring instrumentation inside the workflow itself.
+      Because the event is non-blocking, a failure in the recording path never
+      interrupts an in-flight optimization cycle.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `JobsView.getAllJobs`, finds attempts that have been evaluated but
+      do not yet have a matching `EvalRecorded` event, and calls
+      `JobEntity.recordEval(attemptNumber, verdict, score,
+      ceilingExceeded)`. The call is idempotent on `(jobId, attemptNumber)`.
+      The workflow itself also emits one `EvalRecorded` event on the
+      terminal transition (JobAccepted or JobRejectedFinal) carrying the
+      whole loop's outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · token ceiling
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: E1
+    label: Per-attempt eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

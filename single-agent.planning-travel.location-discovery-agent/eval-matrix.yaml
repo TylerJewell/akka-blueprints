@@ -1,0 +1,104 @@
+schema_version: 1
+sample_id: location-discovery-agent
+coordination_pattern: single-agent
+domain: planning-travel
+
+controls:
+  - id: S1
+    name: Redact exact coordinates before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      A user's GPS latitude and longitude constitute sensitive location data that
+      can reveal home address, workplace, medical-facility visits, or other
+      location patterns the user did not intend to share with a model provider.
+      Redaction to a coarse bounding-box token runs in a Consumer between the raw
+      submission and the agent invocation; the raw coordinates are preserved on the
+      entity for audit but are never the input seen by the model. This ensures the
+      LLM receives only the geographic resolution needed to rank places — not enough
+      to reconstruct the user's precise position.
+    implementation: |
+      `CoordinateSanitizer` Consumer subscribes to `SearchSubmitted` events emitted
+      by `SearchEntity`. It computes a ±0.01-degree bounding box from the raw
+      latitude and longitude, formats it as "bbox:<latMin>-<latMax>:<lonMin>-<lonMax>",
+      and loads the in-process seeded place dataset filtering to candidates within
+      the requested radius. Outputs a `SanitizedCoordinate` carrying the bounding-box
+      token and the matched `candidatePlaces` list. Calls
+      `SearchEntity.attachSanitized(sanitized)`. `DiscoveryWorkflow.discoverStep`
+      then passes the `candidatePlaces` as the `LocationDiscoveryAgent` task
+      attachment; the raw latitude and longitude remain accessible only via
+      `request.rawLatitude` / `request.rawLongitude` on the entity, never on the
+      wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject malformed recommendations before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A location-discovery agent whose output contains phantom place identifiers
+      or out-of-range relevance scores can silently corrupt the user's decision.
+      The before-agent-response hook is the right cut point: catch the bad response
+      before it leaves the agent's loop, force a retry inside the same task, and
+      only let well-formed recommendations reach the workflow. This is especially
+      important when candidate place ids are session-scoped — an id not in the
+      submitted candidate list cannot be verified by the user and would be a
+      hallucinated venue.
+    implementation: |
+      `RecommendationGuardrail` is registered on `LocationDiscoveryAgent` via the
+      agent's guardrail-configuration block, bound to the `before-agent-response`
+      hook. On each candidate response it (1) parses the response into
+      `PlaceRecommendation`, (2) asserts every `places[].placeId` appears in the
+      `SanitizedCoordinate.candidatePlaces` list supplied in the task attachment,
+      (3) asserts every `relevanceScore` is in the integer range 1–10, and (4)
+      asserts the `places` list is non-empty. On any failure returns a structured
+      rejection naming the failed check; the agent loop consumes one of its 3
+      iterations and retries. Passing responses flow through to `discoverStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every recommendation for ranking quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A well-formed recommendation can still be low-quality: all places rated the
+      same score, rationale strings that are copy-pasted filler, or a top result
+      that does not match the query's stated intent. An on-decision evaluator
+      surfaces these patterns without blocking the recommendation itself, giving
+      users a fast signal about which results deserve a closer look before they
+      navigate to a venue. Score ≤ 2 flags the card for attention.
+    implementation: |
+      `EvaluationScorer` runs inside `DiscoveryWorkflow.evalStep`, fired immediately
+      after `RecommendationRecorded` lands. The scorer is deterministic and rule-based
+      (no LLM call — keeping the single-agent invariant honest): checks that every
+      `PlaceResult.rationale` is non-empty, that rationale strings are not from a
+      known generic-filler list (e.g., "great place", "highly recommended", "worth
+      visiting"), and that `relevanceScore` values are not all identical across the
+      returned list (a collapsed ranking loses 1 point). Emits `EvaluationScored`
+      with a 1–5 score and a one-line rationale. The score is surfaced on the App
+      UI tab; searches with score ≤ 2 are flagged for user review.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Coordinate redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Recommendation-form guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision ranking eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

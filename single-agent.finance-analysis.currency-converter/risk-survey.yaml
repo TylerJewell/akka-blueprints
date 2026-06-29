@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: currency-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: currency-conversion-and-rate-lookup
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: information-only
+  user_type: finance-user-or-developer
+
+# ---- Data ----
+data:
+  inputs:
+    - currency-pair
+    - amount
+    - rate-snapshot-label
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: false
+
+# ---- Decisions ----
+decisions:
+  authority_level: information-only
+  decision_subject: currency-conversion-result
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_verdict_before_action: false
+
+# ---- Failure ----
+failure:
+  blast_radius: single-conversion-request
+  failure_modes:
+    - stale-rate-data
+    - wrong-currency-pair-interpretation
+    - numeric-precision-error
+    - hallucinated-market-context
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: TO_BE_COMPLETED_BY_DEPLOYER
+  reviewer_role: finance-user
+  reviewer_must_read_verdict_before_action: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_conversion: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  financial-regulatory-license-required: TO_BE_COMPLETED_BY_DEPLOYER

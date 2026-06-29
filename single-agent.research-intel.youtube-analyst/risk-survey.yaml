@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: youtube-analyst
+
+# ---- Purpose ----
+purpose:
+  primary_function: youtube-channel-performance-analysis
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: inform-only
+  user_type: content-creator-or-channel-strategist
+
+# ---- Data ----
+data:
+  inputs:
+    - channel-handle
+    - video-performance-metrics
+    - subscriber-counts
+    - engagement-statistics
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  metrics_sourced_from_public_api: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: inform-only
+  decision_subject: channel-content-strategy
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_report_before_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-channel-analysis
+  failure_modes:
+    - unsupported-trend-claim
+    - misclassified-tier
+    - stale-metrics
+    - recommendation-without-metric-anchor
+    - hallucinated-video-reference
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: content-creator-or-channel-strategist
+  reviewer_must_read_report_before_action: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_analysis: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  youtube-api-terms-of-service-compliance: TO_BE_COMPLETED_BY_DEPLOYER

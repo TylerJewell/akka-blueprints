@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: guided-intake-agent
+coordination_pattern: planner-executor
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Vet every proposed question before it reaches the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      The IntakeAgent proposes questions drawn from a goal's question set, but
+      the LLM can surface off-topic, policy-violating, or prompt-injection-
+      carrying text when the conversation context drifts. A user-facing question
+      that asks for financial account details, medical diagnoses, or that carries
+      an instruction to "ignore previous context" causes direct harm to the user
+      and erodes trust in the intake channel. Running a deterministic vetter on
+      every proposal — before it is emitted as a QuestionAsked event — means no
+      out-of-policy text ever reaches the user, regardless of what the model
+      returned.
+    implementation: |
+      `TopicGuardrail.vet(QuestionProposal, GoalDefinition)` is called by
+      `ConversationWorkflow`'s `guardrailStep` between `proposeStep` and
+      `askStep`. The vetter checks (a) that the question text mentions only
+      subjects present in the active goal's domain keywords, (b) that it does
+      not request financial account numbers or card numbers, (c) that it does
+      not ask for a medical diagnosis or prescription, and (d) that it does
+      not contain prompt-injection patterns ("ignore"/"disregard"/"forget"/
+      "override" adjacent to "previous" or "instructions"). On reject, the
+      workflow records a `QuestionBlocked` entry via
+      `ConversationEntity.recordBlock` and loops back to `proposeStep` so the
+      `IntakeAgent` sees the rejection and revises.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub PII from every user reply before it is stored or re-read by the agent
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Users answering intake questions frequently include personal identifiers —
+      names, email addresses, phone numbers, national ID numbers — even when not
+      asked. Storing raw replies in the conversation record and feeding them back
+      into subsequent LLM prompts propagates PII through the event log, the view
+      projection, the SSE feed, and any downstream export. The sanitizer
+      intercepts every reply immediately after receipt, before the TurnRecorded
+      event is emitted, so PII never enters the durable store or the agent's
+      next context window.
+    implementation: |
+      `PiiScrubber.scrub(String)` runs in `ConversationWorkflow`'s
+      `sanitizeStep` between `awaitReplyStep` and `recordStep`. The scrubber
+      applies labelled-replacement regexes for full names (two or more adjacent
+      capitalized words), RFC-5321 email addresses, E.164 and common national
+      phone formats, SSNs (ddd-dd-dddd), and NHS numbers (ddd ddd dddd).
+      Replacements are tagged: `[REDACTED:name]`, `[REDACTED:email]`,
+      `[REDACTED:phone]`, `[REDACTED:ssn]`, `[REDACTED:nhs]`. The sanitized
+      form is what lands on the `TurnRecord` event and what the `IntakeAgent`
+      sees on subsequent EVALUATE_REPLY and PROPOSE_QUESTION calls. The raw
+      reply is discarded in-memory immediately after `sanitizeStep` completes
+      and is never written to any event or view field.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Question guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response (TopicGuardrail + GoalDefinition policy)
+    source: —
+  - id: S1
+    label: PII sanitizer
+    mechanism: Sanitizer
+    implementation: pii (regex redactor — name, email, phone, SSN, NHS)
+    source: —

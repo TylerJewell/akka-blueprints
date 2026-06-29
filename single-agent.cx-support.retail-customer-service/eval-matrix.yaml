@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: retail-customer-service
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block order modifications that the order's status does not permit
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: state-validator
+    enforcement: blocking
+    rationale: |
+      Order-modifying tool calls (cancel, update-address, update-quantity) are only valid
+      during a subset of the order lifecycle. An agent operating over a long conversation
+      context may invoke a tool against an order whose status has changed since the session
+      began — for example, attempting to cancel an order that entered SHIPPED status while
+      the customer was composing their message. Intercepting the call before execution
+      prevents an invalid mutation from reaching the order entity and surfacing as a data
+      integrity error. The guardrail fetches the live order status and rejects the call with
+      a structured code; the agent then produces a compliant explanation for the customer
+      without requiring the tool to execute and roll back.
+    implementation: |
+      `OrderModificationGuardrail` is registered on `CustomerServiceAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook on the three
+      mutation tools: `cancelOrder`, `updateOrderAddress`, and `updateOrderQuantity`. On
+      each intercepted call it fetches the current `OrderEntity` state via
+      `componentClient.forEventSourcedEntity(OrderEntity.class, orderId).call(getOrder)`,
+      then evaluates the permitted-status set for the requested modification (cancel:
+      {PENDING}; update-address: {PENDING, PROCESSING}; update-quantity: {PENDING}). A
+      status outside that set triggers `Guardrail.reject(ORDER_NOT_MODIFIABLE + " current
+      status: " + order.status())`, which the agent loop receives and routes into the next
+      iteration's context so the model can frame an appropriate response for the customer.
+    regulation_anchors: []
+
+  - id: G2
+    name: Reject customer-facing replies that violate brand and pricing policy
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-validator
+    enforcement: blocking
+    rationale: |
+      A customer-facing channel is a public commitment surface. An agent drawing on a broad
+      language model may produce replies that mention competitor brands by name, quote prices
+      that undercut the catalog, or use dismissive phrasing that conflicts with the retailer's
+      service standards. Because these failures do not manifest as structural data errors,
+      they cannot be caught by a schema validator — they require a separate policy pass over
+      the candidate text. Running this check before the reply leaves the agent loop means the
+      customer never receives a non-compliant message; the agent rewrites on the next iteration
+      using the rejection signal as guidance.
+    implementation: |
+      `ReplyPolicyGuardrail` is registered on `CustomerServiceAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook on all
+      outbound replies. It applies three checks in sequence: (1) a scan for competitor brand
+      names loaded from `src/main/resources/policy/competitor-brands.txt`; (2) a price-quote
+      check that flags any numeric price more than 10% below the catalog value for any
+      product mentioned in the reply (using `ProductCatalog` to resolve prices); (3) a
+      rude-language scan against phrase patterns in `policy/rude-patterns.txt`. On any
+      failure it returns `Guardrail.reject(<structured-error>)` naming the policy code
+      (`COMPETITOR_MENTION`, `PRICE_UNDERCUT`, or `POLICY_TONE`). The agent loop counts the
+      rejection toward its 4-iteration budget and retries. Passing replies flow through to
+      `SessionWorkflow.replyStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Order-modification state gate
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: G2
+    label: Reply brand and pricing policy check
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

@@ -1,0 +1,125 @@
+schema_version: 1
+sample_id: hr-shortlister
+coordination_pattern: sequential-pipeline
+domain: hr-recruiting
+
+controls:
+  - id: S1
+    name: Redact special-category attributes before the scoring phase executes
+    mechanism:
+      kind: sanitizer
+      hook: before-tool-call
+      flavor: special-category
+    enforcement: blocking
+    rationale: |
+      Recruiting pipelines routinely receive resumes that include age, gender,
+      nationality, or disability indicators — either stated explicitly by the
+      applicant or extractable by an LLM from indirect signals (school graduation
+      year → age, name → nationality). Allowing these fields to reach the scoring
+      phase creates direct exposure to disparate-treatment liability under equal
+      employment law in most jurisdictions. The right cut is the agent–tool
+      boundary: intercept every SCORE-phase tool call, replace the protected field
+      values with "[REDACTED]" in the profile object the tool receives, and record
+      each replacement as a durable audit event on the entity. The original values
+      are never written to the scored record, and the audit trail proves they were
+      not used in scoring.
+    implementation: |
+      `SpecialCategoryGuardrail` is registered on `ShortlistAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. It fires
+      only for SCORE-phase tool calls (`Phase.SCORE` on `ScoreTools` methods). On
+      each call it reads the current `ApplicationRecord` from `ApplicationEntity`
+      using the `applicationId` carried in the in-flight `TaskDef.metadata`. For
+      each of {`age`, `gender`, `nationality`, `disabilityIndicator`}: if the value
+      is non-null and not already `"[REDACTED]"`, it replaces it with `"[REDACTED]"`
+      in the `Profile` object that will be passed to the tool, and calls
+      `ApplicationEntity.recordRedaction(fieldName, Instant.now())` so that a
+      `SpecialCategoryRedacted` event lands on the entity. The guardrail always
+      returns `Guardrail.accept(sanitizedCallContext)` — it sanitizes, never
+      blocks. The UI's redaction-log strip surfaces all redaction events for the
+      selected application.
+    regulation_anchors: []
+
+  - id: H1
+    name: Hold every shortlist decision in an approval queue until a recruiter acts
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Automated shortlisting narrows candidate pools faster than human review but
+      cannot substitute for recruiter accountability on final hiring decisions.
+      Regulatory frameworks in several jurisdictions (EU AI Act Art. 14, EEOC
+      guidance on automated selection) require a meaningful human review step
+      before an automated employment decision takes effect. The approval gate in
+      `ShortlistingWorkflow` is the structural enforcement: the workflow cannot
+      call `ErpNextAdapter.writeApplicant(...)` until a recruiter has explicitly
+      approved or overridden the agent's decision via the UI. An override is fully
+      supported — the recruiter can substitute any `Decision` value with a
+      freetext rationale, and the overridden decision is what reaches ERPNext.
+    implementation: |
+      `ShortlistingWorkflow.approvalStep` emits `ApprovalRequested` on
+      `ApplicationEntity` and suspends the workflow via `effects().pause()`. The
+      application status transitions to `AWAITING_APPROVAL` and the UI shows a
+      yellow approval banner on the card. The workflow remains suspended until
+      `ShortlistEndpoint` receives `POST /api/applications/{id}/decision` with a
+      `RecruiterDecision` payload. The endpoint resumes the workflow; the workflow
+      emits `RecruiterApproved` (if the recruiter accepts the agent's decision as-is)
+      or `RecruiterOverridden` (if the recruiter substitutes a different `Decision`
+      and supplies an `overrideRationale`). Only after one of these events does
+      `erpNextStep` execute. Both events carry the `recruiterId`, the final
+      `Decision`, and a timestamp, giving a complete recruiter-accountability record
+      in the entity log.
+    regulation_anchors: []
+
+  - id: E1
+    name: Scan shortlisting-outcome distributions daily for fairness drift
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      A sanitizer that redacts individual protected-attribute values does not
+      guarantee group-level fairness — a model can still learn proxy features
+      (e.g., institution names as a nationality proxy, years-of-experience
+      distributions as an age proxy). Individual-level redaction needs to be
+      complemented by a population-level monitor that watches whether shortlisting
+      rates diverge across cohorts over time. A periodic drift scanner is the right
+      architecture for this: it runs outside the per-application pipeline, operates
+      on the rolling 30-day window where patterns accumulate, and surfaces a
+      breach signal without blocking any individual application. The recruiter or
+      compliance owner then decides whether to investigate the model, the job
+      criteria configuration, or the applicant pool composition.
+    implementation: |
+      `FairnessDriftWorkflow` is a scheduled Workflow that fires daily (configurable
+      interval in `application.conf`). Its single step calls
+      `ApplicationView.getApplicationsInWindow(from, to)` to retrieve the
+      `ApplicationRow` records for the last 30 days, then passes the list to
+      `FairnessScorer.compute(rows)`. `FairnessScorer` groups rows by `gender`
+      cohort value and `nationality` cohort value (excluding rows where the value
+      is `"[REDACTED]"` — those cannot be attributed to a cohort), computes the
+      shortlisting rate per cohort, and finds the highest-to-lowest ratio for each
+      dimension. When the ratio exceeds `threshold` (default 1.20), the scorer
+      returns a `DriftReport{breached: true, cohortA, cohortB, ratio, ...}`.
+      `FairnessDriftWorkflow` writes each `DriftReport` to `DriftReportEntity`
+      (one entity per cohort dimension). `ShortlistEndpoint` serves the current
+      reports at `GET /api/drift-reports`; the Eval Matrix tab renders the breach
+      status and ratio per dimension.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Special-category attribute sanitizer
+    mechanism: Sanitizer
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Recruiter approval gate
+    mechanism: HITL
+    implementation: workflow-pause / resume
+    source: —
+  - id: E1
+    label: Fairness drift monitor
+    mechanism: Eval · periodic
+    implementation: daily scheduled scan
+    source: —

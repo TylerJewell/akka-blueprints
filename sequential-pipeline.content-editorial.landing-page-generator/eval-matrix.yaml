@@ -1,0 +1,32 @@
+schema_version: 1
+sample_id: landing-page-generator
+coordination_pattern: sequential-pipeline
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Review final page copy for accuracy and brand safety before it is marked ready
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: |
+      The pipeline produces public-facing marketing copy. Before a page is
+      treated as finished, the assembled copy is evaluated for factual
+      accuracy and brand safety so that off-brand, misleading, or unsafe
+      claims do not reach the READY state unchecked.
+    implementation: |
+      LandingPageWorkflow's reviewStep evaluates the assembled page (headline,
+      subhead, body copy, sections, CTA) with the brand-safety rubric carried in
+      prompts/copy-agent.md. A passing ReviewResult drives
+      LandingPageEntity.markReady(score); a failing result drives
+      markFlagged(reason) and ends the workflow, blocking the READY transition.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Brand-safety review of final copy
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: blueprint

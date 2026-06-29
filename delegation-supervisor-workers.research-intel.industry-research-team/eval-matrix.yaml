@@ -1,0 +1,56 @@
+schema_version: 1
+sample_id: industry-research-team
+coordination_pattern: delegation-supervisor-workers
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Block ungrounded research briefs before they reach the reader
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: |
+      Industry analysis is often read as investment input. A synthesized brief
+      whose claims are not supported by the worker findings would mislead the
+      reader. The guardrail scores the synthesis against the recorded findings
+      and stops a weakly-grounded brief from being released.
+    implementation: |
+      ResearchWorkflow.synthesizeStep evaluates the SynthesizedBrief returned
+      by SupervisorAgent on the before-agent-response hook. If groundingScore
+      is below 0.6, the step calls BriefEntity.recordBlock (BLOCKED) and ends;
+      otherwise it calls recordSynthesis. The score and any block reason are
+      projected through BriefsView to the UI.
+    regulation_anchors: []
+
+  - id: S1
+    name: Append the required sector disclaimer to every released brief
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: non-blocking
+    rationale: |
+      Research output for a regulated sector may need a standing compliance
+      disclaimer and must avoid prohibited advisory phrasing. The sanitizer
+      applies the configured disclaimer and scrub rules to the brief body
+      before it is marked complete.
+    implementation: |
+      ResearchWorkflow.sanitizeStep takes the synthesized body, scrubs
+      prohibited advisory phrasing, appends the configured sector disclaimer,
+      then calls BriefEntity.recordSanitization (SANITIZED) followed by
+      recordCompletion (COMPLETED). The sanitized body is the one served to
+      the UI and the API.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Grounding guardrail on synthesis
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: Sector disclaimer sanitizer
+    mechanism: Sanitizer
+    implementation: sanitizeStep
+    source: —

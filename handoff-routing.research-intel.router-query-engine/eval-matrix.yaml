@@ -1,0 +1,37 @@
+schema_version: 1
+sample_id: router-query-engine
+coordination_pattern: handoff-routing
+domain: research-intel
+
+controls:
+  - id: E1
+    name: Score every routing decision inline
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Routing accuracy is the pivotal decision in a query engine handoff: a question
+      directed to the wrong engine produces an answer that is either fabricated
+      (a semantic engine guessing at precise row counts) or incomplete (a structured
+      engine unable to synthesize narrative context). An on-decision eval provides a
+      continuous, per-query signal — graded against the question's actual information
+      need — without blocking the answer flow. Persistent low scores indicate the
+      router's prompt requires adjustment or the engine taxonomy needs refinement.
+    implementation: |
+      `RoutingEvalScorer` Consumer subscribes to `QueryEntity` events. On every
+      `RoutingDecided` it calls `RoutingJudge` (typed Agent) with the
+      `ResearchQuestion` and the `RoutingDecision`. The judge returns
+      `RoutingScore { score: 1–5, rationale }`. The Consumer then calls
+      `QueryEntity.recordRoutingScore` which emits `RoutingScored`. The score is
+      non-blocking — a low score does not alter the workflow; it surfaces on the
+      App UI tab as a colour-graded chip and would feed a system-level alert in a
+      deployed setting.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: On-decision routing eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

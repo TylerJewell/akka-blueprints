@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: todoist-organizer
+
+# ---- Purpose ----
+purpose:
+  primary_function: task-organization-automation
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: automated-with-guard
+  user_type: knowledge-worker
+
+# ---- Data ----
+data:
+  inputs:
+    - todoist-inbox-tasks
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  task_content_visible_to_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: automated-with-guard
+  decision_subject: user-task
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-by-user
+
+# ---- Failure ----
+failure:
+  blast_radius: single-user-workspace
+  failure_modes:
+    - incorrect-project-assignment
+    - low-confidence-task-silently-moved
+    - misconfigured-project-allowlist-blocks-all-updates
+    - model-drift-degrades-label-accuracy-over-time
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  automated_guardrail: true
+  reviewer_role: workspace-owner
+  reviewer_must_approve_every_outgoing: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - todoist-api-update-task
+    # The simulated TodoistClient is in-process; replace with real REST client when deploying.
+  rate_limit_per_message: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  user_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER

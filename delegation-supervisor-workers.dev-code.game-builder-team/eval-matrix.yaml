@@ -1,0 +1,64 @@
+# Eval Matrix for the game-builder-team Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a developer-tooling sample (dev-code domain) with no industry-
+# or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list
+# across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: game-builder-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: dev-code
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Sandbox the generated code before the run tool executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      The code-execution tool runs model-generated game code. Before it fires, the
+      code must be screened so it cannot reach forbidden APIs (network, filesystem,
+      eval, dynamic import). A before-tool-call guardrail is the right place because
+      the screen must precede the side effect.
+    implementation: >
+      A before-tool-call guardrail on GameDirector calls SandboxRunner's forbidden-API
+      scan against the CodeWriter's GameCode. On a trip, GameBuildWorkflow.testStep
+      calls GameProjectEntity.block(reason) and ends; the run tool never executes.
+    regulation_anchors: []
+
+  - id: C1
+    name: Gate delivery on a passing test run
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: >
+      Generated game code should not be delivered until it passes deterministic
+      checks. The test gate blocks the path to DELIVERED so a build that does not
+      satisfy the smoke checks settles in TEST_FAILED instead of shipping.
+    implementation: >
+      GameBuildWorkflow.testStep runs SandboxRunner's smoke checks (HTML present,
+      entry point referenced, no syntax markers). On pass it calls recordTestsPassed
+      and proceeds to assembleStep; on fail it retries codeStep up to twice, then
+      calls recordTestsFailed.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Sandbox guardrail on generated code
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: C1
+    label: Test gate before delivery
+    mechanism: CI gate
+    implementation: test-gate
+    source: —

@@ -1,0 +1,97 @@
+# Eval Matrix for the peerreview Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (content-editorial domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: peerreview
+coordination_pattern: debate-multi-perspective
+domain: content-editorial
+
+matrix_cell:
+  coordination_pattern: debate-multi-perspective
+  domain: content-editorial
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: S1
+    name: Redact PII from the document before any reviewer reads it
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: system-level
+    rationale: |
+      A submitted document may carry personal data — names, emails, phone
+      numbers, government identifiers — that the reviewers do not need to do
+      their job and that the Compliance reviewer in particular should not be
+      asked to evaluate in raw form. Redacting at intake keeps personal data
+      out of the persisted review record and out of every agent prompt.
+    implementation: |
+      The deterministic `PiiSanitizer` runs in `ReviewWorkflow.sanitizeStep`
+      before the moderator plans or any reviewer is dispatched. It replaces
+      emails, phone numbers, government identifiers, and capitalised name
+      patterns with typed placeholders and returns a redaction count. Only the
+      redacted body is persisted on `ReviewEntity` (via `DocumentSanitized`);
+      the raw body lives in the workflow's transient state and is never stored.
+    regulation_anchors: []
+
+  - id: G1
+    name: Vet the reconciled verdict before it is returned to the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      The overall verdict is the user-facing artifact and concatenates the
+      moderator's reconciliation of three independent agents. An output policy
+      guardrail catches structural violations (empty summary, no axis reviews,
+      a verdict value outside the allowed set) and prohibited content before
+      the verdict reaches the reviewer's screen.
+    implementation: |
+      Wired on the `ReviewModerator` agent's `before-agent-response` hook in
+      `ReviewWorkflow.guardrailStep`. Reads the proposed `OverallVerdict`,
+      runs a deterministic vetter (structural checks plus a policy table) and
+      an LLM judge with a 5-second timeout. On failure the workflow transitions
+      the review to BLOCKED and emits `ReviewBlocked` with the verdict reason.
+      The axis reviews stay visible for audit.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score cross-axis consistency on completed reviews
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The defining risk of a multi-perspective panel is an overall verdict that
+      contradicts its own axis findings — an APPROVE that sits on top of a
+      Compliance BLOCKER. Periodic sampling of completed reviews gives a
+      continuous signal on reconciliation quality without slowing live traffic.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 5 minutes. It picks the oldest
+      SYNTHESISED review without a `consistencyScore`, calls `EvalJudge` with
+      the three axis reviews and the overall verdict against a 1–5 rubric, and
+      emits a `ConsistencyScored` event with the score and a one-sentence
+      rationale. The score surfaces on the App UI tab beside each review.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII sanitizer
+    mechanism: Sanitizer
+    implementation: pii redaction at intake
+    source: —
+  - id: G1
+    label: Output guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Consistency eval sampler
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

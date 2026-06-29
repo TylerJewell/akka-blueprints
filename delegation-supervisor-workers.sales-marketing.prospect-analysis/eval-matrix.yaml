@@ -1,0 +1,55 @@
+schema_version: 1
+sample_id: prospect-analysis
+coordination_pattern: delegation-supervisor-workers
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Scope the web research tool to an allow-list of domains
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: scope-enforcement
+    enforcement: blocking
+    rationale: |
+      The research worker reaches external web sources. Without a domain
+      allow-list a prompt-injected or drifting agent could fetch from
+      arbitrary hosts, exfiltrate context, or pull untrusted content into the
+      analysis. Restricting the tool to approved domains keeps research within
+      a known boundary.
+    implementation: |
+      A before-tool-call guardrail in CompanyResearchAgent screens the
+      requested domain against an allow-list before the tool call to
+      ResearchToolEndpoint executes. An off-list domain is refused and the call
+      never fires; the refusal is recorded so the UI can show it.
+    regulation_anchors: []
+
+  - id: S1
+    name: Mask decision-maker contact details before they are stored
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Org analysis surfaces named executives and contact hints. Storing raw
+      personal contact details in the read model spreads PII into surfaces
+      that do not need it. Masking at the write boundary keeps identifying
+      contact data out of the projected view and the UI.
+    implementation: |
+      The ProspectEntity.recordAnalysis command handler applies a PII
+      sanitizer that masks each DecisionMaker.contactHint before the
+      OrgAnalyzed event is persisted, so ProspectsView and the UI only ever
+      see masked values.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Research tool scoped to allowed domains
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: Executive contact details masked
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

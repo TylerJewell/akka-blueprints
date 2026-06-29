@@ -1,0 +1,80 @@
+schema_version: 1
+sample_id: multi-agent-handoff-workflow
+
+# ---- Purpose ----
+purpose:
+  primary_function: task-routing
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: automated-task-result
+  user_type: knowledge-worker
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-task-requests
+  data_classes:
+    pii: false
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  admission_checked_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-with-guardrail
+  decision_subject: task-request
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: result-is-informational-unless-acted-on
+  routing_decisions_made_by_ai: true
+  execution_decisions_made_by_ai: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-work-item
+  failure_modes:
+    - wrong-domain-routing
+    - out-of-scope-tool-use
+    - result-hallucination
+    - admission-bypass
+    - validation-false-positive
+    - specialist-scope-mismatch
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: workflow-operator
+  reviewer_must_approve_every_outgoing: false
+  reviewer_must_review_tool_blocked_tasks: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - search_knowledge_base
+    - lookup_style_guide
+    - get_language_reference
+  rate_limit_per_task: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

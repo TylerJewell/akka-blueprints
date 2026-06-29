@@ -1,0 +1,75 @@
+# Eval Matrix for the multi-strategy-workflow Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (general domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: multi-strategy-workflow
+coordination_pattern: debate-multi-perspective
+domain: general
+
+matrix_cell:
+  coordination_pattern: debate-multi-perspective
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Block prohibited or malformed queries before any strategy runs
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: input-policy
+    enforcement: blocking
+    rationale: |
+      Running three concurrent strategy agents against a prohibited or empty query
+      wastes compute, can produce hallucinated evidence, and risks surfacing
+      policy-violating material across all three answer paths simultaneously.
+      Blocking at the input boundary before the coordinator is even called keeps
+      rejected queries from entering the strategy fan-out entirely, and provides a
+      clear audit trail in QueryRejected events.
+    implementation: |
+      The deterministic `QueryValidator` runs in `QueryWorkflow.validateStep`
+      before the coordinator is called. It checks that the question is non-empty,
+      under 2000 characters, and does not match any pattern in the
+      `multistrategy.guardrail.blocked-patterns` list from `application.conf`.
+      On failure, `QueryEntity.reject(reason)` emits `QueryRejected` and the
+      workflow ends in status `REJECTED`. No agent call is made.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score cross-strategy agreement on synthesized answers
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      When three independent strategies (keyword, semantic, chain-of-thought)
+      each produce their own answer, the defining risk is a synthesized answer
+      that is more confident than the underlying strategies justify — for
+      example, a definitive claim derived from only one strategy while the other
+      two returned low-confidence or divergent answers. Periodic agreement scoring
+      surfaces systematic synthesis drift without slowing live query traffic.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 5 minutes. It picks the oldest
+      `SYNTHESIZED` query without an `agreementScore`, calls `ConsistencyJudge`
+      with the three strategy results and the synthesized answer against a 1–5
+      rubric, and emits an `AgreementScored` event with the score and a
+      one-sentence rationale. The score surfaces on the App UI tab beside each
+      query row.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Input guardrail
+    mechanism: Guardrail
+    implementation: input-policy before strategy dispatch
+    source: —
+  - id: E1
+    label: Cross-strategy agreement sampler
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

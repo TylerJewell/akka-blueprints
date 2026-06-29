@@ -1,0 +1,150 @@
+schema_version: 1
+sample_id: sba-loan-processor
+coordination_pattern: sequential-pipeline
+domain: finance-analysis
+
+controls:
+  - id: S1
+    name: Strip applicant PII from agent context before every task
+    mechanism:
+      kind: sanitizer
+      hook: before-call
+      flavor: pii
+    enforcement: system-level
+    rationale: |
+      Small business loan applications carry high-sensitivity personal identifiers —
+      Social Security numbers, full legal names, dates of birth, and home addresses.
+      Allowing these to appear in the agent's LLM context creates unnecessary data-exposure
+      surface: the model does not need an SSN to assess debt-service coverage ratio or
+      collateral value, and including it risks the identifier being echoed in model outputs,
+      log lines, or error messages. A before-call sanitizer removes identifier fields at the
+      boundary where the application record is translated into the agent's instruction context,
+      so the agent reasons purely on financial characteristics regardless of what arrives in
+      the raw submission.
+    implementation: |
+      `PiiSanitizer` is registered on `LoanUnderwritingAgent` as a `before-call` hook. Before
+      each task's instruction context is assembled, the sanitizer reads the raw applicant JSON
+      from the `LoanApplicationRecord` and removes the fields `ssn`, `fullLegalName`,
+      `dateOfBirth`, and `homeAddress`. The sanitized map is what the agent sees in its task
+      instructions. The removed field names (never values) are logged at `DEBUG` for audit.
+      The original values remain on `LoanApplicationEntity` under a `sensitiveData` map and
+      are returned only through a separate `/api/loans/{id}/sensitive` endpoint gated by an
+      officer-role authorization check on `LoanEndpoint`.
+    regulation_anchors: []
+
+  - id: S2
+    name: Mask protected attributes from underwriting and decision task contexts
+    mechanism:
+      kind: sanitizer
+      hook: before-call
+      flavor: special-category
+    enforcement: system-level
+    rationale: |
+      Fair lending law — including the Equal Credit Opportunity Act and the Fair Housing Act —
+      prohibits credit decisions that consider race, ethnicity, sex, age, marital status, or
+      national origin, whether directly or through proxies. An LLM-based underwriting agent
+      that receives these fields in its context can incorporate them into its reasoning even
+      without explicit instructions to do so, and the resulting outputs may contain language
+      that correlates with protected classes in ways that are difficult to detect after the
+      fact. Masking at the context-assembly boundary is the only reliable preventive control;
+      the on-decision evaluator (E1) then checks the output for proxy language as a detective
+      layer.
+    implementation: |
+      `ProtectedAttributeSanitizer` is registered on `LoanUnderwritingAgent` as a `before-call`
+      hook, applied specifically before the `UNDERWRITE_APPLICATION` and `MAKE_DECISION` task
+      contexts are assembled. The sanitizer replaces the values of `race`, `ethnicity`, `sex`,
+      `age`, `maritalStatus`, and `nationalOrigin` in the applicant record with the literal
+      sentinel string `"[REDACTED]"`. The sentinel is chosen over omission so the agent
+      receives a structurally complete record and cannot infer a value from a missing key.
+      `FairLendingScorer` then checks the produced `LoanDecision.rationale` against the
+      `PROXY_TERMS` list for terms that commonly act as proxies for protected characteristics
+      in credit-decision narratives.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require a loan officer approval or denial before any decision takes effect
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Loan approval and denial have direct, material consequences for small business owners —
+      access to capital, credit history impact, and business viability. An automated
+      underwriting recommendation, however well-calibrated, must not take legal or operational
+      effect without a human reviewer confirming the outcome. The HITL gate ensures that every
+      application in `DECISION_MADE` state is held in `PENDING_REVIEW` until an authenticated
+      loan officer submits an explicit approve or deny action. No downstream state
+      (`OFFICER_APPROVED`, `OFFICER_DENIED`) and no final memo can be produced without that
+      human step, making the officer's review a mandatory rather than advisory checkpoint.
+    implementation: |
+      `LoanPipelineWorkflow.hitlStep` is a durable pause step that fires immediately after
+      `DecisionMade` lands on `LoanApplicationEntity` and the `FairnessEvaluated` event is
+      recorded. The workflow emits `OfficerReviewRequested`, sets the entity status to
+      `PENDING_REVIEW`, and suspends indefinitely — no step timeout applies. The workflow
+      resumes only when `LoanEndpoint` receives a `POST /api/loans/{id}/review` request
+      carrying `{ officerId, outcome, notes }` from an authenticated officer. On `outcome =
+      APPROVED`, the workflow advances to `reportStep` and emits `OfficerApproved`. On
+      `outcome = DENIED`, the workflow emits `OfficerDenied` and terminates without generating
+      a memo. The Akka Workflow runtime persists the paused state across service restarts, so
+      the gate is durable even if the service is redeployed while applications are in review.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every underwriting decision for fair-lending signal before officer review
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Fair-lending supervision requires that lenders be able to demonstrate their underwriting
+      decisions are based on financial criteria and do not produce patterns correlated with
+      protected classes. A single-decision review by a loan officer is necessary but not
+      sufficient — the officer sees one application at a time and may not notice an aggregate
+      pattern emerging across decisions. Running a deterministic fairness scorer on every
+      decision immediately after it is produced gives the officer a per-application signal
+      before they act, flags decisions that warrant closer scrutiny, and builds a machine-readable
+      audit trail that can be aggregated for supervisory reporting without an additional
+      extraction step.
+    implementation: |
+      `FairLendingScorer` runs inside `LoanPipelineWorkflow.evalStep`, fired immediately after
+      `DecisionMade` lands and before `OfficerReviewRequested`. The scorer is deterministic and
+      rule-based — no LLM call — so the same decision always produces the same score. Four
+      checks, one point per check satisfied, on a base of 1:
+      (1) Denial-rate pattern: the running denial count in the same `RiskTier` across all
+      applications in the seeded corpus does not exceed 2× the overall approval rate for that
+      tier; fires as a flag but does not fail the application.
+      (2) Rationale completeness: a `DENY` or `APPROVE_WITH_CONDITIONS` decision must cite at
+      least one term from the `FINANCIAL_CRITERIA` list (`dscr`, `ltv`, `cash flow`, `credit
+      score`, `collateral`, `debt service`).
+      (3) Proxy-language absence: `LoanDecision.rationale` contains none of the terms in
+      `PROXY_TERMS` (`neighborhood`, `community ties`, `character`, `stability`, `lifestyle`).
+      (4) DSCR correctness: `dscrResult.dscr` equals `netOperatingIncome / annualDebtService`
+      within a 0.01 tolerance, verifying that `DecisionTools.computeDscr` was called with the
+      correct inputs from the upstream `UnderwritingAnalysis`.
+      Emits `FairnessEvaluated{score: 1–5, flags: List<String>, rationale: String}`. Score ≤ 2
+      highlights the card border in the UI, prompting the officer to expand the fairness detail
+      before approving or denying.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII sanitizer
+    mechanism: Sanitizer
+    implementation: before-call
+    source: —
+  - id: S2
+    label: Protected-attribute sanitizer
+    mechanism: Sanitizer
+    implementation: before-call
+    source: —
+  - id: H1
+    label: Loan-officer approval gate
+    mechanism: Human-in-the-loop
+    implementation: hitl-pause-step
+    source: —
+  - id: E1
+    label: Fair-lending decision eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

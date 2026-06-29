@@ -1,0 +1,24 @@
+# Eval Matrix for the agents-as-tools Akka sample.
+#
+# This is a general-domain baseline sample with controls: [] in the corpus entry.
+# No wired controls exist. A deployer extending this sample should add controls here
+# and re-run the risk survey to materialise a deployer Eval Matrix.
+
+schema_version: 1
+sample_id: agents-as-tools
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls: []
+
+simplified_view:
+  - note: >
+      No controls are defined for this baseline. The sample demonstrates the
+      agents-as-tools structural pattern without attached governance controls.
+      To add a guardrail or eval-event, add an entry to the controls list above
+      and re-run /akka:specify @SPEC.md.

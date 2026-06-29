@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: conversational-interview
+coordination_pattern: single-agent
+domain: hr-recruiting
+
+controls:
+  - id: S1
+    name: Screen answers for protected-category attributes before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: blocking
+    rationale: |
+      Interview answers frequently surface protected-category attributes — references
+      to health conditions, religious obligations, pregnancy status, disability
+      accommodations, and similar GDPR Article 9 / EEOC-category disclosures — even when
+      candidates are not asked about them directly. Passing those attributes to an LLM
+      creates a risk that the model's subsequent question generation is influenced by
+      protected data, creating a discriminatory feedback loop that is difficult to audit
+      after the fact. Redaction runs in a Consumer between each submitted answer and
+      the agent invocation; the raw answer is preserved on the entity for audit but is
+      never the input seen by the model.
+    implementation: |
+      `AnswerSanitizer` Consumer subscribes to `AnswerSubmitted` events emitted by
+      `InterviewSessionEntity`. It runs a keyword-and-heuristic screening pipeline
+      covering race/ethnicity markers, religion, political opinion, health and disability
+      language, pregnancy and maternity references, sexual-orientation markers,
+      trade-union membership, and financial-status proxies. Flagged spans are replaced
+      with typed redaction tokens (`[REDACTED-HEALTH]`, `[REDACTED-RELIGION]`, etc.).
+      The sanitizer builds a `ScreenedAnswer` carrying the redacted text plus the list
+      of detected categories, then calls `InterviewSessionEntity.attachScreenedAnswer`.
+      `InterviewWorkflow.conductTurnStep` passes only `screenedAnswer.redactedAnswer`
+      inside the `history.json` attachment to `InterviewConductorAgent`; the raw payload
+      remains accessible only via `submittedAnswer.rawAnswer` on the entity, never on
+      the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject biased or legally non-compliant questions before the agent responds
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: bias-and-legality-validator
+    enforcement: blocking
+    rationale: |
+      An AI agent generating interview questions from a role definition can produce
+      questions that inadvertently elicit protected disclosures, apply prohibited topics
+      (family planning, religious practice, disability accommodation, protected financial
+      status), or contain leading language that pressures a candidate toward disclosing
+      a protected attribute. These questions must never reach the candidate. The
+      before-agent-response hook is the correct cut: validate every candidate question
+      inside the agent loop before it leaves, force a retry on failure, and let only
+      compliant questions through to the coordinator's screen.
+    implementation: |
+      `QuestionGuardrail` is registered on `InterviewConductorAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On each
+      candidate `InterviewTurn` it (1) asserts the `question` field is non-blank,
+      (2) asserts `competencyId` names a competency that exists in the session's role
+      definition, (3) scans the question text for prohibited-topic markers (a curated
+      keyword list covering pregnancy, family planning, religion, nationality, disability
+      accommodation, age proxies, and financial-status signals), and (4) detects
+      leading-question patterns that solicit a protected disclosure (e.g., "do you have
+      any health conditions that would prevent…"). On any failure, returns a structured
+      rejection naming the failed check and the offending phrase; the agent loop consumes
+      one of its 3 iterations and retries. Passing responses flow through to
+      `conductTurnStep` and on to the coordinator's UI.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Special-category answer screen
+    mechanism: Sanitizer
+    implementation: special-category
+    source: —
+  - id: G1
+    label: Bias and legality guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

@@ -1,0 +1,95 @@
+# Eval Matrix for the hitl-pdf-extract Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (ops-automation domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: hitl-pdf-extract
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: ops-automation
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human review gate for low-confidence extractions
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      PDF extraction is probabilistic. When a model's confidence in extracted field
+      values falls below the configured threshold, automated downstream posting could
+      propagate incorrect data into business systems. The human review gate interrupts
+      the workflow before any write to downstream targets, requiring an operator to
+      verify the extracted fields. This is the defining characteristic of the
+      human-in-loop-gate pattern applied to ops-automation pipelines.
+    implementation: >
+      ExtractionWorkflow pauses in awaitReviewStep when confidence < 0.85, calling
+      setPendingReview on DocumentEntity and polling status every 5 seconds.
+      POST /api/documents/{id}/approve and POST /api/documents/{id}/reject transition
+      the entity; the workflow resumes on the next poll cycle.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII from extracted fields before human review
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      PDF documents submitted to an extraction pipeline often contain personal
+      identifiers — names, account numbers, tax IDs, and addresses — embedded
+      alongside the structured data of interest. Displaying raw extracted values
+      directly to reviewers exposes PII unnecessarily. RedactionAgent replaces
+      sensitive tokens with [REDACTED] markers in a separate redactedFields map
+      before any field value reaches the review UI, minimising unnecessary data
+      exposure during the human gate.
+    implementation: >
+      RedactionAgent runs as redactStep in ExtractionWorkflow immediately after
+      extractStep. It receives the ExtractionResult and returns a RedactedResult
+      whose fields map carries sanitized values. DocumentEntity persists both
+      rawFields (for audit) and redactedFields (for display). The UI presents
+      only redactedFields to the reviewer.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the post tool unless the document is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Writing extracted data to a downstream business system is a consequential,
+      often irreversible action. A guardrail at the tool invocation boundary ensures
+      that even if workflow orchestration logic contains a bug or a race condition,
+      the post tool cannot execute unless DocumentEntity explicitly records an
+      APPROVED status. This provides a second enforcement point independent of the
+      workflow state machine.
+    implementation: >
+      A before-tool-call guardrail on the post step re-reads DocumentEntity.status
+      immediately before the simulated downstream post tool is invoked. If status is
+      not APPROVED, the guardrail blocks the call and the document remains in its
+      current state. No compensation path is required because posting is the terminal
+      write.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human review gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/reject when confidence is low.
+  - id: S1
+    name: PII redaction before display
+    mechanism: "sanitizer · pii"
+    short: Extracted fields are sanitized before reaching the reviewer UI.
+  - id: G1
+    name: Guard post tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block downstream posting unless status is APPROVED.

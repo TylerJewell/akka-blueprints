@@ -1,0 +1,70 @@
+schema_version: 1
+sample_id: multi-model-chatbot
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block policy-violating replies before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: content-moderation
+    enforcement: blocking
+    rationale: |
+      A customer-facing chatbot that sends replies directly to users has zero tolerance
+      for harmful language, off-topic brand attacks, or accidental re-exposure of PII
+      that the sanitizer already stripped from the input. The before-agent-response hook
+      is the correct interception point: the candidate reply is caught before it exits
+      the agent loop, a retry is forced within the same task, and the user never receives
+      the violating content. Waiting until the reply reaches the endpoint would require
+      discarding an already-stored turn, which is harder to reason about and surfaces the
+      bad content to the view layer even briefly.
+    implementation: |
+      `ReplyGuardrail` is registered on `ChatAgent` via the agent's guardrail-configuration
+      block, bound to the `before-agent-response` hook. On each candidate response it
+      (1) parses the response into `ChatReply`, (2) invokes `ContentPolicyChecker` over
+      `replyText` checking for harmful-language patterns (a curated regex set) and
+      off-topic brand-name references, (3) checks whether any PII token that was redacted
+      from the input turn appears verbatim in the reply. On any failure returns a structured
+      rejection naming the failed check and the offending span; the agent loop consumes one
+      of its 3 iterations and retries. Passing responses flow through to `replyStep`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII from user messages before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Support chat sessions routinely carry real names, email addresses, phone numbers,
+      postal addresses, and account identifiers — users paste them into messages to
+      authenticate their request or describe their account. Sending this data to an LLM
+      provider creates an unnecessary data-processing risk: the provider's input logs may
+      retain the identifiers, and the model may echo them back in ways the deployer did not
+      intend. Redacting before the agent call eliminates the risk at the source while keeping
+      the raw text on the entity for the deployer's own audit purposes.
+    implementation: |
+      `MessageSanitizer` Consumer subscribes to `MessageReceived` events emitted by
+      `ConversationEntity`. It runs a pipeline of regex stages (email, phone, payment-card,
+      government-identifier patterns), a heuristic stage (person names, postal addresses),
+      and an account-id-token stage over `userText`. The output is a `sanitizedText` string
+      plus the list of PII categories found. The Consumer calls
+      `ConversationEntity.attachSanitized(turnId, sanitizedText, piiCategoriesFound)`.
+      `ChatWorkflow.replyStep` then passes `sanitizedText` inline in the task instructions
+      to `ChatAgent`; the raw `userText` remains accessible only via the entity's stored
+      `MessageTurn`, never on the wire to the model.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Content-moderation guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

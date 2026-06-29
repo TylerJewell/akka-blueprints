@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: akka-resumable-agent-http
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Gate every tool invocation before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-argument-validator
+    enforcement: blocking
+    rationale: |
+      The `SlowWeatherTool` is an external invocation surface: the agent supplies
+      a free-text location argument and an enum-typed query type at runtime. Without
+      a gate, a poorly-formed or injection-patterned location string reaches the tool
+      before any validation occurs. The `before-tool-call` hook is the correct cut:
+      it fires after the agent decides to call the tool but before the tool executes,
+      so a rejected invocation can be returned as a structured error to the agent loop,
+      which retries with a corrected argument within the same task — no external
+      coordination required.
+    implementation: |
+      `ToolCallGuardrail` is registered on `WeatherQueryAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      candidate tool invocation it (1) asserts the `location` argument is non-empty,
+      (2) asserts `location` is ≤ 200 characters, (3) asserts `location` contains
+      only printable characters (no control sequences or injection-like tokens),
+      and (4) asserts `queryType` is one of `{CURRENT, FORECAST, AIR_QUALITY}`.
+      On any failure it returns `Guardrail.reject(structuredError)` naming the
+      failed check; the agent loop consumes one of its three iterations and retries.
+      Passing invocations flow through to `SlowWeatherTool.execute(...)`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record a structured incident event on every crash-resume
+    mechanism:
+      kind: eval-event
+      flavor: on-incident-reporter
+    enforcement: non-blocking
+    rationale: |
+      Crash-resume is the defining observable of this blueprint, but observability
+      alone does not constitute governance. Without a recorded incident event, a
+      pattern of repeated crashes — potentially indicating a malfunctioning tool,
+      a pathologically slow model, or a deliberate process-kill test running in
+      production — is invisible to any downstream audit. The on-incident evaluator
+      classifies each resume event by severity based on which workflow step was
+      interrupted, records elapsed time before crash, and emits a durable
+      `IncidentEvent` that the UI surfaces in the run's incident panel.
+    implementation: |
+      `IncidentEvaluator` runs as `incidentStep` inside `AgentRunWorkflow`, fired
+      immediately after the workflow detects a `RunResumed` transition on startup
+      (i.e., `AgentRunEntity.status` is `TOOL_CALLED` or `REPORTING` when the
+      workflow initialises, indicating the prior process did not reach a terminal
+      state). The evaluator is deterministic and rule-based (no LLM call — keeping
+      the single-agent invariant honest): it classifies severity as `INFO` when the
+      interrupted step was `initStep` (no tool call had started), `WARNING` when
+      `toolCallStep` was in-flight (a slow tool call was killed), and `ERROR` when
+      `reportStep` was interrupted (the tool had already returned but report
+      generation was cut). It records `elapsedBeforeCrashMs` and a human-readable
+      `notes` field. Emits `IncidentRecorded` on `AgentRunEntity`; the event is
+      surfaced in the App UI's incident panel on the run detail pane.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-argument guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Crash-resume incident reporter
+    mechanism: Eval · event
+    implementation: on-incident-reporter
+    source: —

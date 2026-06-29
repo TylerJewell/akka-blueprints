@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: gitwikidemoagent
+
+# ---- Purpose ----
+purpose:
+  primary_function: wiki-content-management
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: autonomous
+  user_type: wiki-editor-or-content-author
+
+# ---- Data ----
+data:
+  inputs:
+    - wiki-page-body
+    - requested-changes
+    - github-repository-content
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    internal-documentation: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  content_written_to_external_repo: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous
+  decision_subject: wiki-page-content
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-via-git-revert
+  reviewer_reads_every_commit_before_merge: false
+
+# ---- Failure ----
+failure:
+  blast_radius: repository-branch
+  failure_modes:
+    - unwanted-overwrite
+    - push-to-wrong-branch
+    - missing-repo-token
+    - merge-conflict
+    - agent-corrupted-markdown
+    - impersonated-commit-author
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: repository-maintainer
+  reviewer_reviews_commits_on_github: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - github-api-commit
+    - github-api-ref-update
+  rate_limit_per_update: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  repository-content-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  github-token-rotation-policy: TO_BE_COMPLETED_BY_DEPLOYER

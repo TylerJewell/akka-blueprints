@@ -1,0 +1,40 @@
+schema_version: 1
+sample_id: lats-tree-search
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: E1
+    name: Record every node's reflection score as an eval event
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The reflector's numeric score is the core signal driving branch selection:
+      which path the search follows, which candidates are pruned, and when the
+      tree terminates. Recording that score as a typed event per node gives
+      operators a continuous stream of search-quality data — score distributions
+      by depth, frequency of terminal hits, backpropagation delta trends —
+      without coupling the measurement logic to the workflow itself. Without this
+      stream, diagnosing a search that consistently misses good branches or
+      terminates too late requires replaying the full entity log.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 45 s. Queries
+      `TreeView.getAllTrees`, finds tree nodes that have a `NodeScore` but do
+      not yet have a matching `EvalRecorded` event on `SearchTreeEntity`, and
+      calls `SearchTreeEntity.recordEval(nodeId, depth, score, isTerminal,
+      backpropDelta)`. The call is idempotent on `(treeId, nodeId)`.
+      The `TreeSearchWorkflow` itself also emits one `EvalRecorded` event on
+      the terminal transition (`TreeSolved` or `BudgetExhausted`) carrying
+      the whole search's depth, total node count, and the terminal or best
+      partial node's final score.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-node reflection score recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

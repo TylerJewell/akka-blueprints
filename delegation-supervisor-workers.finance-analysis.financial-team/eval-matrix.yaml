@@ -1,0 +1,90 @@
+# Eval Matrix for the financial-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (finance-analysis domain) with no
+# jurisdiction-bound anchors at this tier, so regulation_anchors is an empty list across
+# all controls. Deployers operating under MiFID II, SEC IA rules, or similar frameworks
+# should add anchors when materialising their own Eval Matrix from risk-survey.yaml.
+
+schema_version: 1
+sample_id: financial-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: S1
+    name: Scrub regulated phrases from financial output before committing
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: non-blocking
+    rationale: >
+      Financial assistants risk emitting phrases that cross into regulated investment-advice
+      territory (e.g. "guaranteed return", "risk-free"). A finance-sector sanitizer
+      applies a curated replacement map to the consolidated report before it is written to
+      the entity, removing or softening such phrases without blocking delivery. Content
+      where replacement is impossible triggers the downstream guardrail.
+    implementation: >
+      sanitizerStep in FinancialWorkflow applies a regex-based replacement map loaded from
+      src/main/resources/finance-sanitizer-rules.yaml over the ConsolidatedReport text.
+      Replaced phrases are recorded in ConsolidatedReport.sanitizerVerdict. The step
+      never blocks on its own; it hands the cleaned report to guardrailStep.
+    regulation_anchors: []
+
+  - id: G1
+    name: Vet the consolidated report for investment-advice compliance before publishing
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The consolidated financial report is the user-facing artifact. A before-agent-response
+      guardrail performs a final LLM-judge pass over the sanitized report to catch residual
+      compliance failures (e.g. specific securities recommendations presented as advice,
+      forward-looking guarantees). A blocking guardrail ensures non-compliant output never
+      reaches the end user; the report enters BLOCKED and the reason is persisted.
+    implementation: >
+      A before-agent-response guardrail on FinancialCoordinator runs a deterministic rule
+      check plus an LLM judge over the ConsolidatedReport in FinancialWorkflow.guardrailStep.
+      On failure the workflow calls FinancialReportEntity.block and the report enters BLOCKED
+      with a failureReason describing the violation.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the coordinator synthesis decision for report quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The coordinator's synthesis merges market data, portfolio planning, and a narrative
+      draft into one consolidated report — a multi-source decision with several points of
+      potential quality loss. Sampling that decision with a rubric judge surfaces a quality
+      score that appears beside the report in the UI, giving operators early visibility into
+      output quality without blocking delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries FinancialView for the oldest
+      PUBLISHED report lacking an evalScore, runs a 1–5 rubric judge over the consolidated
+      content (covering coherence, factual grounding, and absence of unsupported claims),
+      and calls FinancialReportEntity.recordEval(score, rationale), emitting ReportEvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: Finance-sector phrase sanitizer
+    mechanism: "sanitizer · sector"
+    short: Replace regulated investment-advice phrases before the report is committed.
+  - id: G1
+    name: Consolidated report compliance guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a report that contains residual investment-advice violations after sanitizing.
+  - id: E1
+    name: Synthesis quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's multi-source synthesis decision.

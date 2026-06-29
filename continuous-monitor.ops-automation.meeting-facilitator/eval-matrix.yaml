@@ -1,0 +1,69 @@
+schema_version: 1
+sample_id: meeting-facilitator
+coordination_pattern: continuous-monitor
+domain: ops-automation
+
+controls:
+  - id: S1
+    name: Redact PII from transcripts before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Meeting transcripts inherently contain speaker names, email addresses,
+      phone numbers, and occasionally meeting-join URLs that embed personal
+      tokens. Publishing a summary derived from unredacted transcript text
+      risks surfacing these identifiers to all meeting participants, including
+      those who were not present during sensitive segments. Redaction runs
+      inside a Consumer so the model receives only the sanitized form.
+    implementation: |
+      `TranscriptSanitizer` Consumer subscribes to `SegmentReceived` events
+      from `MeetingSessionQueue`. It applies a two-stage pipeline: a regex stage
+      for well-known formats (email, phone, meeting-join URL patterns) and a
+      heuristic stage for speaker-name tokens and account-like strings. The
+      result is a `SanitizedSegment` carrying `redactedTranscript`,
+      `redactedChat`, and `piiCategoriesFound`. This object is what
+      `NotesSummaryAgent` and `ChatSummaryAgent` receive; neither agent ever
+      has access to the raw `TranscriptSegment`.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block publication of summaries that fail response policy check
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-enforcement
+    enforcement: blocking
+    rationale: |
+      Even after PII sanitization at ingestion, an LLM can reconstruct or
+      infer identifying details from context, or produce summaries that
+      include content violating the operator's meeting-distribution policy
+      (e.g., disclosing headcount data, compensation discussion, or
+      confidential project codenames to a broad participant list). The
+      before-agent-response guardrail provides a second independent check on
+      the output before it is committed as a published summary.
+    implementation: |
+      `MeetingFacilitatorWorkflow`'s `guardrailStep` inspects the outputs of
+      `NotesSummaryAgent` and `ChatSummaryAgent` before calling
+      `MeetingSessionEntity.markPublished`. The check evaluates both outputs
+      against a configurable policy rule set (regex patterns for known
+      confidential markers, a name-leak detector that flags tokens matching the
+      original speaker-name list, and a content-policy classifier). If any rule
+      fires, the step emits `GuardrailFailed` on `MeetingSessionEntity` and the
+      workflow transitions to `SessionSuppressed` without publishing. The
+      `GuardrailVerdict` — including the `reason` string — is stored on the
+      entity for audit.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: Transcript PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Summary publication guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

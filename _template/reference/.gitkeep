@@ -1,0 +1,7 @@
+# Required files:
+#   architecture.md     — narrative around the mermaid diagrams
+#   api-contract.md     — every endpoint with payload schemas
+#   ui-mockup.md        — the 5-tab structure tailored to this blueprint
+#   user-journeys.md    — the acceptance bar (3–6 numbered journeys)
+#   data-model.md       — every Java record, every event, every enum
+# See BLUEPRINT-AUTHORING-GUIDE.md §10.

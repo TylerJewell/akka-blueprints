@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: personal-finance-agent
+coordination_pattern: single-agent
+domain: finance-analysis
+
+controls:
+  - id: S1
+    name: Tokenise PII in transaction data before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Personal financial transactions are dense with identifying information: account
+      numbers, card PAN fragments, full-name strings in merchant descriptions, and
+      routing or sort codes that can be combined to reconstruct account access credentials.
+      Sending this data to an LLM in raw form is both a regulatory exposure and a
+      confidentiality breach for the account holder. Tokenisation runs in a Consumer
+      between the raw query submission and the agent invocation; the raw transaction
+      records are preserved on the entity for audit purposes but are never the input
+      the model receives.
+    implementation: |
+      `TransactionSanitizer` Consumer subscribes to `QuerySubmitted` events emitted by
+      `QueryEntity`. It runs a four-stage pipeline: (1) replaces account numbers with
+      `[ACCT-last4]` tokens using only the last 4 digits of the account number as the
+      suffix, (2) masks card PAN fragments with `[CARD-last4]`, (3) replaces full-name
+      strings matching the `principal` or known-name heuristics with `[NAME-INITIALS]`,
+      and (4) strips routing and sort code patterns with `[ROUTING-REDACTED]`. The output
+      is a `SanitizedContext` carrying the redacted transaction list and a count of
+      replacements. `QueryWorkflow.answerStep` passes only the sanitized context to
+      `FinanceAssistantAgent`; the raw `QueryRequest.rawTransactions` remains accessible
+      solely via the entity state.
+    regulation_anchors: []
+
+  - id: G1
+    name: Validate every write-tool call before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: write-intent-validator
+    enforcement: blocking
+    rationale: |
+      A conversational finance agent that can execute fund transfers and bill payments
+      operates with real side-effects even in a simulated context. An unchecked write
+      tool is the primary risk vector: the model could propose a transfer amount that
+      exceeds the available balance, a destination account that is not owned by the
+      requesting principal, or a payee that was injected through a crafted query. The
+      before-tool-call hook is the correct cut-point: it sits between the agent's intent
+      and the tool's execution, so a blocked write never reaches the simulated bank
+      state, and the refusal is handed back to the agent as structured data it can
+      incorporate into its natural-language answer.
+    implementation: |
+      `WriteGuardrail` is registered on `FinanceAssistantAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. It is
+      selective: read-only tool invocations (`getBalance`, `listTransactions`,
+      `groupByCategory`) pass through without inspection. For write tools
+      (`transferFunds`, `payBill`) it enforces three rules: (1) the proposed `amount`
+      must not exceed the `available` balance on the source account as returned by
+      `FinanceTools.getBalance`; (2) the destination `toAccountId` must appear in the
+      session's `accounts` list on the `QueryRequest`, ruling out arbitrary external
+      transfers; (3) the `principal` field in the tool call arguments must match the
+      `QueryRequest.principal` from the entity, preventing cross-user injection. A rule
+      failure returns a structured `blocked-write` payload naming the failed rule; the
+      agent receives this as a tool result with `WriteOutcome.BLOCKED` and constructs a
+      user-facing explanation without retrying the blocked call.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII tokenisation before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Write-tool guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

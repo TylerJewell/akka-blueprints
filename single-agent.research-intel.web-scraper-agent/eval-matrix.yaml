@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: web-scraper-agent
+coordination_pattern: single-agent
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Block disallowed or rate-limited scrape targets before the fetch fires
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: url-validator
+    enforcement: blocking
+    rationale: |
+      A web-scraping agent that calls an arbitrary URL on every user request is one
+      misrouted submission away from hitting internal infrastructure, abusing third-party
+      terms of service, or tripping rate limits that get the operator's IP blacklisted.
+      The before-tool-call hook is the right cut: the guardrail intercepts the pending
+      fetchPage invocation before any outbound TCP connection opens, checks the domain
+      against the operator-maintained allowlist and the per-origin rolling window, and
+      returns a structured rejection if either check fails. The agent receives the
+      rejection as tool output and records a BLOCKED result — the network stack is never
+      touched for an unapproved target.
+    implementation: |
+      `UrlGuardrail` is registered on `WebScraperAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook targeting
+      `FetchPageTool`. On each pending invocation it (1) parses the target URL,
+      (2) calls `AllowlistLoader.isDomainAllowed(domain)` — the allowlist is loaded
+      at startup from `src/main/resources/sample-events/allowed-domains.jsonl`,
+      (3) calls `RateLimitStore.checkRateLimit(origin)` — a thread-safe
+      ConcurrentHashMap of timestamps in a rolling 60-second window (default budget:
+      5 calls per origin per window). On any failure it returns
+      `Guardrail.reject(reason)` with a JSON payload carrying `{"blocked": true,
+      "reason": "<domain-not-allowed|rate-limit-exceeded>", "origin": "..."}`. The
+      agent surfaces this as a final `ScrapeResult` with `status = BLOCKED` and the
+      reason text. `ScrapeWorkflow.submitStep` writes a `ScrapeBlocked` event on
+      the entity; the workflow transitions the entity to the terminal BLOCKED state.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII from extracted content before storage and downstream use
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Web pages scraped on behalf of a researcher frequently contain personal data that
+      was incidental to the page's purpose — a journalist's byline email, a contact-page
+      phone number, a contributor's postal address. If the raw extraction is stored
+      verbatim and forwarded to downstream consumers, the operator inherits a PII
+      handling obligation for data they did not intend to collect. Running the sanitizer
+      as a Consumer after `RawContentExtracted` ensures that what lands in
+      `SanitizedResult` — and what the UI renders — is already redacted, while the
+      original extraction is preserved on the entity solely for audit purposes.
+    implementation: |
+      `ContentSanitizer` Consumer subscribes to `RawContentExtracted` events emitted
+      by `ScrapeEntity`. It runs a redaction pipeline over `ScrapeResult.summary` and
+      over every `DataPoint.value` and `DataPoint.sourceQuote`: a regex stage covering
+      well-known formats (email, phone, postal code, payment-card-like tokens), a
+      heuristic stage for person names and street addresses, and an account-id-token
+      stage. Outputs a `SanitizedResult` carrying the cleaned `sanitizedSummary`,
+      the cleaned `sanitizedDataPoints` list, and the `piiCategoriesFound` list
+      (e.g., `["email", "phone", "person-name"]`). Calls
+      `ScrapeEntity.attachSanitized(sanitized)`. The raw `ScrapeResult` remains
+      accessible only via `result` on the entity; the view and the UI receive only
+      the sanitized form.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: URL allowlist + rate-limit guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: PII redaction on extracted content
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

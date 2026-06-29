@@ -1,0 +1,41 @@
+schema_version: 1
+sample_id: ae-oauth
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Validate OAuth scope before every tool call
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: oauth-scope-validator
+    enforcement: blocking
+    rationale: |
+      An agent that proposes tool calls without checking OAuth scopes creates a privilege-
+      escalation path: a caller with a read-only token can ask the agent to perform writes
+      and — absent enforcement — the agent will comply. Catching this at the tool-call
+      boundary, inside the agent loop, ensures the guardrail is unconditional. A post-hoc
+      audit log catches violations after the fact; the before-tool-call hook prevents them.
+      Expired tokens are a related risk: a token that was once valid may have had its scopes
+      revoked between issuance and use; expiry checking in the resolve step closes that gap
+      before any tool call is attempted.
+    implementation: |
+      `OAuthScopeGuardrail` is registered on `ToolCallerAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      proposed tool call it (1) looks up the tool name in `ToolRegistry.TOOL_SCOPES`
+      to determine `requiredScope`, (2) checks that `requiredScope` is a member of the
+      session's `ResolvedToken.scopes`, and (3) if absent returns `Guardrail.deny` with a
+      structured payload `{disposition:"DENIED", reason:"token lacks scope <scope>"}` so
+      the `ToolCallerAgent` records the denial in `ToolCallRecord` and continues to the
+      next proposed call. Allowed calls flow through to `SimulatedToolExecutor`. Token
+      expiry is handled one step earlier in `SessionWorkflow.resolveTokenStep`, which
+      transitions the session to `FAILED` without invoking the agent.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: OAuth scope check before tool call
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

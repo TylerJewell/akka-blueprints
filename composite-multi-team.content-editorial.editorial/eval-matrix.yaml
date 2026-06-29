@@ -1,0 +1,130 @@
+# Eval Matrix for the editorial-desk Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community content-editorial sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list across
+# all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: editorial-desk
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: composite-multi-team
+  domain: content-editorial
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Vet the final article before it is published
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: |
+      The final article is publishable content assembled by the editor-in-chief at
+      the end of the pipeline. Everything upstream — research, sections, review — is
+      internal working material, but the article is what reaches a reader, so it
+      needs an output gate of its own. The guardrail fires on the editor-in-chief's
+      FINALIZE response before the article is persisted, so a piece that fails the
+      bar never becomes a published document.
+    implementation: |
+      A before-agent-response guardrail registered on `EditorInChief` inspects the
+      `Article` produced by the FINALIZE task. It refuses an article shorter than a
+      minimum length, one containing profanity or a banned topic, or one with an
+      empty byline. On a refusal `EditorialWorkflow.publishStep` calls
+      `DocumentEntity.recordPublishBlock(reason)` and ends with the document left
+      `APPROVED`; nothing is published and the guardrail reason is shown in the UI.
+    regulation_anchors: []
+
+  - id: G2
+    name: Gate every write into the shared document workspace
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: |
+      Three desks of agents — researchers, writers, reviewers — all write into one
+      shared document workspace through `DocumentTools`. Those writes are stateful
+      side effects: a stray write could append to the wrong story, overwrite a
+      section another writer owns, or modify a story that has already been
+      published. A self-organising set of agents writing into shared state needs a
+      gate in front of every write, so the operation never lands when it is out of
+      scope.
+    implementation: |
+      A before-tool-call guardrail registered on `Researcher`, `Writer`, and
+      `Reviewer` inspects each `DocumentTools` call. It refuses a write whose target
+      `storyId` or `sectionId` is not the one the agent was assigned, a write to a
+      story whose status is already `PUBLISHED`, or a payload over a size cap. A
+      refused write records the stage with the guardrail reason and the agent
+      returns without a partial write; for a section the `WriterWorkflow` releases
+      the claim so another writer can pick it up.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every stage result as it lands
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Each stage of the pipeline produces an evaluable result — a research digest, a
+      draft, a review verdict. Scoring those results as they land gives the editor a
+      running read on quality without holding up the pipeline, and surfaces weak
+      stages (a thin digest, a short draft, a draft that needed revision) beside the
+      story in the UI.
+    implementation: |
+      `StageEvalConsumer` subscribes to `DocumentEntity` events and fires on
+      `ResearchSynthesized`, `DraftAssembled`, and `ReviewCompleted`. For each it
+      runs `StageEvaluator` — a deterministic pure function, not an LLM call — that
+      returns a `StageEval{stage, score, flags}` (e.g., a digest with fewer than
+      three key facts, a draft under a word-count floor, a review with any REVISE
+      axis). The eval is recorded on the document and shown in the App UI; it never
+      gates the workflow.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Allow post-publication compliance review of published articles
+    mechanism:
+      kind: hotl
+      flavor: live-compliance-review
+    enforcement: non-blocking
+    rationale: |
+      Some review is better done after an article is out — a compliance officer
+      reading published pieces for issues the in-line review panel was not asked to
+      catch. This reviewer is on the loop, not in it: the article publishes without
+      waiting, and the post-publication review is recorded against it for audit and
+      follow-up rather than gating the release.
+    implementation: |
+      `POST /api/stories/{id}/compliance-review` accepts a `ComplianceReview`
+      (`reviewedBy`, `outcome` of `CLEARED` or `FLAGGED`, `comments`) only when the
+      document status is `PUBLISHED`; otherwise it returns `409`.
+      `DocumentEntity.recordComplianceReview` emits `ComplianceReviewRecorded` and
+      stores the review without changing the `PUBLISHED` status. The App UI shows a
+      compliance box on every published story and the recorded outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Final-article output guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: G2
+    label: Workspace-write guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Per-stage quality eval
+    mechanism: Eval event
+    implementation: on-decision-eval
+    source: —
+  - id: HO1
+    label: Post-publication compliance review
+    mechanism: Human on the loop
+    implementation: live-compliance-review
+    source: —

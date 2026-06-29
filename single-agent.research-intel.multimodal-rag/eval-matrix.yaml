@@ -1,0 +1,44 @@
+schema_version: 1
+sample_id: multiformat-hybrid-rag
+coordination_pattern: single-agent
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Reject uncited answers before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: citation-coverage-validator
+    enforcement: blocking
+    rationale: |
+      A retrieval-augmented research agent is trusted precisely because its answers
+      are grounded in retrieved passages. If the model can return factual assertions
+      without citing a retrieved chunk, the RAG contract breaks: the answer could
+      draw on training-data hallucinations rather than the actual corpus. The
+      before-agent-response hook is the right cut because it intercepts the
+      candidate answer while the agent loop can still retry — a citation-free
+      sentence is not surfaced to the user; the model is asked to correct it
+      within the same task's iteration budget rather than having a downstream
+      component reject an already-recorded answer.
+    implementation: |
+      `CitationGuardrail` is registered on `ResearchAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate response it (1) parses the response into `ResearchAnswer`,
+      (2) when `decision == ANSWERED`, asserts every `citations[].chunkId` is
+      present in the `RetrievedChunk` list stored on `QueryEntity` for that query,
+      (3) asserts that `answerText` is non-empty and accompanied by at least one
+      citation, and (4) when `decision == NO_RESULT`, asserts the `citations` list
+      is empty and `noResultReason` is non-empty. On any failure it returns a
+      structured rejection naming the failed check and the offending chunkId or
+      sentence; the agent loop consumes one of its 3 iterations and retries.
+      Passing responses flow through to `QueryWorkflow.answerStep` which calls
+      `QueryEntity.recordAnswer`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Citation-coverage guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

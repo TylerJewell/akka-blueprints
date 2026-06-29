@@ -1,0 +1,41 @@
+schema_version: 1
+sample_id: multi-provider-router
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: E1
+    name: Aggregate per-provider quality metrics on a rolling call window
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      A load-balancing agent that distributes calls across two providers introduces a
+      risk that the providers drift in quality — one may produce consistently shorter,
+      truncated, or lower-quality responses while still succeeding technically. A single
+      failed call is insufficient signal; the pattern only becomes visible in aggregate.
+      The periodic evaluator runs every 5 completed calls, computing latency percentiles
+      and a rule-based quality score per provider, so operators can detect divergence
+      and act before it affects users at scale. Because individual calls are not gated,
+      the evaluator is non-blocking — it surfaces a trailing signal rather than a hard
+      enforcement fence.
+    implementation: |
+      `PerformanceMonitor` Consumer subscribes to `CallCompleted` events emitted by
+      `CallEntity`. It maintains a window counter; when the counter reaches 5
+      (configurable), it fetches the last N `CallRow` records from `CallView`, groups
+      them by `Provider`, and passes each group to `EvaluationAggregator`. The aggregator
+      computes P50 and P95 latency over the window's `latencyMs` values, calculates an
+      error rate from `FAILED` rows in the same window, and assigns a rule-based quality
+      score (1–5) based on response length and absence of truncation markers. The result
+      is written as a `MonitorRow` upsert to `MonitorView`. `RouterEndpoint` serves the
+      monitor view at `GET /api/monitor`. The Eval Matrix tab in the UI renders the
+      latest report per provider with P50/P95 bars and a colour-coded quality chip.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-provider quality monitor
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

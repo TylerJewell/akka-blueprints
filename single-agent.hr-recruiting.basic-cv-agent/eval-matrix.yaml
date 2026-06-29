@@ -1,0 +1,45 @@
+schema_version: 1
+sample_id: basic-cv-agent
+coordination_pattern: single-agent
+domain: hr-recruiting
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      hook: pre-agent-input
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Candidate profiles submitted by recruiters or candidates themselves regularly
+      include government identifiers (national insurance numbers, social security numbers),
+      bank account details included in reference letters, medical disclosures in cover-text,
+      and personal contact information. None of those identifiers should appear in an LLM
+      call: they are not needed to generate a CV, they create unnecessary data-processor
+      obligations, and a model that echoes them in output introduces leakage risk. The
+      sanitizer runs in a Consumer between the raw profile submission and the agent
+      invocation, so the model only ever receives the redacted form. The raw profile
+      is preserved on the entity for audit purposes and is never on the wire to the model.
+    implementation: |
+      `ProfileSanitizer` Consumer subscribes to `ProfileSubmitted` events emitted by
+      `CvEntity`. It applies a pipeline of regex stages (email, phone, government ID
+      patterns including UK NINOs and US SSNs, payment-card-like tokens, bank sort-code
+      and account-number patterns), a keyword deny-list stage for medical condition terms
+      that a candidate may disclose in free-text, and a heuristic stage for postal
+      addresses. The two fields sanitized are `request.contactEmail` (always present) and
+      `request.additionalNotes` (optional free-text). Outputs a `SanitizedProfile` carrying
+      the redacted contact email, the redacted notes, and the list of PII categories found.
+      Calls `CvEntity.attachSanitized(sanitized)`. `CvWorkflow.generateStep` then passes
+      the sanitized profile as the `CvGeneratorAgent` task attachment via
+      `TaskDef.attachment("profile.json", ...)`. The raw contactEmail and additionalNotes
+      remain accessible only via `request.contactEmail` and `request.additionalNotes` on
+      the entity; they are excluded from the `CvView` row so the UI never displays them.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

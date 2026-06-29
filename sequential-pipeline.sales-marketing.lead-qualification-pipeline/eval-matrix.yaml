@@ -1,0 +1,116 @@
+schema_version: 1
+sample_id: inbound-lead-qualification
+coordination_pattern: sequential-pipeline
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Block Slack write until qualification score is recorded
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: |
+      In a lead qualification pipeline, the Slack notification is the moment
+      the system creates external real-world work: a sales rep receives an alert
+      and is expected to act on it. Allowing that write to fire before
+      `QualificationScored` is recorded would notify reps about leads that have
+      not yet been evaluated — wasting rep time and potentially routing
+      misclassified leads into the sales process. The before-tool-call hook is
+      the correct cut point: it intercepts the outbound `postLeadToSlack` call
+      before any network socket is touched, surfaces a structured rejection to
+      the agent loop, and records the violation on `LeadEntity` for audit. The
+      agent can self-correct within its iteration budget without losing the lead.
+    implementation: |
+      `SlackGuardrail` is registered on `LeadAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      On every tool call the guardrail checks whether the candidate tool is
+      `postLeadToSlack`. If so, it looks up `LeadEntity.status` and
+      `LeadEntity.score` by `leadId` (carried in the in-flight `TaskDef.metadata`).
+      The accept condition is: `status ∈ {QUALIFIED, NOTIFYING}` AND
+      `score.isPresent()`. On reject, the guardrail returns a structured
+      `slack-write-blocked` error to the agent loop and calls
+      `LeadEntity.recordGuardrailRejection(phase, tool, reason)` so the
+      rejection appears in the UI's rejection-log strip and in the audit log.
+      All non-Slack tools pass through unconditionally.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip lead PII before enrichment tools receive the instruction context
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: system-level
+    rationale: |
+      Lead form submissions carry name, email address, and personal company
+      contact information — all personal data under standard data-protection
+      frameworks. Forwarding these raw values to an LLM or to a third-party
+      firmographic enrichment API is an unnecessary data-minimization risk:
+      the enrichment tools need only the company domain, not the individual's
+      identity. A system-level PII sanitizer that runs before the ENRICH task's
+      instruction string reaches the agent removes this risk at the source.
+      The original values are retained on `LeadEntity` for CRM handoff and are
+      never re-introduced into agent context after sanitization.
+    implementation: |
+      `PiiSanitizer` is registered on `LeadAgent` as a system-level sanitizer.
+      It intercepts the instruction string for the ENRICH task before the string
+      is forwarded to the LLM or any function tool. Using a regex-plus-field-map
+      pass, it replaces every occurrence of `firstName`, `lastName`, `email`,
+      and personal company contact fields with stable pseudonymous tokens
+      (`[NAME-1]`, `[EMAIL-1]`, etc.) derived from `sha1(leadId + sessionSalt)`.
+      The tokens are stable within a run so the agent can refer to them
+      consistently. The `LeadEntity` state record retains the original `LeadFormData`
+      unchanged; the sanitizer only operates on the ephemeral instruction string
+      passed to the agent.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample every qualification score for tier consistency and rep assignment completeness
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A qualification score can be structurally well-formed yet still be
+      commercially wrong: a 10-person startup marked HOT, a score of 80 paired
+      with tier COLD, or an assigned rep with no Slack identity. None of these
+      errors block the pipeline — the lead is notified either way — but they
+      surface as wasted sales-rep attention and erode trust in the scoring model
+      over time. An on-decision evaluator that runs immediately after every
+      qualification score is recorded gives the sales operations team a
+      continuous signal about scoring drift without requiring them to manually
+      audit every lead.
+    implementation: |
+      `QualificationEvaluator` runs inside `LeadPipelineWorkflow.evalStep`,
+      fired immediately after `QualificationScored` lands. The evaluator is
+      deterministic and rule-based (no LLM call). Three checks:
+      (1) tier-by-size consistency — `LeadTier.HOT` requires
+      `employeeBand ∈ {201–1 000, 1 001+}` or `estimatedArrBand ≥ $5 M`;
+      `WARM` requires `employeeBand ∈ {51–200}` or the ARR range $1 M–$5 M;
+      `COLD` is the fallback.
+      (2) rep assignment completeness — `assignedRepSlackId` must be non-blank.
+      (3) score-tier alignment — `score ≥ 70 → HOT`, `score 40–69 → WARM`,
+      `score < 40 → COLD`.
+      Confidence: HIGH (all 3 pass), MED (2 pass), LOW (≤ 1 pass). Emits
+      `EvaluationRecorded{confidence, rationale}` with a rationale sentence
+      naming the failing check. LOW-confidence leads are highlighted amber in
+      the App UI so the sales operations team can review before the rep acts.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Slack write gate guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: Lead PII sanitizer
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: E1
+    label: Qualification accuracy eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

@@ -1,0 +1,58 @@
+schema_version: 1
+sample_id: fomc-event-analyst
+coordination_pattern: sequential-pipeline
+domain: finance-analysis
+
+controls:
+  - id: G1
+    name: Review synthesized policy analysis for financial output quality before recording
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Financial analysis is high-stakes advisory output. An agent synthesizing
+      Federal Reserve policy interpretation can produce structurally well-formed
+      responses that nonetheless cite rate-move rationales not present in the
+      gathered market data, reference market indicators that were never observed,
+      or return an empty analysis when signals are ambiguous. Each of these
+      defects reaches the analyst silently if only the pipeline's task-boundary
+      handoffs are checked. The before-agent-response hook is the right cut for
+      this domain: it intercepts the SYNTHESIZE task's candidate PolicyAnalysis
+      before it is written as an immutable event, verifies that every cited
+      PolicySignal exists in the recorded PolicySignalSet and every
+      GroundingRef.indicatorId exists in the recorded MarketSnapshot, and
+      rejects candidates that fail — returning a structured reason to the agent
+      loop so it can self-correct within its iteration budget. No hallucinated
+      rate attribution reaches the analyst's screen; every accepted analysis is
+      traceable to the data actually gathered.
+    implementation: |
+      `FinancialOutputGuardrail` is registered on `FomcAnalystAgent` via the
+      agent's guardrail-configuration block, bound to the `before-agent-response`
+      hook. It fires only on the SYNTHESIZE task — the GATHER and INTERPRET tasks
+      produce typed structured outputs that are validated structurally by the
+      task result type, not by the guardrail. On the SYNTHESIZE task, the
+      guardrail reads the candidate `PolicyAnalysis`, the recorded
+      `PolicySignalSet` (fetched from `FomcEventEntity` via the `analysisId`
+      carried in the `TaskDef.metadata`), and the recorded `MarketSnapshot`.
+      Three checks are applied in order: (1) signal attribution — every
+      `PolicySection.signalId` must equal a `PolicySignal.signalId` from
+      `PolicySignalSet.signals`; (2) market grounding — every
+      `PolicySection.groundedIn[i].indicatorId` must equal a
+      `MarketIndicator.indicatorId` from `MarketSnapshot.indicators`; (3)
+      non-emptiness — `PolicyAnalysis.sections` must be non-empty. On the first
+      failing check, the guardrail returns `Guardrail.reject("financial-quality-
+      violation: <check-name>: <detail>")` to the agent loop and calls
+      `FomcEventEntity.recordGuardrailRejection(phase, reason)` so the rejection
+      is visible in the UI's review-log strip and in the audit log. On all
+      checks passing, the guardrail accepts the candidate and records
+      `ReviewOutcome{verdict: "ACCEPTED"}` on the entity.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Financial output quality guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: line-personal-assistant
+coordination_pattern: planner-executor
+domain: planning-travel
+
+controls:
+  - id: G1
+    name: Vet every outbound write action before the integration call runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      Calendar creates and email sends are irreversible write actions that act
+      on the user's real data — a mistakenly created meeting or an email sent
+      to a wrong address cannot be easily undone. The planner agent sees only
+      natural-language input; a single misparse could route an email to an
+      unintended recipient or create a calendar event with missing required
+      fields. A deterministic guardrail positioned between the plan step and
+      the executor call catches bad parameters and deny-listed recipients
+      before any API call is attempted, keeping the blast radius limited to a
+      blocked conversation rather than an erroneous write to a live integration.
+    implementation: |
+      `ActionPlanGuardrail.vet(ActionPlan)` runs in `ConversationWorkflow`'s
+      `guardStep` immediately after `planStep` and before `executeStep` or
+      `confirmRequestStep`. The vetter checks (a) the recipient email domain
+      against the deny-list in `application.conf`, (b) parameter completeness
+      for `CREATE_EVENT` (startTime and endTime required), (c) parameter
+      completeness for `SEND_EMAIL` (recipientEmail and subject required), and
+      (d) that the intent resolves to a known `IntentKind`. On any failure,
+      the workflow emits `ActionBlocked` on `ConversationEntity`, sends a
+      LINE reply explaining the block, and ends the conversation in `BLOCKED`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require explicit user confirmation before sending outbound email
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: non-blocking
+    rationale: |
+      Email sends in a personal-assistant context carry meaningful risk: the
+      user's message may be ambiguous about recipient, subject, or content.
+      Unlike calendar events (which can be deleted), a sent email cannot be
+      recalled. Routing every outbound email through a confirm-before-send
+      gate — delivered inside the same LINE thread the user is already in —
+      keeps the user in control of every external communication the agent
+      makes on their behalf without requiring them to switch context.
+      Confirmations that go unanswered expire after 10 minutes so the
+      workflow does not park indefinitely.
+    implementation: |
+      When `ActionPlan.intent = SEND_EMAIL` and the guardrail passes, the
+      workflow enters `confirmRequestStep`: it emits `ConfirmationRequested`
+      on `ConversationEntity`, opens a `ConfirmationEntity` keyed by
+      `conversationId`, and sends a LINE confirmation message via the
+      `lineReplyToken`. The conversation moves to `AWAITING_CONFIRMATION`.
+      `awaitConfirmStep` polls `ConfirmationEntity.get` every 3 s. When the
+      user replies YES, `LineWebhookEndpoint` calls
+      `ConfirmationEntity.resolveConfirmation(approved=true)`, which triggers
+      workflow resumption and `GmailExecutorAgent` execution. If the user
+      replies NO, the workflow emits `ConfirmationDenied` and moves to
+      `CANCELLED`. If 10 minutes elapse with no reply,
+      `StaleConversationMonitor` calls `ConversationEntity.expireConversation`
+      and the workflow exits in `EXPIRED`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Action plan guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Confirm before send
+    mechanism: HITL
+    implementation: application (LINE confirm-reply gate)
+    source: —

@@ -1,0 +1,85 @@
+schema_version: 1
+sample_id: medical-preauth
+
+# ---- Purpose ----
+purpose:
+  primary_function: insurance-prior-authorization-pipeline
+  sector: healthcare
+  decisions_surface: binding
+  user_type: clinician-or-payer-reviewer
+
+# ---- Data ----
+data:
+  inputs:
+    - member-id
+    - cpt-procedure-code
+    - icd-10-diagnosis-code
+    - treating-physician-npi
+    - clinical-notes
+    - payer-policy-corpus
+  data_classes:
+    pii: true
+    phi: true
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: binding
+  decision_subject: prior-authorization-request
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-via-appeal
+  denial_requires_human_acknowledgement: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-authorization-request
+  failure_modes:
+    - phi-leak-to-llm
+    - incorrect-policy-match
+    - phase-violation
+    - denial-without-human-review
+    - hallucinated-policy-citation
+    - eligibility-check-false-positive
+    - rationale-too-brief-for-denial
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: true
+  reviewer_role: payer-clinical-reviewer
+  denial_hold_timeout_hours: 72
+  escalation_on_timeout: true
+  audit_frequency: daily
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_request: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  hipaa_covered_entity_or_ba: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  phi-sanitization-before-llm: true

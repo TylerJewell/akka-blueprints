@@ -1,0 +1,104 @@
+schema_version: 1
+sample_id: airline-cs
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Redact customer PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Customer messages in airline support flows routinely contain frequent-flyer
+      numbers, passport-like booking tokens, email addresses, and phone numbers.
+      None of those belong in an LLM call body. A customer asking to change seat
+      "on my booking FF-7891234 at jane@example.com" should not expose either
+      identifier to the model — the booking reference is already in the booking
+      context, and the email is not needed for any tool the agent calls. Redaction
+      runs in a Consumer before the agent receives the message; the raw message is
+      preserved on the entity for audit but is never the text the model reasons over.
+    implementation: |
+      `MessageSanitizer` Consumer subscribes to `RequestReceived` events emitted by
+      `RequestEntity`. It runs a pipeline of regex stages (email, phone, FFP-\d{7}
+      frequent-flyer pattern, passport-like alphanumeric 6–9 char tokens) followed
+      by a person-name heuristic. Outputs a `SanitizedMessage` carrying the redacted
+      text plus the list of PII categories found. Calls
+      `RequestEntity.attachSanitized(sanitized)`. `ServiceWorkflow.serveStep` then
+      passes `sanitized.redactedMessage` as the `CustomerServiceAgent` task
+      instructions; the raw payload remains accessible only via `request.rawMessage`
+      on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block destructive reservation writes without a confirmation token
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-argument-validator
+    enforcement: blocking
+    rationale: |
+      Booking modification and cancellation are irreversible operations that change
+      a customer's itinerary. A ReAct agent that reasons freely over tools could
+      call `modifyReservation` as a confident next step without ever asking the
+      customer to confirm. The before-tool-call hook is the right enforcement point:
+      intercept the call before it reaches `BookingService`, assert a confirmation
+      token is present (proving the customer explicitly approved), and return a
+      structured rejection if it is not. This forces the agent to route through the
+      HITL gate before any seat, date, or flight change executes.
+    implementation: |
+      `ModificationGuardrail` is registered on `CustomerServiceAgent` via the
+      agent's guardrail-configuration block, bound to the `before-tool-call` hook.
+      On any call whose tool name is `modifyReservation` or `cancelReservation`, it
+      reads the arguments map for a `confirmationToken` field. If the field is absent
+      or blank, it returns `Guardrail.reject("MISSING_CONFIRMATION_TOKEN: call
+      requestConfirmation first")`. The agent loop receives the structured rejection,
+      counts it as one iteration, and should next call `requestConfirmation` to
+      obtain a token. On a subsequent call that carries a non-blank token, the
+      guardrail passes through to `BookingService`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Pause and require customer confirmation before reservation changes execute
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: non-blocking
+    rationale: |
+      Airline customers have clear consumer-protection expectations: a change to
+      their booking should not happen without them explicitly approving it. An
+      application-gated HITL pause — where the workflow stops and waits for the
+      customer to POST a confirm or cancel token — is the correct enforcement
+      surface. It is not a background review queue; the customer is the human in
+      the loop. The pause is bounded by the hitlStep's 3600 s timeout, after which
+      the workflow fails safely rather than proceeding unilaterally.
+    implementation: |
+      When `CustomerServiceAgent` calls `requestConfirmation(proposedChange)`,
+      `ServiceWorkflow` transitions `RequestEntity` to `AWAITING_CONFIRMATION` and
+      enters `hitlStep`. The hitlStep is a suspended workflow step: no further agent
+      iterations run until `ServiceEndpoint` receives `POST /api/requests/{id}/
+      confirmation`. On `action=confirm`, the endpoint calls the workflow's resume
+      path, which emits `ConfirmationReceived` (carrying the issued token) onto
+      `RequestEntity` and passes the token back into the agent's running task.
+      `ModificationGuardrail` (G1) then validates the token on the next tool call.
+      On `action=cancel`, the workflow calls `RequestEntity.cancel` and records
+      `CANCELLED` without executing any booking write.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Modification token guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Customer confirmation gate
+    mechanism: HITL
+    implementation: application
+    source: —

@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: sequential-pipeline-ops-automation-style-workflow
+
+# ---- Purpose ----
+purpose:
+  primary_function: workflow-run-orchestration
+  sector: ops-automation
+  decisions_surface: recommend-only
+  user_type: platform-operator
+
+# ---- Data ----
+data:
+  inputs:
+    - operator-supplied-workflow-id
+    - in-process-workflow-definition-catalog
+    - in-process-step-simulation-corpus
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: workflow-run-execution
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  operator_reviews_run_result_before_followon_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-run
+  failure_modes:
+    - phantom-step-execution
+    - missing-step-coverage
+    - stage-violation
+    - out-of-order-notification
+    - step-outcome-unknown
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reader_role: platform-operator
+  operator_reviews_run_result_before_followon_action: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_run: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  workflow-definition-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

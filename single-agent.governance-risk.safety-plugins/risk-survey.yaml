@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: safety-plugins
+
+# ---- Purpose ----
+purpose:
+  primary_function: content-safety-screening
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: blocking
+  user_type: platform-operator-or-automated-pipeline
+
+# ---- Data ----
+data:
+  inputs:
+    - submitted-text-payloads
+    - safety-rule-profiles
+  data_classes:
+    pii: true
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: blocking
+  decision_subject: text-payload
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-with-appeal
+  reviewer_reads_every_verdict_before_action: false
+
+# ---- Failure ----
+failure:
+  blast_radius: single-payload
+  failure_modes:
+    - false-positive-block
+    - false-negative-allow
+    - pii-leakage-via-llm
+    - guardrail-bypass-via-encoding
+    - prompt-injection-in-payload
+    - severity-collapse-to-allow
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: trust-and-safety-operator
+  reviewer_must_read_verdict_before_action: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_screening: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: TO_BE_COMPLETED_BY_DEPLOYER
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  payload-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: reflection-agent
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: E1
+    name: Record every iteration's verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The reflector's accept-or-revise verdict is the highest-information
+      signal the loop produces. In a general-purpose reflection agent the
+      generator can produce almost any kind of content, so no deterministic
+      content check is available — all quality judgment passes through the
+      reflector. Recording that judgment as a typed event per iteration gives
+      operators a continuous quality stream: pass rate per iteration number,
+      drift in average score, distribution of change-request categories. This
+      observable record is also the primary evidence that the loop converged
+      on quality and did not simply terminate after a fixed number of cycles.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. It queries
+      `TasksView.getAllTasks`, finds iterations that have been reflected but
+      do not yet have a matching `EvalRecorded` event on `TaskEntity`, and
+      calls `TaskEntity.recordEval(iterationNumber, verdict, score)`. The
+      call is idempotent on `(taskId, iterationNumber)`. The workflow itself
+      also emits one `EvalRecorded` event on the terminal transition
+      (TaskAccepted or TaskRejectedFinal) carrying the whole loop's outcome.
+      Both paths write to the same event type; consumers can reconstruct the
+      full quality history from the event stream alone.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the loop gracefully at the iteration ceiling
+    mechanism:
+      kind: halt
+      flavor: graceful-degradation
+    enforcement: system-level
+    rationale: |
+      A reflection loop without a hard ceiling can consume unbounded LLM
+      calls and wall-clock time if the reflector's rubric is impossible to
+      satisfy for a given input. In a general-purpose agent this is a
+      realistic failure mode — the generator may produce a response on a
+      topic the reflector consistently judges as incomplete regardless of
+      revisions. The halt mechanism bounds resource consumption, surfaces a
+      structured rejection reason that names the iteration count and the
+      last critique, and preserves the highest-scoring response so an
+      operator or downstream system can act on the best available output
+      without starting over.
+    implementation: |
+      `ReflectionWorkflow` reads `reflection-agent.loop.max-iterations`
+      (default 4) at start. Before scheduling the next `generateStep`, the
+      workflow checks `iterationCount < maxIterations`. When the ceiling is
+      reached, the workflow transitions to `rejectStep`, which emits
+      `TaskRejectedFinal` with the highest-scoring iteration's response as
+      the best-of and a structured `rejectionReason` ("max iterations
+      reached" plus the count and the last score). The
+      `defaultStepRecovery(maxRetries(2).failoverTo(rejectStep))` override
+      ensures any unrecoverable agent failure also lands in the same terminal
+      state rather than leaving the workflow suspended.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-iteration eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: HT1
+    label: Halt at iteration ceiling
+    mechanism: Halt
+    implementation: graceful-degradation
+    source: —

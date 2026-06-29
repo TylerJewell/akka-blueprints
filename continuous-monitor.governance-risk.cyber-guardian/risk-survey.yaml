@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: cyber-guardian-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: cybersecurity-threat-detection-and-response
+  sector: infrastructure-security
+  decisions_surface: automatic-for-halt+advisory-for-remediation
+  user_type: security-operations-analyst
+
+# ---- Data ----
+data:
+  inputs:
+    - infrastructure-telemetry
+    - network-event-logs
+    - host-activity-signals
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: TO_BE_COMPLETED_BY_DEPLOYER
+    ip-addresses-and-hostnames: true
+    security-credentials: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: automatic-for-halt+advisory-for-remediation
+  decision_subject: infrastructure-asset
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: halt-reversible-by-human-lift
+
+# ---- Failure ----
+failure:
+  blast_radius: single-host-to-network-segment
+  failure_modes:
+    - false-positive-halt-of-production-host
+    - missed-critical-signal
+    - stale-remediation-playbook
+    - eval-event-silently-dropped
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: true
+  reviewer_role: security-operations-analyst
+  reviewer_must_approve_every_outgoing: false
+  halt_lift_requires_human: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    # The simulated isolation directive is in-process; replace with real SOAR integration when deploying.
+  rate_limit_per_signal: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  incident-response-plan_in_place: TO_BE_COMPLETED_BY_DEPLOYER

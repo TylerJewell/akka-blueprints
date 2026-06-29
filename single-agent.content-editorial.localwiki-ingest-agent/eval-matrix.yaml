@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: localwiki-ingest-agent
+coordination_pattern: single-agent
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Reject unsafe file-write paths before the tool executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: path-safety-validator
+    enforcement: blocking
+    rationale: |
+      A wiki ingest agent that can freely choose any target path is one
+      miscalibrated LLM response away from writing to system paths, admin
+      directories, or locations outside the declared namespaces. Because
+      the write action is persistent — filing a page is not easily undone
+      at scale — the right cut is before the tool executes, not after.
+      The before-tool-call hook intercepts every proposed write_wiki_page
+      call and validates path prefix, namespace membership, and title
+      presence before a single byte is written to the wiki store.
+    implementation: |
+      `WritePageGuardrail` is registered on `WikiIngestAgent` via the
+      agent's guardrail-configuration block, bound to the
+      `before-tool-call` hook. On each proposed `write_wiki_page` call
+      it (1) asserts the `targetPath` does not begin with any forbidden
+      prefix (`../`, `/etc/`, `/admin/`, `/sys/`), (2) asserts the
+      namespace component of the path is in the deployer-declared allowed
+      set (`/docs`, `/blog`, `/reference`), and (3) asserts the proposed
+      `title` is non-empty. On any failure it returns a structured
+      `tool-call-rejected` error naming the failed check and suggesting a
+      corrected namespace; the agent loop counts the iteration toward its
+      `maxIterationsPerTask(3)` budget and retries with a corrected call.
+      Passing calls flow through to the wiki write stub.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII from fetched source before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Web pages, images, and PDFs ingested from arbitrary sources
+      routinely contain emails, phone numbers, government identifiers,
+      payment-card-like tokens, postal addresses, person names, and
+      account identifiers. Filing that content verbatim into a wiki would
+      propagate PII into a persistent, indexed store — and would expose
+      it to the LLM during the ingest call. Redaction runs in a Consumer
+      before the agent ever sees the source; the raw fetched text is
+      preserved on the entity for audit but is never the input seen by
+      the model or stored in the filed wiki page.
+    implementation: |
+      `ContentSanitizer` Consumer subscribes to `SourceSubmitted` events
+      emitted by `IngestEntity`. It runs a pipeline of regex stages
+      (well-known formats: email, phone, SSN-like, payment-card-like),
+      a heuristic stage (person names, postal addresses), and an
+      account-id-token stage over the raw fetched text. Outputs a
+      `SanitizedContent` carrying the redacted text, the detected MIME
+      type, and the list of PII categories found. Calls
+      `IngestEntity.attachSanitized(sanitized)`. `IngestWorkflow.ingestStep`
+      then passes `sanitized.redactedText` as the `WikiIngestAgent` task
+      attachment; the raw payload remains accessible only via
+      `submission.sourceAddress` on the entity, never on the wire to the
+      model or in the filed wiki page.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: File-write path guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

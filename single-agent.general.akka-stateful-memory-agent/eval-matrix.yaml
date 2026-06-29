@@ -1,0 +1,71 @@
+schema_version: 1
+sample_id: akka-stateful-memory-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: S1
+    name: Sanitize PII before writing to persistent memory
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Unlike a stateless chat system, this agent writes facts about the user into a
+      persistent memory block that survives restarts and is visible to every future
+      turn. A single message containing an email address, phone number, or account
+      identifier could embed that value permanently in the human block and surface it
+      repeatedly in the agent's context. The sanitizer runs inside MemoryWriterConsumer
+      before any patch is committed, so the stored profile never contains raw identifiers.
+      The raw user message is preserved on the entity log for audit; the redacted form is
+      what the agent reads on subsequent turns.
+    implementation: |
+      `MemoryWriterConsumer` subscribes to `AgentResponseReady` events. For each proposed
+      `MemoryPatch`, it runs a pipeline of regex stages (email, E.164 phone, SSN-like
+      patterns, account-id-like tokens) over the `newContent` field, replacing matches
+      with typed redaction markers (`[REDACTED-EMAIL]`, `[REDACTED-PHONE]`, etc.). Only
+      the sanitized `MemoryPatch` is forwarded to `ConversationEntity.applyMemoryPatch`;
+      the raw proposed content is discarded and never persisted. The `ConversationEntity`
+      still records the original user message text in its event log for audit purposes,
+      but the memory blocks themselves contain only the sanitized form.
+    regulation_anchors: []
+
+  - id: E1
+    name: Evaluate human memory block for demographic drift every ten turns
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      Self-modifying memory is a persistent artefact. Over many turns an agent that
+      remembers facts about a user can inadvertently build a profile dominated by a
+      single demographic attribute — nationality, gender, age, religion — if that
+      attribute is mentioned repeatedly while other facts are not. Without a periodic
+      check, this drift is invisible until a downstream decision surfaces it. The
+      evaluator fires every ten turns, before drift compounds further, and flags the
+      session so a human can inspect or reset the memory block. The check is
+      deterministic so the same block content always receives the same verdict.
+    implementation: |
+      `DriftEvaluator` is a pure Java class invoked by `ConversationWorkflow.evalStep`
+      when `turnNumber % 10 == 0`. It receives the current `humanBlock.content` string
+      and the `turnNumber`. It counts occurrences of keyword clusters drawn from five
+      categories (nationality, race, gender, age-range, religion). If any one cluster
+      accounts for more than 60% of all attribute mentions, the risk score equals that
+      cluster's proportion (0.0–1.0) and the reason names the dominant cluster. The
+      result is an `DriftAnnotation{riskScore, reason, atTurnNumber, evaluatedAt}`.
+      `ConversationWorkflow` writes the annotation back to `ConversationEntity` via
+      `recordDrift`. The UI shows a colour-coded chip: green (< 0.4), yellow (0.4–0.7),
+      red (≥ 0.7). No LLM call is made — the single-agent invariant is preserved.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before memory write
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: E1
+    label: Periodic drift-fairness check on human block
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —

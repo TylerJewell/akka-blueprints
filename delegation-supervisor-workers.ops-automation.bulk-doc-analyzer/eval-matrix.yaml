@@ -1,0 +1,74 @@
+# Eval Matrix for the bulk-doc-analyzer Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (ops-automation domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: bulk-doc-analyzer
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: ops-automation
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: S1
+    name: Sanitize PII from processed document text before persistence
+    mechanism:
+      kind: sanitizer
+      hook: before-agent-response
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Document batches submitted to this system may contain names, email addresses,
+      national identification numbers, and phone numbers embedded in unstructured text.
+      These fields must be detected and replaced before the processed record is written
+      to DocumentEntity, so that downstream consumers never receive raw personal data
+      and the persistent event log stays clean. Because the sanitizer runs inline in
+      BatchWorkflow.sanitizeStep before markProcessed is called, a failure to sanitize
+      stops persistence rather than silently storing PII.
+    implementation: >
+      A blocking sanitizer runs in BatchWorkflow.sanitizeStep immediately after BatchCoordinator
+      returns a ProcessedDocument. The step scans the sanitizedText field for PII patterns
+      (names, emails, national IDs, phone numbers), replaces each span with a
+      [REDACTED:<piiType>] placeholder, and records each replacement as a PiiRedaction entry
+      in the ProcessedDocument.piiRedactions list. The sanitized ProcessedDocument is then
+      passed to DocumentEntity.markProcessed. If the sanitizer cannot complete (e.g., the
+      scanner throws), the step routes to degradeStep and the document enters DEGRADED.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the coordinator merge decision for processing quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The coordinator's merge step combines outputs from two independent agents — an Extractor
+      and a Classifier — into one ProcessedDocument. The quality of that merge (field
+      completeness, classification accuracy, appropriate redaction scope) cannot be verified
+      inline without introducing latency into the processing pipeline. A periodic rubric judge
+      samples finished documents and surfaces a 1–5 score alongside the record in the App UI,
+      giving operators a signal for model drift or prompt degradation without ever blocking
+      document delivery.
+    implementation: >
+      QualitySampler (TimedAction, every 5 minutes) queries DocumentView.getAllDocuments,
+      filters client-side for the oldest PROCESSED document lacking a qualityScore, then runs
+      a 1-5 rubric judge that evaluates field completeness, classification plausibility, and
+      redaction appropriateness. It calls DocumentEntity.recordQuality(score, rationale),
+      emitting QualityScored, which updates the DocumentView row and surfaces the score in the
+      App UI without blocking or modifying the already-persisted ProcessedDocument.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: PII sanitizer
+    mechanism: "sanitizer · pii"
+    short: Strip personal data from document text before writing the processed record.
+  - id: E1
+    name: Merge quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's extraction + classification merge decision.

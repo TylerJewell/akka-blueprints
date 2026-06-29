@@ -1,0 +1,99 @@
+schema_version: 1
+sample_id: multi-agent-handoff-workflow
+coordination_pattern: handoff-routing
+domain: general
+
+controls:
+  - id: G1
+    name: Block task requests that fail admission before any agent is activated
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: admission-check
+    enforcement: blocking
+    rationale: |
+      In a multi-specialist handoff system, activating any agent for a malformed or
+      policy-violating request wastes compute and may produce outputs that can never be
+      safely published. The admission guardrail checks required fields (non-empty title,
+      description in bounds, valid preferredDomain), scope compliance (no prohibited-topic
+      keywords), and structural validity before registering the task entity or starting the
+      workflow. No LLM call is made for a rejected request — the guard fires entirely inside
+      a Consumer reading the raw queue event.
+    implementation: |
+      `AdmissionGuardrail` Consumer subscribes to `TaskQueue` events. For each
+      `InboundTaskReceived` it applies a rule set (field presence, length bounds on
+      `description`, enumeration check on `preferredDomain`, keyword scan against a
+      prohibited-topics list) and produces an `AdmissionResult` with `admitted` flag and
+      `rejectionReasons`. On `admitted=false` it calls `TaskEntity.rejectAtAdmission`
+      which emits `TaskRejectedAtAdmission` (terminal `REJECTED`) — the workflow is never
+      started. On `admitted=true` it registers the task and starts a `HandoffWorkflow`.
+    regulation_anchors: []
+
+  - id: G2
+    name: Block disallowed tool calls before a specialist tool executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-allowlist
+    enforcement: blocking
+    rationale: |
+      Autonomous specialist agents can attempt tool calls that were not anticipated at
+      design time — external HTTP fetches to unapproved domains, shell-command invocations,
+      or file-system writes. In a general-purpose handoff workflow these escape paths
+      represent the highest-severity risk: a single disallowed tool call can exfiltrate
+      task content, introduce non-determinism, or cause side-effects in external systems.
+      Intercepting tool calls before execution and comparing against an allowed-tool
+      registry prevents any such call from running, regardless of what the specialist's
+      model decides.
+    implementation: |
+      Each specialist (`DataAnalyst`, `ContentWriter`, `CodeReviewer`) is an
+      `AutonomousAgent`. The `HandoffWorkflow` step for each specialist wraps the
+      `forAutonomousAgent` call with a tool-dispatch interceptor keyed on the tool name
+      and argument schema. When a tool call arrives that is not on the registry (permitted
+      read-only tools: `search_knowledge_base`, `lookup_style_guide`,
+      `get_language_reference`), the interceptor emits `ToolCallBlocked` on `TaskEntity`
+      (fields: `toolName`, `argsDigest`, `allowed=false`, `blockReason`, `calledAt`) and
+      fails the workflow step, transitioning the task to terminal `TOOL_BLOCKED`. The
+      blocked tool name and reason are surfaced in the App UI for operator review.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every routing decision inline
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The routing decision is the inflection point of the entire handoff: a task sent to
+      the wrong specialist gets an answer shaped for the wrong domain, which typically
+      fails validation or produces low-quality output. An on-decision eval provides a
+      continuous, per-task signal on routing quality — independent of whether the task
+      ultimately completes — and surfaces as a score chip visible in the live task list.
+      A sustained drop in routing scores identifies model drift or a prompt regression
+      before it accumulates into a backlog of validation failures.
+    implementation: |
+      `RoutingEvalScorer` Consumer subscribes to `TaskEntity` events. On every
+      `RoutingDecided` it calls `RoutingJudge` (typed Agent) with the `IncomingTask`
+      and the `RoutingDecision`. The judge returns `RoutingScore { score: 1–5, rationale }`.
+      The Consumer then calls `TaskEntity.recordRoutingScore` which emits `RoutingScored`.
+      The score is non-blocking — a low score does not change the workflow flow; it surfaces
+      on the App UI tab as a colour-graded chip (1–2 red, 3 amber, 4–5 green) and would
+      feed a system-level alert in a deployed setting.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Admission guardrail
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —
+  - id: G2
+    label: Tool-call allowlist guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: On-decision routing eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

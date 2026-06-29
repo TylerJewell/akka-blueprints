@@ -1,0 +1,80 @@
+schema_version: 1
+sample_id: persona-hot-reload
+
+# ---- Purpose ----
+purpose:
+  primary_function: runtime-agent-persona-management
+  sector: governance-risk
+  decisions_surface: direct-action
+  user_type: platform-operator
+
+# ---- Data ----
+data:
+  inputs:
+    - persona-payload-keys
+    - chat-queries
+    - behavioral-probe-responses
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  persona_instructions_validated_before_activation: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: direct-action
+  decision_subject: agent-persona-definition
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  rollback_mechanism: push-prior-persona-fixture
+
+# ---- Failure ----
+failure:
+  blast_radius: all-conversations-until-corrected
+  failure_modes:
+    - persona-injection-via-store
+    - model-swap-to-non-allowlisted-model
+    - revalidation-false-positive
+    - monitoring-window-missed
+    - gate-bypass-via-store-direct-write
+    - adversarial-instructions-in-persona
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: platform-operator
+  monitoring_window_seconds: 300
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - configuration-store-watch
+  rate_limit_per_push: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  store-write-access-restricted-to-authorized-operators: TO_BE_COMPLETED_BY_DEPLOYER

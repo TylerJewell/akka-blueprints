@@ -1,0 +1,95 @@
+# Eval Matrix for the hiring-hitl-gate Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (hr-recruiting domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: hiring-hitl-gate
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: hr-recruiting
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human validator gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      A hiring proposal from an AI agent carries material consequence for a
+      candidate's career. Allowing the workflow to record an outcome without
+      a human decision-maker reviewing the proposal would automate a
+      consequential employment decision. The validator gate between proposal
+      and outcome is the defining governance mechanism of this pattern.
+    implementation: >
+      HiringWorkflow pauses in awaitValidatorStep, polling ApplicationEntity
+      status every 5 seconds. POST /api/applications/{id}/approve and
+      POST /api/applications/{id}/decline transition the entity; the workflow
+      resumes on the next poll and either moves to recordOutcomeStep or ends.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip protected-attribute signals before human review
+    mechanism:
+      kind: sanitizer
+      hook: before-agent-response
+      flavor: special-category
+    enforcement: blocking
+    rationale: >
+      Hiring decisions involve candidates who are natural persons. LLM-generated
+      proposals may encode inferences about age, gender, ethnicity, or disability
+      status drawn from the candidate profile. Persisting those inferences as part
+      of the proposal exposes the deployer to discrimination risk and, in many
+      jurisdictions, triggers obligations under special-category data rules. The
+      sanitizer removes those signals before the HiringProposal is written to
+      ApplicationEntity and surfaced to the human reviewer.
+    implementation: >
+      A before-agent-response sanitizer on HiringDecisionProposer inspects the
+      HiringProposal text for protected-attribute language (age references, gender
+      pronouns used evaluatively, ethnicity markers, disability inferences) and
+      redacts or neutralises those passages before the result is returned to
+      HiringWorkflow and persisted on ApplicationEntity.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block outcome recording unless the validator has approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Outcome recording is the write that makes a hiring decision durable. Allowing
+      it to run on an application that has not been explicitly approved by a human
+      would defeat the validator gate. The before-tool-call guardrail provides a
+      second line of defence — it re-reads ApplicationEntity.status immediately
+      before the tool runs, so the guard holds even if the workflow's await loop
+      has a race or is replayed.
+    implementation: >
+      A before-tool-call guardrail on the outcome-recording step inside
+      HiringWorkflow re-reads ApplicationEntity.status via getApplication. The
+      tool is permitted to run only when status is APPROVED. Any other status
+      causes the guardrail to block the call and end the workflow without
+      recording an outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human validator gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/decline before any outcome is recorded.
+  - id: S1
+    name: Protected-attribute sanitizer
+    mechanism: "sanitizer · special-category"
+    short: Strip protected-attribute signals from proposals before human review.
+  - id: G1
+    name: Guard outcome-recording tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block outcome recording unless ApplicationEntity status is APPROVED.

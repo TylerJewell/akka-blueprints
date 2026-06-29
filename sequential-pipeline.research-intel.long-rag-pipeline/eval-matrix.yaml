@@ -1,0 +1,94 @@
+schema_version: 1
+sample_id: long-rag-workflow
+coordination_pattern: sequential-pipeline
+domain: research-intel
+
+controls:
+  - id: H1
+    name: Flag and revise every model response that contains uncited sentences
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: after-llm-response
+    enforcement: blocking
+    rationale: |
+      Very long document inputs create a specific failure mode distinct from
+      general hallucination: the model can produce sentences that are
+      plausible given the semantics of the retrieved window but that cite
+      facts from neighbouring documents that were NOT retrieved into the
+      active ChunkWindow. A before-tool-call hook does not catch this — the
+      model has already produced the response by the time any tool is called.
+      The after-llm-response hook is the only position in the pipeline where
+      every model-generated sentence can be inspected against the bounded set
+      of chunk ids that were actually in scope. Blocking the response and
+      requiring revision within the agent's iteration budget is the minimum
+      action that keeps the guarantee: nothing leaves the agent unless every
+      non-trivial sentence is grounded in the active window.
+    implementation: |
+      `CitationGuardrail` is registered on `DocumentAgent` via the agent's
+      guardrail-configuration block, bound to the `after-llm-response` hook.
+      After every model response, the guardrail receives the raw response
+      text and the active `ChunkWindow` chunk-id set (serialised into
+      `TaskDef.metadata` as `"chunkIds"`). It scans the response for
+      `[chunkId]` citation tags and for each sentence of >= 10 words verifies
+      at least one `[chunkId]` tag whose id appears in the window set. On a
+      citation gap, the guardrail returns a structured `citation-gap`
+      revision instruction naming the uncited sentences and listing the
+      available chunk ids. On any revision event, the guardrail also calls
+      `QueryEntity.recordCitationFlag(sentence, missingCitation, windowSize)`
+      so the flag is visible in the UI's citation-flag log strip and in
+      the persisted audit log. On accept, the response proceeds to the
+      workflow step. The agent's 5-iteration budget gives it room to revise
+      and still complete the task; an exhausted budget transitions the
+      workflow to the error step and the entity to FAILED.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every emitted report for chunk coverage and citation density
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A report can pass the citation guardrail (every sentence is tagged)
+      while still being coverage-thin — a section citing only one chunk for
+      a theme supported by eight retrieved passages, or a citation list that
+      references chunk ids outside the active window (a sign that an earlier
+      revision introduced an id the guardrail did not catch because the
+      sentence had already been accepted in a prior iteration). An
+      on-decision evaluator that runs after the full report is assembled
+      catches these patterns that per-sentence checks miss. Flagging the
+      report rather than blocking it is the right posture: the report may
+      still be usable, but the reader deserves to know that its evidence
+      base is thin or that a citation provenance check failed.
+    implementation: |
+      `CoverageScorer` runs inside `LongRagPipelineWorkflow.evalStep`,
+      fired immediately after `ReportWritten` lands. The scorer is
+      deterministic and rule-based (no LLM call — keeping the single-agent
+      sequential-pipeline invariant honest). Four checks, one point per check
+      satisfied, on a base of 1:
+      (1) theme coverage — every `Synthesis.themes[i]` has a matching
+      `ResearchReport.sections[j]` (`theme.themeId == section.themeId`).
+      (2) citation density — every `ReportSection.citations` list contains
+      >= 2 distinct `Citation.chunkId` values.
+      (3) chunk provenance — every `Citation.chunkId` appears in the
+      recorded `ChunkWindow.chunks[].chunkId` list (no out-of-window
+      references).
+      (4) section parity — `sections.size() == themes.size()` (no silent
+      expansion or collapse during report generation).
+      Emits `EvaluationScored{score: 1-5, rationale: String}` with a
+      rationale sentence naming the largest gap. Reports with score <= 2
+      are flagged on the UI card for human inspection.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Citation coverage guardrail
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: E1
+    label: Report coverage and citation eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

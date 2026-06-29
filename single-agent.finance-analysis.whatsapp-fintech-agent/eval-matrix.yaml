@@ -1,0 +1,106 @@
+schema_version: 1
+sample_id: whatsapp-fintech-agent
+coordination_pattern: single-agent
+domain: finance-analysis
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound WhatsApp messages from financial customers routinely carry phone numbers,
+      account numbers, card-like digit sequences, national identifiers, and personal
+      names. Passing these directly to a language model creates both a data-protection
+      liability and an attack surface for prompt-injection via crafted PII strings.
+      Redaction runs in a Consumer between the raw message ingestion and the agent
+      invocation; the raw message text is preserved on the entity for audit but is
+      never the input seen by the model.
+    implementation: |
+      `MessageSanitizer` Consumer subscribes to `MessageReceived` events emitted by
+      `MessageEntity`. It runs a pipeline of regex stages (phone numbers, card-like
+      digit sequences, national identifiers, account number patterns), a heuristic
+      stage (person names, postal addresses), and a financial-token stage
+      (IBAN-like, routing-number-like). Outputs a `SanitizedMessage` carrying the
+      redacted text plus the list of categories found. Calls
+      `MessageEntity.attachSanitized(sanitized)`. `MessageWorkflow.respondStep` then
+      passes `sanitized.redactedText` as the context fed to `FintechQueryAgent`; the
+      raw payload remains accessible only via `inbound.rawText` on the entity,
+      never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Validate payment tool calls before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: payment-validator
+    enforcement: blocking
+    rationale: |
+      A funds-movement tool call issued by a language model carries real financial
+      risk if the destination account is invalid, the amount is outside permitted
+      bounds, or the calling session is already in a terminal state. The
+      before-tool-call hook is the correct cut: intercept the call before it reaches
+      the simulated (or real) payment API, return a structured rejection to the agent
+      loop, and force a corrected retry — rather than letting an erroneous tool call
+      propagate to an external system that may not be idempotent.
+    implementation: |
+      `PaymentGuardrail` is registered on `FintechQueryAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On every
+      tool call it (1) checks that the `destinationAccountId` argument exists in the
+      seeded account registry loaded from classpath, (2) checks that the `amount`
+      argument is a positive number and does not exceed `single_transaction_cap_usd`
+      from `application.conf`, and (3) verifies the message session is not already
+      in a terminal status (`EXECUTED`, `HITL_REJECTED`, `FAILED`). On any failure
+      returns a structured rejection naming the failed check and the offending
+      argument value; the agent loop consumes one of its 3 iterations and retries
+      with a corrected tool call. Passing calls flow through unchanged.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require human confirmation for large-value transactions
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Financial messaging channels carry a disproportionate volume of social-engineering
+      attempts targeting high-value transfers. Allowing an AI agent to autonomously
+      execute transactions above a configurable threshold without any human checkpoint
+      removes the last control layer against model errors, adversarial inputs, and
+      prompt-injection attacks that survived sanitization and the guardrail. An
+      application-level HITL gate ensures a named human operator explicitly approves
+      or rejects every transfer above the threshold before funds move, creating a
+      durable approval record on the entity.
+    implementation: |
+      `HitlGate` is a supporting class used by `MessageWorkflow.hitlStep`. It reads
+      `large_value_threshold_usd` from `application.conf` (default 500) and compares
+      it against the `PendingTransaction.amount` found in the recorded `AgentResponse`.
+      When the threshold is exceeded, `hitlStep` emits `ApprovalRequested` on
+      `MessageEntity`, transitioning it to `AWAITING_APPROVAL`, and the workflow
+      suspends. An operator uses `POST /api/messages/{id}/approve` or `/reject` to
+      supply a `HitlDecision`. The entity command triggers a workflow callback that
+      resumes `executeStep`. The `HitlDecision` — including `operatorId`, `outcome`,
+      `note`, and `decidedAt` — is stored on the entity as a permanent audit record.
+      Transactions below the threshold bypass `hitlStep` entirely and proceed directly
+      to `executeStep`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Payment tool-call guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Large-value HITL approval gate
+    mechanism: HITL
+    implementation: application
+    source: —

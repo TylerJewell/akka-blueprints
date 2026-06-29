@@ -1,0 +1,36 @@
+schema_version: 1
+sample_id: triage-router-ui
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block handler drafts that violate the reply-policy rubric
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-rubric
+    enforcement: blocking
+    rationale: |
+      This baseline surfaces agent-generated replies directly in a customer-facing UI.
+      A handler agent can return a draft whose fields are well-formed but whose content
+      is policy-violating — promising a refund timeline not in the published SLA,
+      offering compliance or legal guidance outside its scope, or echoing a [REDACTED]
+      token that leaked through the prompt. Because the UI renders the draft to an
+      operator who may unblock it without careful review, the guardrail must catch
+      violations before the draft ever reaches the operator surface.
+    implementation: |
+      `DraftGuardrail` is a typed Agent. `TriageWorkflow.guardrailStep` invokes it
+      with the `SupportMessage` and the handler's `HandlerReply` draft. The agent
+      returns `GuardrailResult { allowed, violations, rubricVersion }`. On
+      `allowed=false` the workflow emits `ReplyBlocked` (terminal `BLOCKED`) and the
+      operator can either publish the blocked draft via `POST /api/messages/{id}/unblock`
+      or leave the message blocked. The override note is written to the audit record.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-response policy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

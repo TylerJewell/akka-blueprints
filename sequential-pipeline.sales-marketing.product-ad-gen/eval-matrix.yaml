@@ -1,0 +1,50 @@
+schema_version: 1
+sample_id: product-catalog-ad-generation
+coordination_pattern: sequential-pipeline
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Reject ad drafts that violate brand policy before they are recorded
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      In a product advertisement pipeline, the output of the DRAFT task is
+      structured prose that will be placed in paid channels. A draft
+      containing prohibited words, missing required brand elements, or
+      exceeding placement character limits causes downstream brand damage and
+      potential regulatory exposure before any human reviewer sees it. The
+      before-agent-response hook is the correct interception point: the agent
+      has produced a full structured response (AdDraft or ProductAd), the
+      guardrail inspects every prose field as a whole, and a violation list is
+      returned to the agent as a structured correction notice — giving it
+      exactly the information needed to self-correct within its iteration
+      budget. Catching violations here prevents non-compliant copy from ever
+      landing in the entity event log, which is the audit record.
+    implementation: |
+      `BrandGuardrail` is registered on `AdGeneratorAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      It fires on DRAFT-phase and REVIEW-phase task responses (the ENRICH
+      phase produces a structured product record, not ad copy, so the brand
+      rules do not apply). For each candidate `AdDraft` or `ProductAd`, the
+      guardrail applies four rules: (1) the headline must contain at least one
+      string from `src/main/resources/brand-policy/elements.json`; (2) no
+      copy field may include a word from `prohibited-words.txt`; (3) the
+      `callToAction` field must end with a token matching `[a-z0-9-]+`; (4)
+      each `AdPlacement.charCount` must be within the limit declared in
+      `placement-limits.json` (search ≤ 130, display ≤ 300, social ≤ 280).
+      On any failure the guardrail returns `Guardrail.reject(BrandRejection{
+      violations, rejectedAt})` and calls `AdJobEntity.recordGuardrailRejection`
+      so the rejection is visible in the UI rejection-log strip and in the
+      audit event log. On full pass it returns `Guardrail.accept()`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Brand-policy ad guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

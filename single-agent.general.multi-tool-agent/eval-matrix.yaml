@@ -1,0 +1,49 @@
+schema_version: 1
+sample_id: multi-tool-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Validate tool inputs before every external API call
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: input-validator
+    enforcement: blocking
+    rationale: |
+      A single agent calling multiple external APIs is exposed to a distinct
+      failure mode that response-level guardrails miss: a malformed or
+      out-of-range input dispatched to a live external service can trigger
+      rate-limiting, account suspension, or unexpected billing. The
+      before-tool-call hook intercepts at the right cut — after the agent
+      decides to call a tool but before the adapter fires — so invalid inputs
+      are caught before they touch the network. In this blueprint, all tool
+      adapters are simulated in-process, but the guardrail pattern is
+      identical to what a deployer wires against real HTTP endpoints, making
+      the sample directly transferable to production use.
+    implementation: |
+      `ToolCallGuardrail` is registered on `ToolCallingAgent` via the
+      agent's guardrail-configuration block, bound to the
+      `before-tool-call` hook. On each pending tool invocation it branches
+      on `toolName`:
+      — For `WeatherTool.lookup`: asserts `cityName` is non-empty and
+        fewer than 100 characters.
+      — For `CurrencyTool.convert`: asserts `fromCode` and `toCode` are
+        exactly 3-character uppercase strings present in the registered
+        ISO-4217 table; asserts `amount` is a finite positive `double`.
+      — For `UnitTool.convert`: asserts `fromUnit` and `toUnit` are both
+        in the registered unit vocabulary (temperature, length, weight
+        families); asserts `value` is a finite `double`.
+      A failed assertion returns `Guardrail.reject(structuredError)` naming
+      the tool, the argument, and the failure reason. The agent loop counts
+      the rejection toward `maxIterationsPerTask` and reformulates the call.
+      Passing calls are forwarded to the adapter unchanged.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-input validation guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: gitty
+
+# ---- Purpose ----
+purpose:
+  primary_function: oss-maintainer-reply-drafting
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-only
+  user_type: oss-project-maintainer
+
+# ---- Data ----
+data:
+  inputs:
+    - github-issue-and-pr-thread-content
+    - maintainer-context-notes
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  public_content_from_github: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: github-issue-or-pr-reply
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_draft_before_posting: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-thread-reply
+  failure_modes:
+    - off-topic-draft
+    - confrontational-tone
+    - hallucinated-thread-reference
+    - draft-posted-without-review
+    - missed-community-context
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: oss-project-maintainer
+  reviewer_must_approve_before_posting: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - github-rest-api-read
+  rate_limit_per_draft: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  github-content-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

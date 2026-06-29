@@ -1,0 +1,70 @@
+# Eval Matrix for the travel-concierge Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (planning-travel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: travel-concierge
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: planning-travel
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Gate every booking tool call against the user's stated constraints
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: constraint-evaluation
+    enforcement: blocking
+    rationale: >
+      A travel booking is a financial commitment made on the user's behalf. A before-tool-call
+      guardrail intercepts each booking action and checks whether the itinerary's total fare
+      exceeds the stated budget and whether any advisory or restriction in the destination
+      brief disqualifies the trip. Blocking delivery before the tool fires prevents an
+      out-of-budget or restricted booking from reaching an external system.
+    implementation: >
+      TripWorkflow.guardrailStep runs immediately after the user's HITL confirmation and
+      before the booking tool call. It reads the TripItinerary's fare and the user's
+      budgetUsd from TripEntity, evaluates the constraint set, and either continues to
+      bookStep or calls TripEntity.blockTrip, ending the workflow with TripBlocked.
+      TripCoordinator's before-tool-call hook is declared in its definition() so the Akka
+      runtime enforces the guardrail even if the agent attempts a direct tool invocation
+      outside the main step path.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require explicit user approval before committing any purchase
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Trip booking creates a binding financial commitment. Inserting a human decision point
+      between itinerary presentation and purchase gives the traveller the opportunity to
+      review pricing, advisories, and visa requirements before any money changes hands.
+      The pause is enforced inside the workflow — not merely displayed in the UI — so
+      approval cannot be bypassed by a direct API call to the booking step.
+    implementation: >
+      TripWorkflow.hitlStep calls Workflow.pause() after emitting ApprovalRequested on
+      TripEntity. TripEndpoint exposes POST /api/trips/{id}/confirm and
+      POST /api/trips/{id}/decline. Both handlers call the workflow's resume signal with
+      the user's decision. Only the confirm path advances to guardrailStep; the decline
+      path ends the workflow with TripDeclined. The workflow stores the pending HITL state
+      durably so a service restart preserves the approval gate.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Booking action guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Block a booking that exceeds budget or violates travel constraints.
+  - id: H1
+    name: Purchase confirmation HITL
+    mechanism: "hitl · application"
+    short: Pause the workflow for explicit user approval before any booking is committed.

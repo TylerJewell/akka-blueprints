@@ -1,0 +1,79 @@
+# Eval Matrix for the lead-score-hitl Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires
+# regulation_anchors on each control. This is a community-content sample
+# (sales-marketing domain) with no industry- or jurisdiction-bound anchors, so
+# regulation_anchors is intentionally an empty list across all controls.
+
+schema_version: 1
+sample_id: lead-score-hitl
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: sales-marketing
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Gate outreach on human approval of shortlisted leads
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      No outreach email is drafted for a lead until a person approves it. The
+      pause between scoring and outreach is the defining characteristic of the
+      human-in-loop-gate coordination pattern.
+    implementation: >
+      LeadScoringWorkflow pauses in awaitReviewStep, polling LeadEntity. POST
+      /api/leads/{id}/approve and POST /api/leads/{id}/reject transition the
+      lead; only an APPROVED lead resumes into outreachStep.
+    regulation_anchors: []
+
+  - id: S1
+    name: Sanitize lead PII before storage and model calls
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Lead records carry personal contact information. PII is redacted and
+      normalized before it is stored or placed in an agent prompt, so raw
+      contact data never reaches a model provider.
+    implementation: >
+      PiiSanitizer runs inside collectStep before LeadEntity.recordCollected and
+      before any agent prompt is built; contactName is stored only in its
+      sanitized form.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block off-policy claims in drafted outreach
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: >
+      Outbound sales email is customer-facing. A before-agent-response guardrail
+      stops pricing promises and unsupported guarantees from leaving the system.
+    implementation: >
+      A before-agent-response guardrail on OutreachAgent inspects the drafted
+      subject and body; a failing draft blocks the outreachStep and the lead
+      stays APPROVED rather than CONTACTED.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/reject before outreach.
+  - id: S1
+    name: PII sanitizer
+    mechanism: "sanitizer · pii"
+    short: Redact contact PII before storage and model calls.
+  - id: G1
+    name: Outreach guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block off-policy claims before an email is persisted.

@@ -1,0 +1,113 @@
+# Eval Matrix for the shared-task-team Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain coordination sample with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: shared-task-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: team-shared-list
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Veto synthesized worker output before it reaches the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Worker agents produce synthesized text that could contain unsafe
+      instructions, hallucinated references, or content that contradicts the
+      established plan. In a self-organising team where workers claim and complete
+      tasks without case-by-case human approval, no human reviews a response before
+      it is recorded and surfaced. A guardrail that intercepts the response before
+      it is committed to the task artifact is the only gate that can prevent harmful
+      or incoherent content from propagating across dependent tasks. The check fires
+      before the response is written anywhere — a refused response is never
+      persisted.
+    implementation: |
+      A before-agent-response guardrail registered on `WorkerAgent` intercepts
+      every synthesized response. It refuses the response when the content contains
+      unsafe instructions, empty or placeholder sections, citations that do not
+      resolve, or any response produced while `SystemControl` reports the team is
+      halted. On a refusal, `WorkerWorkflow.workStep` calls `TaskEntity.block(reason)`
+      so the task is recorded `BLOCKED` with the guardrail reason; the worker
+      returns to polling for other work without committing the refused artifact.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score completed goal output for cross-worker consistency
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A team of workers each producing sections of a shared goal can produce
+      output that is internally inconsistent — one worker's summary may contradict
+      another's analysis, or the synthesized sections may collectively fail to
+      address the original goal. No individual quality check per task catches these
+      cross-worker contradictions because each task is evaluated in isolation. A
+      decision-level eval that scores the complete goal output after all tasks are
+      done provides a signal that cannot be obtained from per-task checking alone,
+      and it runs non-blocking so it does not delay the `COMPLETED` transition.
+    implementation: |
+      When `GoalEntity` transitions to `COMPLETED`, `WorkerWorkflow.finishStep`
+      (or a dedicated eval step) collects all `ResultArtifact` summaries for the
+      goal's tasks from `TaskBoardView` and passes them to the on-decision eval
+      alongside the original `GoalBrief`. The eval scores three dimensions:
+      coverage (does the set of artifacts address the original description), absence
+      of contradiction across sections, and presence of a plan-level summary. The
+      `EvalResult` is recorded on `GoalEntity` as a metadata field and exposed via
+      `GET /api/goals/{id}`. The `COMPLETED` status is set regardless of the eval
+      outcome.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Operator halt of the whole worker team
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      A self-organising team that claims and processes tasks autonomously needs a
+      single operator stop that takes effect immediately across every active worker.
+      If the planner produces a harmful task breakdown, or if a worker's output
+      exposes an unexpected risk, the operator must be able to freeze all claiming
+      and all response generation at once — without redeploying the service or
+      killing individual workflows. The halt must cover both the poll loop (stopping
+      new claims) and the guardrail (refusing in-flight response generation), so
+      no work continues in any form while the team is frozen.
+    implementation: |
+      `SystemControl` is a `KeyValueEntity` holding a `halted` flag with a reason
+      and an actor. `POST /api/control/halt` sets it; `POST /api/control/resume`
+      clears it. `WorkerWorkflow.pollStep` reads the flag and pauses claiming while
+      halted by scheduling a 5 s resume timer and returning without advancing to
+      `claimStep`. The G1 before-agent-response guardrail reads the same flag and
+      refuses every response while halted. The App UI exposes a Halt / Resume
+      control and shows a red banner when the team is frozen.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Response safety guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Cross-worker consistency eval
+    mechanism: Eval event
+    implementation: on-decision-eval
+    source: —
+  - id: HT1
+    label: Operator team halt
+    mechanism: Halt
+    implementation: operator-regulator-stop
+    source: —

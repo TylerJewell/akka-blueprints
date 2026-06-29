@@ -1,0 +1,63 @@
+# Eval Matrix for the order-processing Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (ops-automation domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: order-processing
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: ops-automation
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human approval gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      An order dispatched without human review can trigger irreversible logistics
+      operations — warehouse picks, carrier bookings, or payment captures. Requiring
+      a person to explicitly approve before fulfillment begins ensures accountability
+      and prevents automated errors from propagating downstream.
+    implementation: >
+      OrderWorkflow pauses in awaitApprovalStep, polling OrderEntity status every
+      5 seconds. POST /api/orders/{id}/approve and POST /api/orders/{id}/reject
+      transition the entity; the workflow resumes on the next poll and either
+      proceeds to fulfillStep or terminates.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the dispatch tool unless the order is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Fulfillment triggers external side-effects — inventory reservation, carrier
+      label generation, and payment capture in a production deployment. A pre-tool
+      guardrail prevents FulfillmentAgent from invoking the dispatch tool on any
+      order that has not passed the approval gate, guarding against workflow
+      re-entrancy or out-of-order task execution.
+    implementation: >
+      before-tool-call guardrail on FulfillmentAgent re-reads OrderEntity.status and
+      allows the simulated dispatch tool only when status is APPROVED. If status is
+      anything else the call is blocked, the task fails, and the workflow does not
+      advance to FULFILLED.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/reject before dispatch.
+  - id: G1
+    name: Guard dispatch tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block fulfillment unless order status is APPROVED.

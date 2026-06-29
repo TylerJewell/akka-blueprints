@@ -1,0 +1,40 @@
+schema_version: 1
+sample_id: swe-bench-agent
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: C1
+    name: Block patches that fail the test suite before recording completion
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      An AI-generated patch that compiles but fails tests is worse than no patch:
+      it creates false confidence and may mask the original defect while introducing
+      new ones. The test gate applies each candidate patch to the normalized snapshot
+      in-process and runs the bundled test stubs before any COMPLETED event is emitted.
+      Because the gate is deterministic, a failing patch on retry N will still fail on
+      retry N+1 unless the agent produces a materially different diff — which is the
+      intended signal. Patches that exhaust the retry budget without passing land in
+      FAILED, where a human can inspect the diff and the gate report together.
+    implementation: |
+      `TestGateRunner` is invoked by `BenchmarkWorkflow.testGateStep` immediately after
+      `PatchProduced` lands on `BenchmarkTaskEntity`. The runner parses each `HunkChange`
+      in the recorded `PatchResult`, applies line-range replacements to the matching
+      files in the `PreparedSnapshot`, and then executes the bundled in-process test
+      stubs (one stub per seeded task type: Python, Go, TypeScript). Each stub asserts
+      that a specific expected-output string is present in the patched file content.
+      A `GateReport` is built from the per-stub `TestCase` results and a `GateVerdict`
+      of PASS or FAIL. On FAIL, the workflow retries `patchStep` up to `maxRetries(2)`;
+      on PASS it emits `TaskCompleted`. The raw `GateReport` is stored on
+      `BenchmarkTaskEntity` and surfaced in the UI.
+    regulation_anchors: []
+
+simplified_view:
+  - id: C1
+    label: CI test gate before completion
+    mechanism: CI gate
+    implementation: test-gate
+    source: —

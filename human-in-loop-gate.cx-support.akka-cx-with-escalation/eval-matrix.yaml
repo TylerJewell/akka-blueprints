@@ -1,0 +1,92 @@
+# Eval Matrix for the akka-cx-with-escalation Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (cx-support domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: akka-cx-with-escalation
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: cx-support
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Pause the workflow at a human escalation acceptance gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Customer service escalation is a regulated hand-off in many jurisdictions:
+      a human agent must explicitly accept responsibility before the AI produces
+      a handoff summary or transfers context. Pausing the workflow at the
+      acceptance gate ensures no escalation proceeds without a named human taking
+      ownership, which is the defining characteristic of the human-in-loop-gate
+      pattern in the cx-support domain.
+    implementation: >
+      SupportWorkflow pauses in awaitEscalationDecisionStep, polling
+      ConversationEntity status. POST /api/conversations/{id}/accept-escalation
+      sets acceptedBy on the entity; the workflow detects this on its next poll
+      and transitions to acceptEscalationStep, where EscalationAgent runs.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII from inbound customer messages before persistence
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Customer support interactions routinely contain email addresses, phone
+      numbers, and payment card numbers entered inline. Persisting raw messages
+      on a durable entity without sanitization creates a long-lived PII footprint
+      that complicates data-subject rights and breach notification obligations.
+      Stripping recognized patterns before the message reaches ConversationEntity
+      keeps the stored state clean regardless of downstream retention policies.
+    implementation: >
+      A PII sanitizer intercepts the inbound customerMessage before
+      SupportWorkflow starts. It applies pattern-based redaction (email, phone,
+      16-digit card numbers) and passes the sanitized text to the workflow and
+      ConversationEntity.recordReply. The original raw message is not stored.
+    regulation_anchors: []
+
+  - id: G1
+    name: Check every agent reply for tone and safe-messaging compliance before delivery
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      Customer-facing replies from an autonomous agent carry brand and legal
+      exposure: an abrasive or non-compliant response cannot be recalled once
+      sent. A before-agent-response guardrail intercepts SupportAgent output
+      before it is recorded on ConversationEntity, ensuring replies meet the
+      minimum tone bar and do not contain content that violates safe-messaging
+      guidelines — without requiring human review of every message.
+    implementation: >
+      A before-agent-response guardrail on SupportAgent evaluates the
+      AgentReply.message for length (minimum 10 characters), tone (no aggressive
+      or dismissive phrasing), and absence of prohibited content patterns before
+      the reply is passed back to SupportWorkflow and written to ConversationEntity.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human escalation acceptance gate
+    mechanism: "hitl · application"
+    short: Workflow pauses until a named human agent accepts the escalation.
+  - id: S1
+    name: PII sanitizer on inbound messages
+    mechanism: "sanitizer · pii"
+    short: Strips email, phone, and card numbers before message is stored.
+  - id: G1
+    name: Reply tone and safety guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block non-compliant agent replies before they reach the customer record.

@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: workflow-observability
+
+# ---- Purpose ----
+purpose:
+  primary_function: governance-risk-monitoring
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: autonomous
+  user_type: risk-officer
+
+# ---- Data ----
+data:
+  inputs:
+    - internal-policy-documents
+    - log-anomaly-payloads
+    - incident-reports
+    - audit-trail-digests
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    confidential-business-documents: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  trace_data_exported_to_third_party: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous
+  decision_subject: internal-process
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: non-reversible-summary-only
+
+# ---- Failure ----
+failure:
+  blast_radius: internal-ops
+  failure_modes:
+    - incorrect-routing-of-escalation-sensitive-items
+    - low-quality-summary-passed-to-downstream-decision-maker
+    - trace-export-failure-creating-observability-gap
+    - eval-score-degradation-undetected-between-samples
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: risk-officer
+  reviewer_must_approve_every_outgoing: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: TO_BE_COMPLETED_BY_DEPLOYER
+  external_tool_calls:
+    - llm-completion
+    - trace-export-http (optional — Arize Phoenix or Langfuse)
+  rate_limit_per_message: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  ai_act_risk_tier: TO_BE_COMPLETED_BY_DEPLOYER
+  runtime_monitoring_backend_in_eu: TO_BE_COMPLETED_BY_DEPLOYER

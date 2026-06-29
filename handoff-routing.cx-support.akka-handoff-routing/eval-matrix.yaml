@@ -1,0 +1,99 @@
+schema_version: 1
+sample_id: akka-handoff-routing
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block handoffs whose context bundle fails the routing safety check
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: routing-context-check
+    enforcement: blocking
+    rationale: |
+      In the OpenAI Agents SDK handoff primitive, the context bundle assembled before
+      the handoff executes may carry residual PII that the MessageFilter missed (e.g.
+      PII embedded in prior-turn summaries), prompt-injection content introduced by a
+      malicious user message, or out-of-scope requests (legal, medical) that no specialist
+      should act on. Checking the bundle before the specialist is invoked — rather than
+      after the specialist responds — prevents the specialist from processing a poisoned
+      context and producing a reply that cannot be undone. The guardrail fires as the
+      first gate after filtering, before TriageAgent classifies and before any specialist
+      sees a single token.
+    implementation: |
+      `RoutingGuardrail` is a typed Agent invoked by `HandoffWorkflow.guardrailStep`
+      with the `FilteredContext` and a null routing decision (no classification has
+      happened yet at this stage). It returns `GuardrailVerdict { allowed, violations,
+      rubricVersion }`. On `allowed=false` the workflow emits `GuardrailVerdictAttached`
+      (rejected) then `HandoffBlocked` (terminal `BLOCKED`), and no downstream agent
+      is ever called. On `allowed=true` the workflow continues to `triageStep`. The
+      step timeout is 20 s with `maxRetries(2)`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII from the message and prior-turn context before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      The message-filter variant of the handoff primitive is the defining feature of
+      this blueprint: the context bundle passed across a handoff boundary is processed
+      by `MessageFilter` before it leaves the originating agent's scope. Inbound
+      conversation turns and prior-turn summaries routinely carry emails, phone numbers,
+      payment-card numbers, and account ids. Neither the routing guardrail, the
+      classifier, nor the specialists need raw identifiers to do their jobs. Redaction
+      happens inside a Consumer before the workflow starts, so every downstream LLM call
+      operates on filtered text only.
+    implementation: |
+      `MessageFilter` Consumer subscribes to `ConversationQueue` events. For each
+      `InboundTurnReceived` it runs a regex stage (well-known email / phone patterns,
+      Luhn-aware card-number match, `ACCT-\w+` token patterns) and a heuristic stage
+      (greeting-position names, address-shaped lines) across `userMessage` and each
+      element of `priorTurns`. It produces a `FilteredContext` carrying the redacted
+      text and the list of PII categories found, then calls `ConversationEntity
+      .registerInbound` and `attachFiltered`. The categories list is kept for audit;
+      only the filtered text is passed to all downstream agents.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every routing decision inline
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The routing decision is the most consequential moment in a handoff: if the
+      classifier sends a billing complaint to TechnicalSpecialist (or vice versa),
+      the specialist's reply will be well-formed but wrong. An on-decision eval
+      produces a per-conversation signal that is independent of the operator's
+      spot checks and visible at a glance in the UI. Persistent low scores would
+      indicate that the TriageAgent's prompt or the FilteredContext's fidelity
+      has degraded — something neither the guardrail nor the specialist can catch.
+    implementation: |
+      `HandoffEvalScorer` Consumer subscribes to `ConversationEntity` events. On every
+      `RoutingDecided` it calls `HandoffJudge` (typed Agent) with the `FilteredContext`
+      and the `RoutingDecision`. The judge returns `HandoffScore { score: 1–5,
+      rationale }`. The Consumer then calls `ConversationEntity.recordHandoffScore`
+      which emits `HandoffScored`. The score is non-blocking — a low score does not
+      change the workflow flow; it surfaces on the App UI tab as a per-conversation
+      score chip.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-handoff routing guardrail
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —
+  - id: S1
+    label: PII redaction (message-filter variant)
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: E1
+    label: On-decision routing eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

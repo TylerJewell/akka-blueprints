@@ -1,0 +1,102 @@
+schema_version: 1
+sample_id: guardrails-side-by-side
+coordination_pattern: single-agent
+domain: governance-risk
+
+controls:
+  - id: G1
+    name: Block unsafe or out-of-scope prompts before the main agent is invoked
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: input-screener
+    enforcement: blocking
+    rationale: |
+      A governance-risk advisor deployed to a broad user base will receive prompts
+      that range from off-topic requests to active prompt-injection attempts. Allowing
+      those to reach the main policy agent wastes model capacity, opens the system to
+      jailbreaks, and pollutes the audit log with noise. The before-agent-invocation
+      guardrail is the natural cut point: a lightweight screener agent evaluates the
+      prompt once and either clears it or records a structured block reason before
+      PolicyAgent is ever started. The block is permanent for that prompt — the entity
+      records PromptBlocked and the caller receives the screener's reason.
+    implementation: |
+      `InputScreenerAgent` is invoked as the first step of `GuardrailWorkflow`
+      (`inputScreenStep`, 30 s timeout). It receives the raw `promptText` as its task
+      instructions and returns `ScreeningVerdict{result: PASS|BLOCK, reason, decidedAt}`.
+      The workflow inspects the verdict: on BLOCK it calls `PromptEntity.recordBlock` and
+      transitions to `blockStep`, ending the workflow without ever calling `PolicyAgent`.
+      On PASS it proceeds to `agentCallStep`. `InputScreenerAgent` is configured with
+      `maxIterationsPerTask(1)` — it makes one pass and returns; there is no retry loop
+      for the screener.
+    regulation_anchors: []
+
+  - id: G2
+    name: Block policy-violating responses before they are returned to the caller
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-validator
+    enforcement: blocking
+    rationale: |
+      Even a well-scoped prompt can elicit a reply that violates output policy — one
+      that makes commitments the system is not authorised to make, discloses personal
+      data about third parties, or contradicts documented policy rules. Because the
+      main agent's reply is never written to the entity as accepted until the output
+      validator clears it, a blocked reply leaves no misleading artifact in the event
+      log. Callers receive the validator's block reason rather than the agent's raw
+      response, giving them a clear signal that the question should be escalated rather
+      than re-prompted.
+    implementation: |
+      `OutputValidatorAgent` is invoked inside `GuardrailWorkflow.outputValidateStep`
+      (30 s timeout) after `PolicyAgent` returns its `PolicyResponse`. The validator
+      receives the agent's `reply` as task instructions and the original `promptText`
+      as context. It returns `ValidationVerdict{result: PASS|BLOCK, reason, triggeredRule,
+      decidedAt}`. On BLOCK the workflow calls `PromptEntity.recordResponseBlock` and
+      transitions to `blockStep`; the `PolicyResponse` is stored on the entity for audit
+      but is flagged as blocked and never surfaced in the UI. On PASS the workflow calls
+      `PromptEntity.acceptResponse` and proceeds to `evalStep`. `OutputValidatorAgent` is
+      configured with `maxIterationsPerTask(1)`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every accepted response for advisory quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A governance advisor that consistently hedges every answer, answers at one-word
+      length, or fails to reference any concrete governance concept provides low practical
+      value even when technically within policy. The on-decision evaluator surfaces these
+      patterns without blocking the response itself — reviewers use the score to triage
+      which interactions warrant a follow-up and which can be closed. Because the scorer
+      is deterministic, the score is reproducible: re-running the same response through
+      the scorer always yields the same result.
+    implementation: |
+      `ResponseEvaluator` runs inside `GuardrailWorkflow.evalStep` (5 s timeout),
+      immediately after `ResponseAccepted` lands. The evaluator takes `PolicyResponse`
+      and `PromptRequest` as inputs and applies five deterministic rules: (1) word count
+      between 20 and 1000, (2) at least one governance concept from the prompt is
+      referenced in the reply, (3) hedging ratio below 30%, (4) confidence >= 0.6,
+      (5) at least one sentence ends with a clear recommendation. Each rule contributes
+      one point; the score is the sum (1–5). The result is emitted as `EvaluationScored`
+      on `PromptEntity`. The App UI flags responses with score <= 2 with a warning chip.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Input prompt screener
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —
+  - id: G2
+    label: Output response validator
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision response quality eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

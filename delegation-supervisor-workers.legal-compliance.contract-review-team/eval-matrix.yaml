@@ -1,0 +1,97 @@
+# Eval Matrix for the contract-review-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (legal-compliance domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: contract-review-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: legal-compliance
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: S1
+    name: Filter prohibited legal content before any agent receives the contract text
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: blocking
+    rationale: >
+      Contracts in the legal domain can contain clauses that mandate unlawful conduct —
+      discriminatory terms, provisions that violate competition law, or language the system
+      must not assist in drafting or reviewing. A sector sanitizer applied at the entry point
+      of ReviewWorkflow ensures that no agent, prompt, or response ever touches prohibited
+      content. Failure exits the workflow before any LLM call is made, minimising both
+      legal exposure and token cost.
+    implementation: >
+      The sanitizeStep in ReviewWorkflow runs a deterministic legal-sector content filter
+      over the raw contractText field of the ContractSubmission before any AutonomousAgent
+      is invoked. On a match against the prohibited-clause ruleset, the step calls
+      ContractReviewEntity.rejectBySanitizer and ends the workflow with a
+      ReviewRejectedBySanitizer event, moving the review to REJECTED. No agent prompt is
+      constructed and no LLM call is issued for the rejected contract.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require a lawyer to approve or reject the consolidated review package
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Contract redlines carry legal weight; no automated system should finalise them without
+      a qualified reviewer. The HITL gate ensures that the consolidated review package —
+      including clause categorisation, risk scores, and redline suggestions — is inspected
+      and explicitly accepted or rejected by a lawyer before the review reaches a terminal
+      approved state. The gate is non-optional: the review stays in AWAITING_APPROVAL until
+      a human acts, with a 24-hour window covering normal business hours.
+    implementation: >
+      ReviewWorkflow.approvalStep suspends workflow execution with a stepTimeout of 86400
+      seconds (24 hours). A lawyer calls POST /api/reviews/{id}/approve or
+      /api/reviews/{id}/reject via ReviewEndpoint. The endpoint calls
+      ContractReviewEntity.approve or ContractReviewEntity.rejectByLawyer, which emits
+      ReviewApproved or ReviewRejectedByLawyer and transitions the review to APPROVED or
+      REJECTED respectively. If the 24-hour window lapses without a lawyer decision,
+      defaultStepRecovery transitions the review to DEGRADED.
+    regulation_anchors: []
+
+  - id: G1
+    name: Vet the consolidated review package before it reaches the lawyer
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The supervisor's consolidation step merges three independent worker outputs into one
+      review package that a lawyer will act on. An output guardrail catches legally
+      impermissible clause suggestions — such as redlines that introduce discriminatory
+      language or liability waivers that violate mandatory consumer protection rules — before
+      the package is surfaced for human approval. A lawyer acting on an unguarded package
+      could inadvertently adopt advice that exposes the organisation to legal liability.
+    implementation: >
+      A before-agent-response guardrail on ReviewSupervisor runs a deterministic ruleset
+      plus an LLM judge over the ReviewPackage in ReviewWorkflow.guardrailStep. On failure
+      the workflow calls ContractReviewEntity.block and the review enters BLOCKED. The
+      review is never surfaced to the approval queue and the lawyer never sees the flagged
+      content.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: Legal-sector content sanitizer
+    mechanism: "sanitizer · sector"
+    short: Block reviews containing prohibited or unlawful clause content before any agent runs.
+  - id: H1
+    name: Lawyer approval gate
+    mechanism: "hitl · application"
+    short: Require an explicit lawyer approve/reject before a review reaches APPROVED.
+  - id: G1
+    name: Consolidated package output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block packages with legally impermissible redline suggestions before lawyer review.

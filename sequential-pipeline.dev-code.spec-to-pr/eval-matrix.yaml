@@ -1,0 +1,119 @@
+schema_version: 1
+sample_id: spec-to-pr
+coordination_pattern: sequential-pipeline
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Reject tool calls whose phase precondition is not yet satisfied
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      Code-generation pipelines carry a stronger dependency contract than
+      general-purpose pipelines: a tool that proposes file edits (`proposeEdit`,
+      a PLAN-phase tool) must not run while the spec has not yet been parsed
+      into structured requirements. If a repo-write-adjacent tool runs during
+      an earlier phase, it may produce changes against an incomplete or
+      misunderstood requirement set. The before-tool-call hook is the correct
+      intervention point: it intercepts the misordered call at the agent–tool
+      boundary before any codebase state is touched, returns a structured
+      rejection that names the violated precondition, and gives the agent
+      room to self-correct within its iteration budget.
+    implementation: |
+      `WriteGuardrail` is registered on `ImplementationAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      Each function-tool class (`ParseTools`, `PlanTools`, `DraftTools`)
+      carries a `Phase` constant on its methods. On every tool call the
+      guardrail reads the candidate's `Phase` and the current
+      `SpecRunEntity.status` (looked up via the `runId` carried in the
+      in-flight `TaskDef.metadata`) and applies the matrix:
+      `PARSE` tools require `status ∈ {CREATED, PARSING}`; `PLAN` tools
+      require `status ∈ {PARSED, PLANNING}` AND `parsedSpec.isPresent()`;
+      `DRAFT` tools require `status ∈ {PLANNED, DRAFTING}` AND
+      `changePlan.isPresent()`. On reject, the guardrail returns a structured
+      `phase-violation` error and calls
+      `SpecRunEntity.recordGuardrailRejection` so the event is visible in
+      the UI's rejection-log strip and the audit log.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require human approval before the draft PR advances to CI
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      An AI-drafted pull request targeting a production codebase must not
+      reach a merge-eligible state without a human having read and approved
+      the diff. The risk is not just incorrect code — it is code that looks
+      plausible but encodes a misunderstood requirement or an unsafe file
+      deletion. The HITL hold after `PrDrafted` ensures that every draft is
+      inspected by a person who can verify intent against the original spec
+      before any CI resources are consumed or any merge authority is granted.
+      Auto-advancing on timeout is explicitly not permitted: the hold must be
+      unblocked by a positive approval signal.
+    implementation: |
+      `SpecPipelineWorkflow.reviewHoldStep` calls `Workflow.pause()` after
+      `PrDrafted` is recorded on `SpecRunEntity`. The workflow state machine
+      parks in `AWAITING_REVIEW` indefinitely. A human reviewer submits
+      `POST /api/runs/{id}/approve` or `POST /api/runs/{id}/reject` via
+      the App UI or directly via the REST API. `SpecEndpoint` calls
+      `SpecRunEntity.approve(reviewDecision)` or `SpecRunEntity.reject(
+      reviewDecision)`, which emits `ReviewApproved` or `ReviewRejected`
+      and signals the workflow via `componentClient.forWorkflow(...).signal(
+      "review-decision", decision)`. Only `ReviewApproved` continues to
+      `ciCheckStep`; `ReviewRejected` terminates the run as `REJECTED`.
+    regulation_anchors: []
+
+  - id: C1
+    name: Block merge eligibility until CI checks pass
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      A human-approved draft PR is a necessary but not sufficient condition
+      for merge. The CI gate enforces a minimum quality bar independent of
+      the reviewer's judgment: the proposed changes must reference files
+      that exist in the codebase, must not delete files that have test
+      counterparts without corresponding test updates, and must not introduce
+      oversized diffs that indicate the agent exceeded its intended scope.
+      A PR that fails any of these checks transitions to `CI_FAILED` and
+      cannot reach `MERGE_READY`, preventing an approved-but-broken change
+      from silently landing.
+    implementation: |
+      `CiScorer` runs inside `SpecPipelineWorkflow.ciCheckStep`, fired
+      immediately after `ReviewApproved` advances the workflow. The scorer
+      is deterministic and rule-based (no LLM call — keeping the
+      single-agent sequential-pipeline invariant honest). Three checks:
+      (1) compile — every `FileChange.filePath` in the `ChangePlan` is
+      listed in `src/main/resources/sample-data/codebase/file-manifest.json`;
+      (2) test — no `FileChange` with `changeType = "delete"` applies to
+      a file whose slug has a `_test` or `Test` counterpart in the manifest;
+      (3) lint — no `FileChange.proposedDiff` exceeds 200 lines.
+      `CiResult.passed = checks.stream().allMatch(c -> c.passed)`. On pass,
+      emits `CiPassed` → status `CI_PASSED` → `MERGE_READY`. On failure,
+      emits `CiFailed` → status `CI_FAILED` (terminal blocked state). The
+      full `CiResult` including per-check messages is surfaced on the App UI
+      CI check table.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Phase-gate tool guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Human review approval hold
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: C1
+    label: CI test-gate before merge eligibility
+    mechanism: CI gate
+    implementation: test-gate
+    source: —

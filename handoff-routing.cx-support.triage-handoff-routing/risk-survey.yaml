@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: triage-handoff-routing
+
+# ---- Purpose ----
+purpose:
+  primary_function: customer-support
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: customer-reply
+  user_type: customer-support-agent
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-customer-conversation-turns
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  sensitive_data_flagged_by_classifier_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: draft-only
+  decision_subject: customer
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible-until-published
+  routing_decisions_made_by_ai: true
+  routing_validated_by_guardrail_before_specialist: true
+  resolution_decisions_made_by_ai: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-customer
+  failure_modes:
+    - wrong-intent-routing
+    - inappropriate-reply-content
+    - out-of-scope-policy-advice
+    - return-window-fabrication
+    - invented-policy-citation
+    - routing-to-wrong-specialist
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: cx-operations-supervisor
+  reviewer_must_approve_every_outgoing: false
+  reviewer_must_unblock_guardrail_failures: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_turn: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

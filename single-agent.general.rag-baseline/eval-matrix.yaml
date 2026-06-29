@@ -1,0 +1,44 @@
+schema_version: 1
+sample_id: rag-baseline
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: E1
+    name: Score every answer for retrieval groundedness
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Retrieval-augmented generation answers are only as trustworthy as their
+      connection to the retrieved evidence. A model can produce fluent, confident
+      prose while ignoring the retrieved passages entirely or fabricating passage
+      ids that were never returned by the retriever. An on-decision evaluator that
+      checks citation membership and completeness gives the caller a fast signal —
+      a 1–5 groundedness score — without blocking the answer itself. Low scores
+      (1–2) flag answers that should be re-retrieved or escalated rather than
+      trusted at face value. This is the primary governance mechanism for a RAG
+      baseline: the retriever controls what evidence is available, and the evaluator
+      confirms whether the agent used it.
+    implementation: |
+      `GroundednessEvaluator` runs inside `QueryWorkflow.evalStep`, fired
+      immediately after `AnswerRecorded` lands. The evaluator is deterministic and
+      rule-based (no LLM call — keeping the single-agent invariant honest): it
+      checks that every `Citation.passageId` in the `GroundedAnswer` exists in
+      `RetrievedPassages.passages`, that no passage id appears twice in the citation
+      list, that `usedPassages` equals the actual citation count, and that citation
+      excerpts are non-empty. Scoring: 5 = all checks pass with ≥ 3 distinct cited
+      passages; 4 = all checks pass with 1–2 cited passages; 3 = `usedPassages`
+      field inconsistent but passage ids valid; 2 = one fabricated passage id found;
+      1 = multiple fabricated ids or empty citations list. Emits `EvaluationScored`
+      with a 1–5 score and a one-line rationale. Answers with score ≤ 2 are flagged
+      on the App UI tab with a red card border.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Retrieval groundedness eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

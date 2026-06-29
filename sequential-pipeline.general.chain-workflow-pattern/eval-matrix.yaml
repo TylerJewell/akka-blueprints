@@ -1,0 +1,90 @@
+schema_version: 1
+sample_id: chain-workflow
+coordination_pattern: sequential-pipeline
+domain: general
+
+controls:
+  - id: G1
+    name: Validate every stage output before passing it downstream
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: after-llm-response
+    enforcement: blocking
+    rationale: |
+      In a prompt-chaining pipeline, each LLM call's output is the next call's
+      input. If an EXTRACT call returns an empty fact list, the REFINE call
+      receives nothing to work with and silently degrades — facts are fabricated
+      or the document skeleton collapses. The after-llm-response hook is the
+      right cut: inspect the typed result immediately after the LLM returns it,
+      before the workflow records the event. A result that fails the field or
+      referential-integrity checks is returned as a structured rejection to the
+      agent loop so the task can retry inside its iteration budget. This keeps
+      the chain honest: the only way a stage result reaches the entity is if it
+      passed validation.
+    implementation: |
+      `OutputGuardrail` is registered on `TransformAgent` via the agent's
+      guardrail-configuration block, bound to the `after-llm-response` hook.
+      The guardrail reads the current stage from the in-flight `TaskDef.metadata`
+      (`stage = EXTRACT / REFINE / FORMAT`) and applies the per-stage accept
+      matrix: EXTRACT output requires `extracted.facts.size() >= 1` and every
+      `Fact.factId` non-empty; REFINE output requires every
+      `RefinedFact.sourceFactId` to match a `Fact.factId` from the recorded
+      `ExtractedStructure`; FORMAT output requires every `Section.citations`
+      list non-empty and `document.title` non-empty. On reject, the guardrail
+      returns a structured `output-validation-failure` error carrying the
+      failing field and reason, and calls
+      `DocumentEntity.recordGuardrailRejection(stage, failedField, reason)` so
+      the rejection is visible in the UI's rejection-log strip and in the audit
+      log. On accept, the result is passed back to the workflow step for
+      recording.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every emitted document for structural completeness
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A well-formed document can still be structurally incomplete — a section
+      that cites no facts, an extracted fact that is never referenced in the
+      refined content, or a section count that diverges from the number of
+      refined content groups. These gaps are not caught by the output guardrail
+      (which checks individual stage outputs, not the end-to-end relationship
+      between stages). An on-decision evaluator running over the complete
+      (ExtractedStructure, RefinedContent, Document) triple surfaces these
+      cross-stage integrity failures without blocking the document, giving the
+      reader a clear signal about which documents warrant a closer review.
+    implementation: |
+      `QualityScorer` runs inside `TransformPipelineWorkflow.evalStep`,
+      fired immediately after `DocumentFormatted` lands. The scorer is
+      deterministic and rule-based (no LLM call — preserving the single-agent
+      sequential-pipeline invariant). Four checks, one point per check
+      satisfied, on a base of 1:
+      (1) fact coverage — every `Fact.factId` in `ExtractedStructure.facts`
+      is referenced by at least one `RefinedFact.sourceFactId` in
+      `RefinedContent.refinedFacts`.
+      (2) citation completeness — every `Section.citations` list in
+      `Document.sections` is non-empty.
+      (3) structural parity — `sections.size()` equals the number of distinct
+      grouping labels produced during the FORMAT stage (a proxy for the
+      agent's own grouping decision — counted from the tool-call log if
+      available, or from the section count itself).
+      (4) title presence — `Document.title` is non-empty.
+      Emits `QualityScored{score: 1-5, rationale: String}` with a rationale
+      sentence naming the largest gap. The score is surfaced on the App UI
+      tab; documents with score ≤ 2 are flagged for human review.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output validation guardrail
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: E1
+    label: Document completeness eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

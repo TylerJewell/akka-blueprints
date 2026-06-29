@@ -1,0 +1,19 @@
+# Eval Matrix for the parallel-fanout Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a baseline sample (general domain) with no controls defined and no
+# industry- or jurisdiction-bound anchors.
+
+schema_version: 1
+sample_id: parallel-fanout
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls: []
+
+simplified_view: []

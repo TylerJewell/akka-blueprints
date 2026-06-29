@@ -1,0 +1,40 @@
+schema_version: 1
+sample_id: akka-llm-client-basic
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Reject invalid replies before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A minimal LLM client that passes raw agent output straight to the caller
+      creates a direct channel from the model to the end user with no structural
+      gate. Empty replies silently confuse callers; over-length replies can blow
+      out client buffers or UI rendering; a refusal-flag paired with empty body
+      would appear to the caller as a successful empty response. Even at the
+      baseline tier, a before-agent-response check costs nothing and prevents
+      the three most common structural failures without touching the model's
+      substantive content.
+    implementation: |
+      `ReplyGuardrail` is registered on `ConversationAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate response it (1) asserts `reply.text` is non-empty,
+      (2) asserts `reply.text.length()` does not exceed 8 000 characters, and
+      (3) asserts the reply does not carry a structured-refusal flag alongside
+      an empty body. On any failure it returns a structured rejection naming the
+      failed check; the agent loop consumes one of its 3 iterations and retries.
+      Passing responses flow through to `ConversationEndpoint`, which calls
+      `ConversationEntity.recordReply(turnId, reply)`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Reply-form guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

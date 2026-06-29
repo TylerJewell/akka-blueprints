@@ -1,0 +1,103 @@
+schema_version: 1
+sample_id: akka-stategraph-bridge
+coordination_pattern: planner-executor
+domain: general
+
+controls:
+  - id: G1
+    name: Vet every tool-annotated node dispatch before the node executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      Graph nodes that carry a tool annotation can reach external services or
+      perform mutating operations — the exact risk surface depends on which
+      tool the node names. Because node definitions arrive as user-supplied
+      JSON at runtime, the set of possible tool calls is open-ended. A
+      deterministic guardrail at the dispatch boundary ensures that only
+      allow-listed hosts and read-only fixture operations run, regardless of
+      what the PlannerAgent proposes. Blocking the node before execution and
+      requesting a revised binding from the PlannerAgent keeps the system
+      self-correcting rather than hard-failing on the first policy violation.
+    implementation: |
+      `ToolCallGuardrail.vet(NodeDispatch)` is called by `GraphWorkflow`'s
+      `guardrailStep` between `resolveNodeStep` and `executeNodeStep`. It
+      checks (a) the host allow-list (`akka.io`, `doc.akka.io`, `github.com`)
+      against the annotation's host field, and (b) a mutating-operation
+      prefix filter (write, delete, update, post, create, drop, truncate).
+      On rejection, the workflow records a `NodeBlocked` trace entry via
+      `GraphRunEntity.recordBlock(nodeId, reason)`, then calls
+      `PlannerAgent.REVISE_TOOL_BINDING`. If the revised `NodeDef` still
+      fails the guardrail — or if the planner returns empty — the workflow
+      transitions to `failStep`.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Let the operator pause new node dispatches without aborting in-flight execution
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: blocking
+    rationale: |
+      A graph run can execute many nodes across a cycle that may take
+      minutes. An operator who observes unexpected state growth or
+      unexpected tool calls must be able to stop new node dispatches
+      without discarding the work already completed. The pause is a
+      graceful drain — the current node finishes and its output is
+      recorded normally before the loop exits.
+    implementation: |
+      `SystemControlEntity` (single instance keyed by literal `"global"`)
+      holds the halt flag. The App UI tab's operator pane exposes Halt /
+      Resume buttons backed by `POST /api/control/halt` and
+      `POST /api/control/resume`. Every `GraphWorkflow` reads the flag in
+      its `checkHaltStep` at the top of each loop iteration. On
+      `halted=true`, the workflow finishes the in-flight `executeNodeStep`,
+      then emits `RunHaltedOperator` and ends the run in `HALTED`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub secret-shaped strings from every node output before state is updated
+    mechanism:
+      kind: sanitizer
+      flavor: secret
+    enforcement: blocking
+    rationale: |
+      Node outputs are merged into `GraphState` and fed to `EdgeRouterAgent`
+      on subsequent routing decisions. If a fixture or a tool response
+      contains an API key, a JWT, or a bearer token, that material propagates
+      into the state map and into every downstream agent prompt for the
+      remainder of the run. Because the state map is also emitted as part of
+      `NodeExecuted` events and exposed via SSE to the UI, the blast radius
+      of an unredacted secret spans both the LLM context and the browser.
+      Making the sanitizer unconditional and deterministic removes the secret
+      before any of those paths are reached.
+    implementation: |
+      `SecretScrubber.scrub(String)` runs in `GraphWorkflow`'s `sanitizeStep`
+      between `executeNodeStep` and `recordStateStep`. It applies a sequence
+      of labelled-replacement regexes (AWS access key, GitHub token, JWT,
+      OpenAI key, generic bearer token) plus a high-entropy fallback for
+      tokens ≥ 32 characters whose Shannon entropy exceeds 4.5 bits/char.
+      Replacements are tagged: `[REDACTED:aws-access-key]`,
+      `[REDACTED:github-token]`, `[REDACTED:jwt]`, etc. The scrubbed string
+      is stored in `TraceEntry.scrubbedContent` and is what `EdgeRouterAgent`
+      sees on the next routing call.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-call guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: HO1
+    label: Operator runtime monitoring
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring (SystemControlEntity + dashboard)
+    source: —
+  - id: S1
+    label: Secret sanitizer
+    mechanism: Sanitizer
+    implementation: secret (regex + entropy redactor on node outputs)
+    source: —

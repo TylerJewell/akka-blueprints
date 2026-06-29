@@ -1,0 +1,42 @@
+schema_version: 1
+sample_id: ui-demo
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Reject malformed copilot responses before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A customer-facing copilot that streams answers directly to a browser UI has
+      no downstream layer to catch a bad parse. A blank answer, a citation whose
+      source field is an empty string, or a response exceeding the token ceiling
+      would all reach the user — and potentially be logged into the session history
+      — before any application code could reject them. The before-agent-response
+      hook is the right cut: intercept the structured envelope before it leaves the
+      agent loop, force a retry inside the same task, and only allow well-formed
+      CopilotResponse payloads to flow into SessionEntity and onto the SSE stream.
+    implementation: |
+      `ResponseGuardrail` is registered on `CopilotAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate response it (1) parses the payload into `CopilotResponse`,
+      (2) asserts `answer` is non-blank, (3) asserts every `citations[].source` is
+      a non-empty string, (4) asserts every `citations[].index` is a positive
+      integer, and (5) asserts `tokenCount` does not exceed the deployment ceiling
+      (default 2048 tokens). On any failure it returns a structured rejection
+      naming the failed check; the agent loop consumes one of its 3 iterations and
+      retries. Passing responses flow through to `SessionWorkflow.agentCallStep`,
+      which writes `TurnCompleted` onto `SessionEntity` and emits the
+      `RESPONSE_COMPLETE` AG-UI SSE envelope.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Copilot response guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

@@ -1,0 +1,68 @@
+schema_version: 1
+sample_id: traced-agent-otel
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: H1
+    name: Export span health to deployer-runtime monitor
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: non-blocking
+    rationale: |
+      An agent that emits traces is only as observable as its export pipeline.
+      If the OTLP exporter silently drops spans — because the collector is
+      unreachable, the payload exceeds limits, or a serialisation error fires —
+      the deployer's monitoring dashboard goes dark without any error surfacing to
+      the user. Wiring the export result as a first-class lifecycle event (TraceFlushed)
+      gives the deployer's infrastructure an explicit signal: spansDropped > 0 or
+      exporterHealthy = false triggers an alert before the gap grows undetected.
+    implementation: |
+      `TraceExportWorkflow.spanFlushStep` calls `OtlpExporter.flush(spans)` and
+      records the result as `FlushResult{spansExported, spansDropped, exporterHealthy,
+      zipkinTraceUrl, flushedAt}`. On any outcome — success or failure — the step calls
+      `ConversationEntity.recordFlush(flushResult)`, which emits `TraceFlushed`.
+      Deployer-runtime monitoring infrastructure subscribes to `TraceFlushed` events
+      via the `ConversationView` SSE stream and can act on `exporterHealthy = false`
+      or a rising `spansDropped` counter without modifying agent code.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every agent run for trace completeness and latency
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      Span data is only useful if it is actually complete. An agent that emits spans
+      but records zero-duration LLM calls (instrumentation gap), omits tool-call spans
+      when tool mode is enabled, or produces wildly inconsistent p95 latency has a
+      tracing problem that a human reviewer will not notice by looking at the UI answer
+      text. A deterministic post-run monitor turns the raw span data into a 1–5 quality
+      score that surfaces these patterns automatically, without requiring a human to read
+      every trace.
+    implementation: |
+      `PerformanceMonitor` runs inside `TraceExportWorkflow.monitorStep` immediately
+      after each flush. It reads `SpanSummary` from the entity: computes p50 and p95
+      across `LLM_CALL` span durations in milliseconds, checks that `llmTurnCount > 0`
+      (score = 1 if zero, rationale "no LLM spans recorded"), flags zero-duration LLM
+      spans as an instrumentation failure (score = 1), computes tool-call success rate
+      as OK tool spans divided by total tool spans (penalty if below 0.5), and checks
+      that `totalSpans >= llmTurnCount + toolCallCount` (sanity). Emits
+      `PerformanceMonitorScored{qualityScore, p50Millis, p95Millis, toolSuccessRate,
+      rationale, monitoredAt}`. No LLM call — deterministic and rule-based. The score
+      is surfaced on the App UI tab per-conversation card.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Deployer span-export health
+    mechanism: HotL
+    implementation: deployer-runtime-monitoring
+    source: —
+  - id: E1
+    label: Periodic trace-quality monitor
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

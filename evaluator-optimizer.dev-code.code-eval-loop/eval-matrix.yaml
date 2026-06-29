@@ -1,0 +1,103 @@
+schema_version: 1
+sample_id: code-eval-loop
+coordination_pattern: evaluator-optimizer
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Block forbidden imports and unsafe syscalls before verifier executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: input-policy
+    enforcement: blocking
+    rationale: |
+      The Verifier runs code in a sandboxed context, but a sandboxed executor
+      is only as safe as what it is handed. Allowing the VerifierAgent to
+      receive code that contains Runtime.exec(), ProcessBuilder, or sun.*
+      imports means the sandbox must be hardened against every current and
+      future exploit surface. Catching those patterns deterministically before
+      any execution call eliminates the attack surface at the cheapest point in
+      the loop. A Generator that produces forbidden constructs is also giving a
+      wrong answer by the problem's own constraints — returning structured
+      feedback immediately wastes fewer retry cycles than letting the verifier
+      discover the violation mid-execution.
+    implementation: |
+      Wired as `sandboxStep` of `SolutionWorkflow`, immediately after
+      `generateStep`. A pure-function scan of `attempt.code.code()` against a
+      configurable deny-list of import patterns (`java.lang.Runtime`,
+      `java.lang.ProcessBuilder`, `sun.*`) and syscall markers. On failure,
+      emits `AttemptSandboxVerdictRecorded` with `verdict.passed = false` and
+      `reasonCode = "FORBIDDEN_IMPORT"` or `"UNSAFE_SYSCALL"`, then transitions
+      back to `generateStep` with a structured `VerificationNotes` listing the
+      offending pattern. The attempt still counts toward `maxAttempts`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every cycle's test-pass verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The verifier's pass-or-fail verdict paired with its 0–100 score is the
+      highest-information signal the loop produces. Recording it as a typed
+      event per attempt gives operators a continuous quality stream — pass rate
+      by attempt number, score distribution across problem categories, frequency
+      of sandbox-blocked attempts — without adding instrumentation inside the
+      workflow's hot path. This data also feeds any downstream fine-tuning or
+      prompt-quality analysis without requiring a separate data pipeline.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `SolutionsView.getAllSolutions`, finds attempts that have been verified
+      but do not yet have a matching `EvalRecorded` event, and calls
+      `SolutionEntity.recordEval(attemptNumber, verdict, score,
+      sandboxBlocked)`. The call is idempotent on `(solutionId, attemptNumber)`.
+      The workflow itself also emits one `EvalRecorded` event on the terminal
+      transition (SolutionPassed or SolutionExhausted) carrying the whole
+      loop's outcome.
+    regulation_anchors: []
+
+  - id: CG1
+    name: Enforce full test-pass score before surfacing a solution as PASSED
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      An LLM-based verifier can return a PASS verdict without having run every
+      test — especially when given an ambiguous problem whose edge cases are
+      underspecified. A ci-gate that enforces score = 100 before transitioning
+      to PASSED prevents partial-pass hallucinations from reaching the user.
+      This is structurally equivalent to a CI gating rule that blocks a merge
+      unless all test suites are green: the agent's self-report is treated as
+      advisory until a deterministic check confirms it.
+    implementation: |
+      Inside `passStep` of `SolutionWorkflow`, after `VerifierAgent` returns a
+      PASS verdict, a deterministic re-check reads `verification.score()`. If
+      `score < 100`, the step rejects the PASS verdict, emits
+      `AttemptVerified` with a synthetic `FAIL` carrying a `VerificationNotes`
+      entry ("ci-gate: score was N, 100 required"), and re-enters `generateStep`
+      as a revision call. Only a score of exactly 100 advances to
+      `SolutionPassed`. `SolutionEntity.pass()` command validates the same
+      invariant server-side; a command that arrives with `score < 100` is
+      rejected with a command rejection, preventing any out-of-band caller
+      from bypassing the gate.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Sandbox guardrail · forbidden imports / syscalls
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Per-attempt eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: CG1
+    label: CI gate · full test-pass required
+    mechanism: CI gate
+    implementation: test-gate
+    source: —

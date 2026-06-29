@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: durable-workflow-recovery
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: H1
+    name: Resume from last durable checkpoint on stall detection
+    mechanism:
+      kind: halt
+      flavor: graceful-degradation
+    enforcement: blocking
+    rationale: |
+      Durable workflow executions that crash or stall mid-run carry partially
+      committed checkpoint state. Restarting from scratch discards that progress
+      and can cause duplicate side effects (e.g., double-charging a payment batch,
+      re-migrating already-migrated rows). The graceful-degradation halt ensures
+      the WorkflowRecoveryAgent inspects the partial checkpoint snapshot and
+      returns an explicit RESUME, ABORT, or ESCALATE verdict before any restart
+      command is dispatched. An ABORT verdict suppresses the restart entirely,
+      preventing cascading failures on executions whose state is too corrupted
+      to continue safely.
+    implementation: |
+      `CheckpointConsumer` detects a stall when no `CheckpointRecorded` event
+      lands within the configured stall timeout. On detection it builds a
+      `CheckpointSnapshot` from all checkpoint records held on `ExecutionEntity`
+      and calls `ExecutionEntity.markStalled(snapshot)`. `RecoveryWorkflow` then
+      starts. Its `analyzeStep` serialises the snapshot to JSON and passes it to
+      `WorkflowRecoveryAgent` as a `TaskDef.attachment("checkpoint-snapshot.json",
+      ...)`. The agent returns a `RecoveryDecision`. `ResponseValidator` checks the
+      decision structure before it is committed via `ExecutionEntity.recordDecision`.
+      Only when `verdict == RESUME` does `analyzeStep` dispatch a `ResumeCommand`
+      to restart the execution from its last `COMPLETED` checkpoint. An `ABORT`
+      verdict transitions the entity to `ABORTED` with no restart. An `ESCALATE`
+      verdict transitions to `HEALTH_SCORED` and surfaces the issue on the UI for
+      human review.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score in-flight executions for latency drift and retry saturation
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      Long-running durable workflows accumulate health risk over time. A workflow
+      that started healthy can drift into a latency-degraded or retry-saturated
+      state before a hard stall ever triggers. A periodic health evaluator surfaces
+      these early-warning signals without waiting for a stall event, giving
+      operators time to intervene before checkpoint state becomes unrecoverable.
+      Because the evaluator is deterministic and rule-based, repeated scans of the
+      same snapshot produce the same score — making the health signal auditable
+      and reproducible without LLM variability.
+    implementation: |
+      `HealthEvaluator` runs inside `RecoveryWorkflow.healthEvalStep` immediately
+      after a `RecoveryDecision` lands, and also on a 60 s timer inside
+      `CheckpointConsumer` for all executions in `RUNNING` or `STALLED` status.
+      The scorer is deterministic and rule-based (no LLM call — keeping the
+      single-agent invariant honest): (1) latency drift subtracts 1 point if the
+      median checkpoint `elapsedMs` exceeds 2× the workflow type's configured
+      baseline; (2) retry saturation subtracts 1 point for every 20% of
+      `failedCount / totalExpected`; (3) zero progress (completedCount == 0 with
+      more than one checkpoint expected) subtracts 1 point. The resulting 1–5
+      `HealthScore` is committed via `ExecutionEntity.recordHealth` and surfaced
+      on the App UI tab; executions scoring ≤ 2 are automatically flagged for
+      escalation on the next analysis pass.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Graceful-degradation halt
+    mechanism: Halt
+    implementation: graceful-degradation
+    source: —
+  - id: E1
+    label: Periodic health monitor
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

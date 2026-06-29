@@ -1,0 +1,101 @@
+schema_version: 1
+sample_id: sleeptime-memory-consolidation-agent
+coordination_pattern: continuous-monitor
+domain: general
+
+controls:
+  - id: G1
+    name: Block unauthorized memory-block writes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: scope-enforcement
+    enforcement: blocking
+    rationale: |
+      Memory blocks are the shared context surface between the primary agent and
+      the sleeptime consolidator. If any caller — including future agent extensions
+      or injected tool definitions — can write to a block outside a controlled
+      consolidation workflow, the shared context becomes an unaudited mutation
+      surface. The guardrail enforces that only a ConsolidationWorkflow instance
+      holding an active block lease may invoke writeMemoryBlock, so every mutation
+      is traceable to a consolidation run and every unauthorised attempt is
+      surfaced as a GuardrailTriggered event.
+    implementation: |
+      Wired on the `writeMemoryBlock(blockId, consolidatedText)` tool's
+      `before-tool-call` hook inside `ConsolidationWorkflow`. The hook reads a
+      workflow-scoped lease token minted during `loadStep` and compares it against
+      the caller's token in the tool call context. If the tokens do not match or
+      no lease is active for that `blockId`, the call is rejected with a structured
+      error and `MemoryBlockEntity.recordGuardrailTrip(...)` is called, emitting
+      a `GuardrailTriggered` event. The lease is invalidated in `doneStep` so a
+      completed workflow cannot be replayed.
+    regulation_anchors: []
+
+  - id: H1
+    name: Stream every consolidation event to the operator in real time
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: non-blocking
+    rationale: |
+      Asynchronous background memory rewriting is opaque by default. An operator
+      deploying the system has no natural observation point unless events are
+      explicitly streamed. Without a HOTL feed, a consolidation run that silently
+      distorts context (e.g., drops a critical constraint or reverses a prior
+      instruction) would be invisible until the primary agent produces a
+      visibly wrong response. The HOTL mechanism ensures operators can observe
+      every consolidation event, every guardrail trip, and every drift score
+      without needing to query individual entities.
+    implementation: |
+      `MemoryEndpoint`'s `GET /api/memory/sse` endpoint streams `MemoryView`
+      updates as Server-Sent Events. Every projection of `ConsolidationStarted`,
+      `BlockConsolidated`, `BlockMarkedStale`, `DriftScored`, and
+      `GuardrailTriggered` events from `MemoryBlockEntity` updates the view row,
+      which fans out to all open SSE connections. The App UI's HOTL activity stream
+      renders these events in chronological order with severity colouring (red for
+      guardrail trips, amber for high-drift scores, green for successful
+      consolidations).
+    regulation_anchors: []
+
+  - id: E1
+    name: Score semantic drift after every consolidation
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      Each consolidation rewrite changes what the primary agent knows. A rewrite
+      that inadvertently narrows, shifts, or contradicts prior context is a silent
+      quality failure — the system operates on wrong premises until a human notices
+      downstream errors. Periodic semantic drift scoring after consolidation
+      provides a continuous signal proportional to how much each rewrite changed
+      meaning, not just token count. Blocks with drift scores >= 70 are flagged
+      for human review, making the evaluation an actionable quality gate rather
+      than a passive metric.
+    implementation: |
+      `DriftEvalRunner` TimedAction fires every 30 minutes. It queries
+      `MemoryView.getAllBlocks`, picks up to 5 CONSOLIDATED blocks without a
+      `driftScore` field, oldest-first. For each, it calls `DriftEvalAgent` with
+      the block's `priorConsolidated` text and the new `consolidatedText`. The
+      agent returns a `DriftResult{driftScore: int (0–100), rationale, priorSummary,
+      currentSummary}`. `MemoryBlockEntity.recordDrift(driftScore, rationale)` is
+      called, emitting a `DriftScored` event. Blocks with `driftScore >= 70` render
+      a high-drift badge in the App UI's block list.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: writeMemoryBlock scope guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Consolidation event stream
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring
+    source: —
+  - id: E1
+    label: Semantic drift eval
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —

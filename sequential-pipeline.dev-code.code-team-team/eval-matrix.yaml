@@ -1,0 +1,80 @@
+# Eval Matrix for the code-team-team Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community dev-tooling sample (dev-code domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an
+# empty list across all controls. Treat the requirement as relaxed for non-anchored
+# samples.
+
+schema_version: 1
+sample_id: code-team-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: sequential-pipeline
+  domain: dev-code
+
+controls:
+  - id: G1
+    name: Guard the code-execution sandbox against unsafe operations
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      The QA stage runs candidate game source in a code-execution sandbox. Source
+      that reaches for the network, escapes the workspace filesystem, or shells out
+      must never be executed, even in simulation. The guardrail fires before the
+      tool call so unsafe code is rejected before any run.
+    implementation: >
+      before-tool-call guardrail on QaAgent's CodeRunner tool inspects the candidate
+      source and rejects forbidden operations (network access, filesystem escape,
+      os.system / subprocess / eval) before the simulated execution proceeds.
+    regulation_anchors: []
+
+  - id: E1
+    name: Evaluate generated code at the QA decision point
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      When the QA stage completes, an in-band evaluation records a quality score on
+      the build. It is informational — it surfaces test-pass ratio and review notes
+      next to the source so a reader can judge build health at a glance.
+    implementation: >
+      QaAgent returns a QaReport carrying passed, score, and notes. GameBuildWorkflow
+      writes a QaCompleted event onto BuildEntity; BuildsView projects the score and
+      the App UI renders it beside the source.
+    regulation_anchors: []
+
+  - id: A1
+    name: Test-gate before a build is declared shipped
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: >
+      Generated game code should pass its automated tests before being declared
+      shipped. A build whose tests fail must settle as rejected, never shipped.
+    implementation: >
+      chiefReviewStep in GameBuildWorkflow ships only when QaReport.passed is true
+      and ChiefQaAgent's ShipDecision.shipped is true; otherwise it calls
+      BuildEntity.reject. The Maven test phase enforces the same gate at build time
+      via an integration test driving the full engineer -> qa -> chief flow.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Sandbox guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Reject unsafe source before the code sandbox runs it.
+  - id: E1
+    name: QA code eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Record a quality score on every build at the QA step.
+  - id: A1
+    name: Test gate
+    mechanism: "ci-gate · test-gate"
+    short: Ship only when automated tests pass.

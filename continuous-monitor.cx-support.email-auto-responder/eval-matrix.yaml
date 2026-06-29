@@ -1,0 +1,79 @@
+# Eval Matrix for the email-auto-responder Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community cx-support sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list
+# across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: email-auto-responder
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: continuous-monitor
+  domain: cx-support
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: S1
+    name: Redact PII from email content before model and logs
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: >
+      Inbound support email routinely carries phone numbers, email addresses,
+      and card-like numbers. Masking them before the model and before any log
+      line limits exposure of personal data.
+    implementation: >
+      ResponderWorkflow sanitizeStep applies regex masks for emails, phone
+      numbers, and 13-19 digit card-like runs, then calls
+      EmailEntity.recordSanitized; only the sanitizedBody is passed to TriageAgent
+      and ResponderAgent.
+    regulation_anchors: []
+
+  - id: G1
+    name: Guard the simulated send tool against premature dispatch
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Sending an email is an external write action that cannot be unsent. The
+      send tool must only fire when the reply is cleared.
+    implementation: >
+      before-tool-call guardrail on ResponderWorkflow sendStep verifies the
+      EmailEntity status is APPROVED or the reply was triaged routine before the
+      simulated send tool executes.
+    regulation_anchors: []
+
+  - id: H1
+    name: Human approval gate for sensitive replies
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Replies triaged as sensitive should not leave without a person seeing them;
+      the workflow holds them until a human decides.
+    implementation: >
+      ResponderWorkflow reviewGateStep transitions sensitive emails to
+      AWAITING_REVIEW and polls EmailEntity; POST /api/emails/{id}/approve and
+      POST /api/emails/{id}/reject release or terminate the workflow.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: PII redaction
+    mechanism: "sanitizer · pii"
+    short: Mask PII in the body before model and logs.
+  - id: G1
+    name: Guard send tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block send unless approved or routine.
+  - id: H1
+    name: Human approval
+    mechanism: "hitl · application"
+    short: Sensitive replies pause for human approve/reject.

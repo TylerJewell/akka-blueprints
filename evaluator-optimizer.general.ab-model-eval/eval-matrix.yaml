@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: ab-model-eval
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: E1
+    name: Record every trial's judgement as a continuous accuracy eval event
+    mechanism:
+      kind: eval-periodic
+      hook: on-decision-eval
+      flavor: continuous-accuracy
+    enforcement: non-blocking
+    rationale: |
+      The primary value of an A/B testing harness is the accuracy signal it
+      produces over time. A single trial's verdict carries little weight; the
+      win-rate trend over dozens of trials is what informs a model-promotion
+      decision. Recording each trial's outcome as a typed EvalRecorded event
+      with winner, per-candidate totals, and a preferredCandidateWon flag
+      keeps this signal machine-readable, append-only, and queryable without
+      modifying any workflow logic. Missing even one event breaks the trend
+      line, so the sampler's idempotency guarantee matters.
+    implementation: |
+      `AccuracySampler` (TimedAction) fires every 30 s. It queries
+      `TrialsView.getAllTrials`, finds JUDGED trials without a matching
+      `EvalRecorded` event, and calls `TrialEntity.recordEval(winner,
+      totalA, totalB, preferredCandidateWon, recertificationRequired)`.
+      The call is idempotent per `trialId`. The workflow itself also emits
+      one `EvalRecorded` event on the `TrialJudged` terminal transition,
+      carrying the same payload, so the signal is available immediately
+      without waiting for the sampler's next tick.
+    regulation_anchors: []
+
+  - id: CG1
+    name: Gate model promotion when preferred-candidate win-rate falls below threshold
+    mechanism:
+      kind: ci-gate
+      hook: post-eval-aggregate
+      flavor: periodic-recertification-gate
+    enforcement: build-gate
+    rationale: |
+      An A/B harness exists to answer "should we promote this model?" If the
+      answer is allowed to bypass governance when the data says otherwise, the
+      harness produces signal no one acts on. The recertification gate makes
+      the signal actionable: when the preferred candidate's win-rate drops
+      below the configured threshold over a rolling window of trials, the
+      promotion endpoint returns 409 and the App UI surfaces a warning badge.
+      The operator must call the recertify endpoint — explicitly acknowledging
+      the degradation — before promotion is re-enabled. This prevents silent
+      regressions from being promoted into production under cover of routine
+      releases.
+    implementation: |
+      `EvalWorkflow.recertStep` is a pure-function step that runs after
+      `judgeStep` on every trial. It reads the `winRateA` / `winRateB`
+      computed fields from `TrialsView` for the last
+      `ab-eval.recertification.window-trials` (default 20) trials. When the
+      preferred candidate's win-rate is below
+      `ab-eval.recertification.win-rate-threshold` (default 0.60), it calls
+      `TrialEntity.flagRecertification(true)`, emitting
+      `RecertificationFlagged`. `EvalEndpoint.promote` checks for any flagged
+      trial in the window and returns 409 when found. `EvalEndpoint.recertify`
+      clears the flag by calling `TrialEntity.flagRecertification(false)` on
+      all flagged trials.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Continuous accuracy eval recorder
+    mechanism: Eval · periodic
+    implementation: on-decision-eval
+    source: —
+  - id: CG1
+    label: Recertification gate on win-rate drop
+    mechanism: CI gate
+    implementation: periodic-recertification-gate
+    source: —

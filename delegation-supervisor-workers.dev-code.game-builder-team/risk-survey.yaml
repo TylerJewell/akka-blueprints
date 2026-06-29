@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: game-builder-team
+
+# Pre-filled from the blueprint's nature (a developer-tooling pipeline that
+# generates game design specs and self-contained game code). Fields the deployer
+# must answer carry the literal string TO_BE_COMPLETED_BY_DEPLOYER.
+
+purpose:
+  primary_function: Generate a playable game design spec and self-contained game code from a text idea
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: draft-only      # produces code artifacts; a human ships them
+  user_type: developers
+
+data:
+  inputs:
+    - game-idea prompts
+    - generated design specs
+    - generated game code
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+decisions:
+  authority_level: draft-only
+  decision_subject: generated game artifacts
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible    # artifacts are discardable; nothing is shipped automatically
+
+failure:
+  blast_radius: single-user
+  failure_modes:
+    - low-quality or non-functional generated code
+    - generated code references forbidden APIs (caught by sandbox guardrail)
+    - test gate fails repeatedly and the build settles in TEST_FAILED
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: developer reviewing delivered artifacts
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - simulated in-process code run / test gate (no external sandbox)
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+    synthetic-media: true            # generates code artifacts
+    code-generation: true
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER
+
+model:
+  gpai: true
+  foundation: true
+
+subjects:
+  children: false
+  minors: false

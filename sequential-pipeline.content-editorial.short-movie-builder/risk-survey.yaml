@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: short-movie-agents
+
+# ---- Purpose ----
+purpose:
+  primary_function: short-video-production-pipeline
+  sector: content-editorial
+  decisions_surface: creative-artefact-generation
+  user_type: content-creator-or-producer
+
+# ---- Data ----
+data:
+  inputs:
+    - user-supplied-creative-brief
+    - in-process-scene-corpus
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: movie-package-for-downstream-rendering
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  producer_reviews_package_before_rendering: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-production
+  failure_modes:
+    - policy-violating-content
+    - missing-scene-coverage
+    - broken-shot-reference
+    - incoherent-package-order
+    - safety-block-exhausted-budget
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: content-producer-or-editor
+  reviewer_must_approve_before_rendering: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_production: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  content-policy-reviewed-by-legal: TO_BE_COMPLETED_BY_DEPLOYER
+  regulated-brand-list-maintained-by: TO_BE_COMPLETED_BY_DEPLOYER

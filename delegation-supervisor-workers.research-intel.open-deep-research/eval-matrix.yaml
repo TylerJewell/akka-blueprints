@@ -1,0 +1,126 @@
+# Eval Matrix for the open-deep-research Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (research-intel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: open-deep-research
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: research-intel
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Block disallowed URLs before the browser tool executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: url-allowlist
+    enforcement: blocking
+    rationale: >
+      The WebBrowsingAgent issues fetch calls against URLs supplied by the manager's
+      retrieval plan. Without a pre-call check, a poorly-formed plan or prompt injection
+      via a retrieved page could redirect the agent to internal network addresses, data-
+      exfiltration endpoints, or attacker-controlled hosts. A blocking before-tool-call
+      guardrail evaluates each URL against a configured allow-list before any network
+      connection is opened, ensuring the tool's side-effects stay within the operator's
+      intended perimeter.
+    implementation: >
+      The guardrail runs as a before-tool-call hook registered on WebBrowsingAgent.
+      Before the fetch tool executes for each URL in WebBundle, the hook compares the
+      URL's host and scheme against the allow-list in application.conf. Disallowed URLs
+      are rejected immediately; the host and path are recorded as blockedUrl on
+      ResearchRunEntity via ResearchWorkflow. The remaining URLs in the plan proceed
+      normally, so a single blocked URL does not abort the entire retrieval step.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip PII from retrieved content before synthesis
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: system-level
+    rationale: >
+      Web pages and documents retrieved by the two worker agents may include names, email
+      addresses, phone numbers, or other personal data that the original page author never
+      intended to route through a generative model. Passing raw retrieved text to the
+      synthesis prompt risks that PII appearing verbatim in the generated answer and
+      subsequently being stored in ResearchRunEntity or returned via the API. A system-
+      level sanitization pass before synthesis eliminates this risk without requiring the
+      operator to audit every source document.
+    implementation: >
+      ResearchWorkflow.sanitizeStep runs a deterministic regex-and-pattern processor over
+      both WebBundle.pages[*].extractedText and DocumentBundle.sections[*].content. The
+      processor replaces recognized PII patterns (email, phone, national-ID formats) with
+      redaction tokens. The piiSanitized flag on each bundle is set to true after the
+      pass. SynthesisedAnswer.piiSanitized propagates this flag so the caller can confirm
+      that the answer was generated from sanitized input. The sanitizer is not an LLM call
+      and adds no step timeout pressure.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score the manager synthesis decision for answer quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The manager's synthesis step merges content from two independent retrieval workers —
+      web pages with variable quality and a document that may be only partially relevant —
+      into a single cited answer. The quality of that merge varies with the input material
+      and the model's reasoning. A rubric-based eval sampled periodically over completed
+      answers surfaces a quality trend the operator can act on, without delaying answer
+      delivery to the end user.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries ResearchView.getAllRuns and
+      selects the oldest ANSWERED run lacking an evalScore. It applies a 1–5 rubric
+      judge over SynthesisedAnswer — checking citation grounding, coverage of the
+      original question, and PII-sanitized flag — then calls
+      ResearchRunEntity.recordEval(score, rationale), which emits RunEvalScored. The
+      score and rationale appear in the App UI run row. Delivery is never blocked.
+    regulation_anchors: []
+
+  - id: H1
+    name: Flag runs that exceed the retry budget for deployer review
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: non-blocking
+    rationale: >
+      Research runs that repeatedly retry LLM steps — due to rate-limit back-pressure,
+      agent reasoning loops, or transient model errors — accumulate cost and latency that
+      the deployer should review. A per-run retry budget tracked in the workflow surfaces
+      these anomalies as OversightFlagged events, which the deployer can observe via the
+      monitoring endpoint without blocking the answer from being returned.
+    implementation: >
+      ResearchWorkflow.monitorStep reads the step-retry counter accumulated across
+      planStep, fetchWebStep, readDocStep, and synthesiseStep. If the total exceeds the
+      configured budget (default 8), monitorStep calls ResearchRunEntity.flagOversight,
+      emitting OversightFlagged and setting oversightFlagged = true on the run state.
+      GET /api/research/monitoring aggregates the flagged-run count and the timestamp
+      of the most recent flag from ResearchView, giving the deployer a lightweight
+      runtime health surface.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: URL allow-list guardrail
+    mechanism: "guardrail · before-tool-call"
+    short: Block disallowed URLs before the browser fetch tool executes.
+  - id: S1
+    name: PII sanitizer
+    mechanism: "sanitizer · pii"
+    short: Strip personal data from retrieved content before it enters synthesis.
+  - id: E1
+    name: Answer quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the manager's synthesis decision for each completed answer.
+  - id: H1
+    name: Retry-budget oversight flag
+    mechanism: "hotl · deployer-runtime-monitoring"
+    short: Flag runs that exceed the configured retry budget for deployer review.

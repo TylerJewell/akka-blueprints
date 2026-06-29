@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: vto-genmedia
+
+# ---- Purpose ----
+purpose:
+  primary_function: virtual-try-on-media-generation
+  sector: retail-ecommerce
+  decisions_surface: recommend-only
+  user_type: online-shopper
+
+# ---- Data ----
+data:
+  inputs:
+    - garment-id-from-catalogue
+    - model-pose-preset
+    - include-video-flag
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: virtual-try-on-composite
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  shopper_views_composite_before_purchase: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-try-on-request
+  failure_modes:
+    - unsafe-generated-image
+    - colour-fidelity-gap
+    - dimension-mismatch
+    - video-clip-missing
+    - safety-guardrail-budget-exhausted
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reader_role: online-shopper
+  shopper_views_composite_before_adding_to_cart: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_request: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  generated-image-usage-rights-cleared: TO_BE_COMPLETED_BY_DEPLOYER

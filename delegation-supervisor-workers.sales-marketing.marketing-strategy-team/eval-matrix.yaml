@@ -1,0 +1,60 @@
+# Eval Matrix for the marketing-strategy-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (sales-marketing domain) with no industry-
+# or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list
+# across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: marketing-strategy-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: sales-marketing
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Hold the assembled plan to claims grounded in research findings
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: claim-grounding
+    enforcement: blocking
+    rationale: >
+      Strategy artifacts are decision inputs for a marketing team. A plan that asserts
+      market facts not present in the gathered research is an ungrounded claim and must
+      not be persisted as if it were evidence-backed.
+    implementation: >
+      before-agent-response guardrail on CampaignLeadAgent's assemble task: the
+      StrategyWorkflow assembleStep checks each factual claim in the CampaignPlan against
+      the recorded MarketFindings; an ungrounded plan fails the step and re-runs the
+      assemble (max 2 retries) before failover.
+    regulation_anchors: []
+
+  - id: E1
+    name: Self-evaluate the assembled plan against the original brief
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      A self-evaluation pass scoring the plan against the brief surfaces hallucinated or
+      off-brief tactics to the reviewer instead of letting them pass silently.
+    implementation: >
+      eval-event on plan assembly: the StrategyWorkflow evalStep invokes CampaignLeadAgent's
+      EVALUATE task, which returns a PlanEval{score,notes}; the workflow records a
+      PlanEvaluated event on CampaignEntity and the UI shows the score beside the plan.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Claim-grounding guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block plans whose claims are not present in the research findings.
+  - id: E1
+    name: Plan self-evaluation
+    mechanism: "eval-event · on-decision-eval"
+    short: Score the assembled plan against the original brief.

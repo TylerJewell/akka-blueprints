@@ -1,0 +1,76 @@
+# Eval Matrix for the haiku-subagents-under-opus Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (research-intel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: haiku-subagents-under-opus
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: research-intel
+
+integration_tier: Requires Anthropic API key for Opus + Haiku models
+
+controls:
+  - id: S1
+    name: Redact PII from image payloads before sub-agent calls
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: non-blocking
+    rationale: >
+      Multimodal inputs submitted by users frequently contain incidental personally
+      identifiable information — faces in photographs, text visible on documents held by
+      people, licence plates, and similar content. If those payloads were forwarded directly
+      to sub-agents, the PII would be processed by the LLM and could surface in descriptions
+      or the synthesised answer. The sanitizer intercepts each ImagePayload before the
+      parallel fan-out, strips or blurs identified PII, and records whether redaction
+      occurred. Downstream analysis and synthesis operate only on the cleaned images, so
+      PII is never exposed to the model. The workflow continues rather than aborting, because
+      the analytical value of the image is preserved even after redaction.
+    implementation: >
+      PiiSanitizer.sanitize(ImagePayload) is called sequentially over the image list in
+      AnalysisWorkflow.sanitizeStep before OpusCoordinator.DECOMPOSE is invoked. It returns
+      a SanitizedImage with piiDetected=true and a redacted base64Data when it detects a
+      face or embedded document text. AnalysisJobEntity.markSanitized persists the
+      SanitizedImage list. The guardrailStep in AnalysisWorkflow also checks that the
+      SynthesisedAnswer does not reference content that was flagged for redaction.
+    regulation_anchors: []
+
+  - id: G1
+    name: Gate the synthesised answer before it reaches the caller
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The OpusCoordinator produces a single synthesised answer from multiple per-image
+      reports. Because Haiku sub-agents each analysed only one image in isolation, the
+      coordinator's synthesis step is the first point where cross-image claims can emerge.
+      An output guardrail at this boundary catches two failure modes: PII bleed-through
+      (the answer references facial or document details that were redacted from the inputs)
+      and factual inconsistencies (the answer asserts something that no sub-agent report
+      supports). Blocking this response when either condition is detected prevents the
+      caller from ever receiving a non-compliant or hallucinated synthesis.
+    implementation: >
+      guardrailStep in AnalysisWorkflow runs a deterministic vetter (checks for imageRef
+      strings flagged with piiDetected=true appearing in the SynthesisedAnswer text) plus
+      an LLM judge that scores factual grounding against the provided ImageReport list. On
+      failure, the workflow calls AnalysisJobEntity.block and the job enters BLOCKED with
+      a failureReason. The SynthesisedAnswer is never persisted to the entity or emitted
+      via SSE in the blocked path.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: Image PII sanitizer
+    mechanism: "sanitizer · pii"
+    short: Strip faces and document text from image payloads before sub-agent analysis.
+  - id: G1
+    name: Synthesis output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a synthesised answer that references redacted PII or unsupported claims.

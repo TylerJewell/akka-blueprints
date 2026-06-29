@@ -1,0 +1,81 @@
+schema_version: 1
+sample_id: routing-classifier-pattern
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Validate route decision against allowed-route registry before invoking any specialist
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: route-registry
+    enforcement: blocking
+    rationale: |
+      The routing classifier produces a route name and confidence score, but
+      neither value is inherently safe to act on without verification. An
+      out-of-distribution route name would invoke a non-existent or wrong-mode
+      specialist; a low-confidence decision would route ambiguous messages to a
+      specialist that is likely to produce an off-target reply. The
+      before-agent-invocation guardrail intercepts the route decision before any
+      specialist is ever called, checks the route name against the allowed-route
+      set ({GENERAL, REFUND, TECHNICAL}), and enforces a minimum confidence
+      floor ("medium" or above). Any decision that fails either check is
+      rejected immediately, and the message lands in ROUTE_BLOCKED without
+      touching the specialist fleet.
+    implementation: |
+      `RouteGuardrail` is a typed Agent invoked inside `RoutingWorkflow
+      .validateRouteStep` immediately after `RoutingClassifier` returns its
+      `RouteDecision`. The agent receives the `RouteDecision` and returns a
+      `RouteVerdict { approved: boolean, rejectionReason: String }`. On
+      `approved=false` the workflow calls `MessageEntity.recordRouteBlocked`
+      (emitting `MessageRouteBlocked`) and terminates in `ROUTE_BLOCKED`.
+      No specialist agent (`GeneralAgent`, `RefundAgent`, `TechnicalAgent`) is
+      ever invoked for that message. On `approved=true` the workflow branches
+      on `route` and proceeds to the matching specialist step.
+    regulation_anchors: []
+
+  - id: G2
+    name: Screen specialist reply against content-policy rubric before publishing
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-rubric
+    enforcement: blocking
+    rationale: |
+      A specialist agent can return a well-formed `Reply` whose content
+      violates the service's content policy — promising a specific refund
+      processing date that is outside the published SLA, claiming a legal
+      right the system cannot verify, or echoing a token from the original
+      message that should not have been retained. Customer-facing CX replies
+      carry brand and regulatory risk that justify a hard gate before any
+      draft reaches the customer. The before-agent-response guardrail screens
+      every draft against a rubric tied to the specific risk surface of each
+      specialist domain (billing accuracy, legal scope, no fabricated article
+      ids).
+    implementation: |
+      `ReplyGuardrail` is a typed Agent invoked inside `RoutingWorkflow
+      .screenStep` after any specialist (`GeneralAgent`, `RefundAgent`, or
+      `TechnicalAgent`) returns its `Reply`. The agent receives the original
+      `IncomingMessage` and the specialist's `Reply` draft, and returns a
+      `ReplyVerdict { allowed: boolean, violations: List<String>,
+      rubricVersion: String }`. On `allowed=false` the workflow calls
+      `MessageEntity.blockReply` (emitting `ReplyBlocked`, terminal
+      `REPLY_BLOCKED`). The blocked draft and the violations list are
+      preserved in `MessageEntity` state and surfaced in the operator UI.
+      An operator can call `POST /api/messages/{id}/unblock` to publish the
+      draft despite the violation. On `allowed=true` the workflow proceeds to
+      `publishStep` and emits `ReplyPublished`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-invocation route guardrail
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —
+  - id: G2
+    label: Before-response reply guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

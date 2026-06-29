@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: voice-agent
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Reject non-compliant replies before audio synthesis fires
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      In a voice channel the agent's reply is spoken aloud to the caller within
+      seconds of generation. A response containing a disallowed phrase, an
+      overly-long text that overruns the TTS buffer, or a malformed JSON payload
+      would either play garbled audio or expose the organisation to liability
+      before any human can intervene. The before-agent-response hook is the only
+      cut point that sits between the LLM output and the AudioSynthesiser call —
+      catching the problem before it becomes audible is essential.
+    implementation: |
+      `ReplyGuardrail` is registered on `VoiceConversationAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate response it (1) parses the candidate into `AgentReply`,
+      (2) asserts `replyText.length() ≤ 500` (voice output budget), (3) checks
+      `replyText` against a configurable disallowed-phrases list (competitor
+      mentions, off-script promises, prohibited escalation bypasses), and
+      (4) asserts `tone` is one of `{WARM, NEUTRAL, FIRM}`. On any failure,
+      returns a structured rejection naming the failed check; the agent loop
+      consumes one of its 3 iterations and retries. Only responses that pass all
+      four checks reach `ConversationWorkflow.synthesiseStep` and the
+      `AudioSynthesiser`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact caller PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Voice transcripts are among the highest-density PII surfaces in customer
+      operations. A caller typically speaks their name, account number, and
+      sometimes payment details in the first 30 seconds of a call. None of those
+      values should appear in an LLM prompt body. Redacting before the agent
+      invocation eliminates an entire class of data-leakage risk at the source,
+      while the entity retains the raw transcript for audit and replay.
+    implementation: |
+      `TranscriptSanitizer` Consumer subscribes to `AudioReceived` events emitted
+      by `ConversationEntity`. It runs a pipeline of regex stages (phone numbers,
+      payment-card-like tokens, email addresses, date-of-birth patterns), a
+      name-heuristic stage (capitalised bigrams in caller-greeting context), and an
+      account-id-token stage. Outputs a `SanitizedTranscript` carrying the
+      redacted transcript text plus the list of PII categories found. Calls
+      `ConversationEntity.attachSanitizedTranscript(turnId, sanitized)`.
+      `ConversationWorkflow.respondStep` then passes
+      `sanitized.redactedTranscript` as the `VoiceConversationAgent` task
+      attachment; the raw transcript remains accessible only via
+      `request.rawTranscript` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Reply guardrail before TTS
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: text-to-sql-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: finance-data-query
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-only
+  user_type: finance-analyst-or-operations-staff
+
+# ---- Data ----
+data:
+  inputs:
+    - natural-language-questions
+    - receipts-database-schema
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_response: true
+  raw_results_retained_for_audit: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: financial-receipt-data
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_answer_before_action: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Failure ----
+failure:
+  blast_radius: single-query
+  failure_modes:
+    - sql-injection-via-llm
+    - hallucinated-row
+    - pii-leakage-in-result
+    - schema-hallucination
+    - destructive-query-execution
+    - cross-customer-data-exposure
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: finance-analyst-or-data-steward
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - sqlite-jdbc-read-only
+  rate_limit_per_query: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  financial-data-access-controls-in-place: TO_BE_COMPLETED_BY_DEPLOYER

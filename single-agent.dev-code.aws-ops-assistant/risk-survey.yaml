@@ -1,0 +1,84 @@
+schema_version: 1
+sample_id: aws-ops-assistant
+
+# ---- Purpose ----
+purpose:
+  primary_function: aws-cloud-operations-assistant
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: execute
+  user_type: cloud-engineer-or-platform-operator
+
+# ---- Data ----
+data:
+  inputs:
+    - natural-language-operations-requests
+    - aws-resource-metadata-read-from-apis
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    cloud-resource-configuration: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  sensitive_config_in_llm_context: true
+  sensitive_config_handling: resource-metadata-only-no-secrets
+
+# ---- Decisions ----
+decisions:
+  authority_level: execute
+  decision_subject: aws-infrastructure-resource
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+  reviewer_reads_every_verdict_before_action: false
+  mutating_actions_require_confirmation: true
+
+# ---- Failure ----
+failure:
+  blast_radius: multi-resource-single-account
+  failure_modes:
+    - unintended-resource-deletion
+    - scope-creep-across-accounts
+    - confirmation-fatigue-bypass
+    - halt-lag-on-wide-blast
+    - allow-list-misconfiguration
+    - resource-arn-wildcard-abuse
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: true
+  reviewer_role: cloud-engineer-or-platform-operator
+  mutating_calls_require_per_action_approval: true
+  operator_halt_available: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - mcp-aws-tool-calls
+  rate_limit_per_request: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+  mcp_surface: aws-apis-simulated-in-process
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  aws-account-boundary-enforced: TO_BE_COMPLETED_BY_DEPLOYER
+  least-privilege-iam-role-assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  change-management-process-required: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,82 @@
+schema_version: 1
+sample_id: competitor-research-pipeline
+
+# ---- Purpose ----
+purpose:
+  primary_function: competitor-research-and-profiling-pipeline
+  sector: research-intel
+  decisions_surface: recommend-only
+  user_type: market-analyst-or-product-strategist
+
+# ---- Data ----
+data:
+  inputs:
+    - user-supplied-competitor-name
+    - exa-ai-web-search-results
+    - in-process-fixture-corpus
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: competitor-profile
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  analyst_reviews_every_profile_before_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-competitor-profile
+  failure_modes:
+    - schema-violation-notion-write
+    - scope-violation-wrong-database
+    - phase-violation
+    - missing-field-coverage
+    - hallucinated-source-url
+    - exa-search-empty-results
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reader_role: market-analyst-or-product-strategist
+  analyst_reviews_profile_before_distribution: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - exa-ai-search-api
+    - exa-ai-content-api
+    - notion-pages-api
+  rate_limit_per_competitor: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  exa-search-terms-of-service-reviewed: TO_BE_COMPLETED_BY_DEPLOYER
+  notion-workspace-access-scope-reviewed: TO_BE_COMPLETED_BY_DEPLOYER

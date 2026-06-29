@@ -1,0 +1,87 @@
+schema_version: 1
+sample_id: akka-bridge
+coordination_pattern: sequential-pipeline
+domain: general
+
+controls:
+  - id: H1
+    name: Block node outputs that fail content policy or schema conformance
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: after-llm-response
+    enforcement: blocking
+    rationale: |
+      In a graph execution pipeline, each node's LLM output is the sole input
+      to the next downstream node. If a node produces a schema-nonconforming
+      response, a prohibited-content pattern, or a hallucinated node reference,
+      that error propagates unchecked through every downstream node that trusts
+      the upstream output. The after-llm-response hook is the right cut: the
+      raw LLM string is inspected before it is written to the entity or forwarded
+      downstream, so no downstream node ever receives a policy-violating payload.
+      Blocking at this boundary keeps the pipeline contract honest — the typed
+      task handoff only carries outputs that have already cleared the policy gate.
+    implementation: |
+      `OutputGuardrail` is registered on `GraphAgent` via the agent's
+      guardrail-configuration block, bound to the `after-llm-response` hook.
+      It fires after every LLM response the agent produces, regardless of which
+      task is active. Three checks run in sequence: (1) schema conformance —
+      the raw response string is deserialised into the task's declared result
+      type (`ExecutionPlan`, `NodeOutputSet`, or `FinalResult`); a
+      deserialisation failure is an immediate block. (2) Prohibited-content
+      scan — the response is tested against every regex in
+      `src/main/resources/policy/prohibited-patterns.txt`; any match is a
+      block with the matching pattern name in the reason. (3) Reference
+      provenance — for FINALIZE-phase responses, every `ResultItem.sourceNodeIds`
+      entry is checked against the current `ExecutionPlan.nodes[].nodeId` list
+      (read from `GraphRunEntity` by `runId` carried in `TaskDef.metadata`);
+      an unrecognised nodeId is a block. On block, `OutputGuardrail` returns a
+      structured `content-violation` error to the agent loop and calls
+      `GraphRunEntity.recordViolation(nodeId, violationType, reason)` so the
+      event is visible in the UI's violation-log strip. The agent loop retries
+      within its 4-iteration budget.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every finalized output for coverage, integrity, and reference provenance
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A graph run can complete with a well-formed `FinalResult` that still has
+      silent gaps — a planned node with no corresponding output, a node output
+      that did not clear its guardrail check, or a result item referencing a
+      node that was never in the execution plan. An on-decision evaluator surfaces
+      these gaps without blocking the run itself, giving the reviewing human a
+      fast signal about which runs require closer inspection before their outputs
+      are acted upon.
+    implementation: |
+      `PolicyChecker` runs inside `GraphExecutionWorkflow.evalStep`, fired
+      immediately after `OutputFinalized` lands. The checker is deterministic
+      and rule-based (no LLM call — keeping the single-agent sequential-pipeline
+      invariant honest). Four checks, one point per check satisfied, on a base
+      of 1: (1) node coverage — every `ExecutionPlan.nodes[i]` has a matching
+      `NodeOutputSet.outputs[j]` (`plannedNode.nodeId == nodeOutput.nodeId`).
+      (2) output integrity — every `NodeOutput.guardrailPassed` is `true`
+      (no outputs that slipped through on retry without clearing the guardrail).
+      (3) reference provenance — every `ResultItem.sourceNodeIds` entry appears
+      in the `ExecutionPlan.nodes[].nodeId` set (no hallucinated node references
+      in the final output). (4) output parity — `items.size() == nodes.size()`
+      (no silent expansion or collapse of the result relative to the plan).
+      Emits `EvaluationScored{score: 1-5, rationale: String}` with a rationale
+      sentence naming the largest gap. Runs with score ≤ 2 are flagged for human
+      inspection in the App UI.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Node output content-policy guardrail
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: E1
+    label: Execution output coverage eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

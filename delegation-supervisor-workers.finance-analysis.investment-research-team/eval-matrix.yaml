@@ -1,0 +1,69 @@
+# Eval Matrix for the investment-research-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (finance-analysis domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: investment-research-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: S1
+    name: Sanitize the synthesised report against sector content rules before publication
+    mechanism:
+      kind: sanitizer
+      hook: before-agent-response
+      flavor: sector
+    enforcement: blocking
+    rationale: >
+      Investment research reports can surface prohibited content — unattributed price
+      predictions, fabricated earnings forecasts, or jurisdiction-specific advice that
+      creates legal exposure. A sector-scoped sanitizer applied before the report reaches
+      the user ensures that regulated content is caught at the boundary of the coordination
+      layer, not discovered after the fact via a compliance audit. Blocking enforcement means
+      a flagged report enters BLOCKED rather than reaching readers.
+    implementation: >
+      A before-agent-response sanitizer on ReportCoordinator executes in ReportWorkflow's
+      sanitizerStep. The sanitizer runs a deterministic rule set (prohibited phrase patterns,
+      missing-attribution checks) followed by an LLM judge scoped to the sector content policy.
+      On failure, the workflow calls ResearchReportEntity.blockReport and the report enters
+      BLOCKED with a failureReason describing which rule fired.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the coordinator synthesis decision for numeric-claim quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The coordinator's synthesis decision combines fundamental financial data with market
+      sentiment signals into a single report. Numeric claims in that output — ratios, growth
+      rates, EPS figures — are the highest-risk content: a wrong figure can influence a
+      consequential decision. Periodic rubric scoring surfaces whether the coordinator is
+      accurately representing the workers' sourced data without inventing numbers or
+      misattributing facts, without adding latency to report delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries ReportView for the oldest PUBLISHED
+      report lacking an evalScore, runs a 1-5 rubric judge that checks numeric-claim
+      traceability back to FundamentalsBundle facts and SentimentBundle signals, then calls
+      ResearchReportEntity.recordEval(score, rationale), emitting ReportEvalScored. The score
+      and one-line rationale appear beside the report in the App UI.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: Sector content sanitizer
+    mechanism: "sanitizer · before-agent-response"
+    short: Block a report with prohibited investment content or unattributed numeric claims.
+  - id: E1
+    name: Numeric-claim quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's synthesis for numeric accuracy and source attribution.

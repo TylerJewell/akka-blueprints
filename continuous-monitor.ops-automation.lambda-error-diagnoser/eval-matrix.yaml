@@ -1,0 +1,38 @@
+schema_version: 1
+sample_id: lambda-error-diagnoser
+coordination_pattern: continuous-monitor
+domain: ops-automation
+
+controls:
+  - id: E1
+    name: Score every diagnosis at the moment of the incident
+    mechanism:
+      kind: eval-event
+      hook: on-incident-reporter
+      flavor: on-incident-reporter
+    enforcement: non-blocking
+    rationale: |
+      An ops-automation agent diagnosing Lambda errors has no human reviewer in
+      the critical path — incidents are resolved autonomously and operators inspect
+      the board after the fact. Without an automated quality signal attached to each
+      diagnosis, degradation in the model's root-cause accuracy goes undetected until
+      a missed critical error causes an outage. Scoring at the moment of the incident
+      means every operator sees both the diagnosis and its confidence level together,
+      making low-quality diagnoses immediately visible rather than discoverable only
+      through periodic audits.
+    implementation: |
+      `IncidentWorkflow` runs `DiagnosisAgent` in `diagnoseStep`, then immediately
+      calls `EvalJudge` in `evalStep` before emitting `IncidentResolved`. The
+      `EvalResult` (score 1–5, rationale) is written to `IncidentEntity` via
+      `DiagnosisEvaluated` and projected into `IncidentView`. No incident transitions
+      to RESOLVED with a null eval score. The `EvalJudge` agent applies a three-axis
+      rubric: correctness of the root cause, specificity of the fix suggestion, and
+      actionability for an on-call engineer.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: On-incident diagnosis eval
+    mechanism: Eval · event
+    implementation: on-incident-reporter
+    source: —

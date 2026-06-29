@@ -1,0 +1,60 @@
+# Eval Matrix for the debate Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain community sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list on
+# every control. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: debate
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: debate-multi-perspective
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Guardrail the final synthesis for balance and safety
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The synthesis is the user-facing output of the debate. It must represent
+      both sides and contain no unsafe content before it is persisted and shown.
+    implementation: >
+      before-agent-response guardrail on the Synthesizer AutonomousAgent checks
+      the conclusion references both the advocate and critic positions and passes
+      a safety check; a failing synthesis is blocked and the DebateModerator
+      records DebateFailed rather than persisting an unbalanced conclusion.
+    regulation_anchors: []
+
+  - id: E1
+    name: Evaluate synthesis quality against the recorded rounds
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      Synthesis quality — balance across sides and faithfulness to what was
+      actually argued — merits an automated eval surfaced to the reader.
+    implementation: >
+      SynthesisEvalConsumer subscribes to DebateEntity SynthesisRecorded events,
+      computes a quality score from balance and faithfulness to the recorded
+      rounds, and calls DebateEntity.recordEvaluation; the UI shows the score
+      beside the conclusion.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Synthesis guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block an unbalanced or unsafe synthesis from reaching the user.
+  - id: E1
+    name: Synthesis quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Score balance and faithfulness on every synthesis.

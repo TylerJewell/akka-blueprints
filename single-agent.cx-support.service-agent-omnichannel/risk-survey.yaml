@@ -1,0 +1,88 @@
+schema_version: 1
+sample_id: service-agent-omnichannel
+
+# ---- Purpose ----
+purpose:
+  primary_function: customer-support-case-handling
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: act-on-behalf
+  user_type: support-customer
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-customer-messages
+    - channel-metadata
+    - scenario-classification
+  data_classes:
+    pii: true
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: act-on-behalf
+  decision_subject: customer-support-case
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+  reviewer_reads_every_verdict_before_action: false
+
+# ---- Failure ----
+failure:
+  blast_radius: single-customer-interaction
+  failure_modes:
+    - inappropriate-reply
+    - missed-escalation
+    - pii-leakage-via-llm
+    - crm-write-with-bad-data
+    - channel-format-mismatch
+    - false-resolution-of-open-case
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: support-team-operator
+  reviewer_must_read_verdict_before_action: false
+  escalation_path_active: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - crm-case-create
+    - crm-case-update
+    - crm-case-close
+  rate_limit_per_case: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+  channels_supported:
+    - WHATSAPP
+    - VOICE
+    - WEB
+    - FACEBOOK
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  channel-data-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

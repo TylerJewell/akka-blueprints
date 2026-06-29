@@ -1,0 +1,71 @@
+schema_version: 1
+sample_id: auto-insurance-agent
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Redact member PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Insurance member requests routinely carry member IDs, policy numbers, VIN
+      numbers, driver's license numbers, phone numbers, and account numbers. These
+      identifiers are not required by the triage classifier or any specialist to
+      perform their tasks — the category of a claim request is determinable from
+      the subject and body content alone. Redacting before the request enters the
+      workflow means that in no path does an LLM session ever see raw regulated
+      identifiers, reducing both re-identification risk and the blast radius of a
+      prompt-injection attack that attempts to exfiltrate member data.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `RequestQueue` events. For each
+      `InboundRequestReceived` it runs a regex stage (member IDs matching `MBR-\w+`,
+      policy numbers matching `POL-\d+`, VINs matching a 17-character alphanumeric
+      pattern, phone numbers, account numbers matching `ACCT-\w+`) and a heuristic
+      stage (greeting-position names, driver's-license-shaped strings), produces a
+      `SanitizedRequest` carrying the redacted text plus the list of PII categories
+      found, and calls `RequestEntity.registerIncoming` then `attachSanitized`. The
+      categories list is retained for audit; only the redacted text reaches the agents.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block specialist drafts that violate the insurance-communications policy rubric
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-rubric
+    enforcement: blocking
+    rationale: |
+      Insurance communications carry regulatory and contractual obligations that a
+      generative specialist agent can violate even when its response is factually
+      coherent — for example by citing a specific claim settlement amount the member
+      did not provide, promising a coverage tier discount that is not on record, or
+      inventing a roadside ETA that the dispatch system cannot guarantee. A
+      before-agent-response guardrail running on every specialist draft intercepts
+      these violations before the member ever receives the response, preventing
+      regulatory exposure and member trust erosion that would result from an
+      AI-fabricated commitment being treated as a binding statement.
+    implementation: |
+      `ResponseGuardrail` is a typed Agent invoked by `InsuranceWorkflow.guardrailStep`
+      with the `SanitizedRequest` and the specialist's `MemberResponse` draft. It
+      returns `GuardrailVerdict { allowed, violations, rubricVersion }`. On
+      `allowed=false` the workflow emits `ResponseBlocked` (terminal `BLOCKED`) and
+      the member request sits in supervisor queue until an operator calls
+      `POST /api/requests/{id}/unblock` or leaves it blocked. The rubric covers:
+      invented settlement amounts, invented coverage discounts, invented roadside
+      ETAs, out-of-scope legal or medical advice, and `[REDACTED]` token echoes.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Before-response insurance policy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

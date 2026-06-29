@@ -1,0 +1,82 @@
+schema_version: 1
+sample_id: sentiment-monitor
+
+# ---- Purpose ----
+purpose:
+  primary_function: cx-support-sentiment-monitoring
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: alert-only
+  user_type: support-team-lead
+
+# ---- Data ----
+data:
+  inputs:
+    - linear-issue-comments
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  # Linear comments may contain user-reported personal information depending on
+  # the product domain. The deployer must assess whether PII sanitization is
+  # required before comment text is passed to the sentiment model.
+  pii_assessment_required: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: alert-only
+  decision_subject: support-team-lead
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  # Alerts inform humans; no automated action is taken on individual users.
+  affects_individual_outcome: false
+
+# ---- Failure ----
+failure:
+  blast_radius: team-channel
+  failure_modes:
+    - channel-spam-from-misconfigured-alert
+    - model-drift-causing-missed-critical-threads
+    - false-positive-alert-desensitising-support-team
+    - mention-scope-exceeded-causing-workspace-disruption
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: support-team-lead
+  reviewer_must_approve_every_outgoing: false
+  # Humans receive alerts and decide whether to act; they can silence any thread.
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - slack-alert-dispatch  # stub in sample; wire real Slack API for production
+    - linear-comment-poll   # stub in sample; wire real Linear API for production
+  rate_limit_per_comment: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  employee_consent_to_comment_analysis: TO_BE_COMPLETED_BY_DEPLOYER
+  # Note: if Linear is used for internal engineering discussions, sentiment
+  # analysis of employee comments may trigger workplace-monitoring obligations
+  # in some jurisdictions. Consult legal before deploying to internal workspaces.

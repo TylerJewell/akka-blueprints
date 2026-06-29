@@ -1,0 +1,94 @@
+# Eval Matrix for the finance-research-swarm Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (finance-analysis domain) with no
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: finance-research-swarm
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Vet the integrated stock report before it reaches the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      Stock analysis outputs are investment-adjacent content subject to accuracy standards.
+      An output guardrail catches unsupported price claims, fabricated fundamental values,
+      and disallowed recommendation language (e.g., explicit buy/sell directives without
+      required disclaimers) before the report is surfaced, so a flawed synthesis never
+      reaches the reader.
+    implementation: >
+      A before-agent-response guardrail on ReportCoordinator runs a deterministic
+      numeric-accuracy vetter plus an LLM judge over the IntegratedReport in
+      ReportWorkflow.guardrailStep. The vetter cross-checks price and fundamental
+      figures against the raw PriceSummary and FundamentalsSnapshot worker outputs.
+      On failure the workflow calls StockReportEntity.block and the report enters BLOCKED.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub finance-sector compliance phrases from the report summary
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: blocking
+    rationale: >
+      Finance-sector content distributed to consumers is subject to prohibitions on phrases
+      that constitute unqualified investment advice or guarantee claims (e.g.,
+      "guaranteed return", "certain profit", "risk-free"). A sector sanitizer applied
+      before the report is published catches these phrases deterministically, independent
+      of the LLM's self-policing, ensuring the output meets minimum sectoral compliance
+      standards.
+    implementation: >
+      ReportWorkflow.sanitizerStep runs a deterministic string-scan over the integrated
+      summary against a configurable phrase blocklist loaded from
+      src/main/resources/finance-compliance-phrases.txt. Any match causes the workflow
+      to call StockReportEntity.block with a sanitizerVerdict explaining which phrase
+      triggered the block. The sanitizerStep runs before guardrailStep so the LLM judge
+      never sees prohibited phrases.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the coordinator integration decision for numeric accuracy
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The coordinator's integration decision merges price data, news sentiment, and
+      fundamental metrics from four independent workers into one report. Numeric claims
+      (share price, P/E ratio, EPS) are particularly prone to hallucination when
+      synthesised across agent boundaries. Sampling the integration decision with a
+      rubric that cross-checks synthesised numbers against raw worker outputs surfaces
+      an accuracy score beside the published report without blocking delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries StockReportView for the oldest
+      PUBLISHED report lacking an evalScore, runs a 1–5 numeric-accuracy rubric judge
+      comparing the IntegratedReport's price and fundamental figures against the raw
+      PriceSummary and FundamentalsSnapshot payloads stored on StockReportEntity, and
+      calls StockReportEntity.recordEval(score, rationale), emitting EvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Report output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a report with unsupported price claims or disallowed recommendation language.
+  - id: S1
+    name: Finance sector sanitizer
+    mechanism: "sanitizer · sector"
+    short: Scrub prohibited investment-advice phrases before the report is published.
+  - id: E1
+    name: Numeric accuracy eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's numeric claims against raw worker outputs.

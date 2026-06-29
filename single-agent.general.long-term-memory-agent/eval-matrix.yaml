@@ -1,0 +1,43 @@
+schema_version: 1
+sample_id: long-term-memory-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: S1
+    name: Redact PII before persisting memory entries
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Long-term memory stores are uniquely risky for PII: a piece of identifying
+      information gathered in session one can silently propagate into every future
+      session for that user, and into every future model call that recalls those
+      memories. Unlike a document-review system where PII is transient, a memory
+      store accumulates and amplifies exposure over time. Redaction must happen
+      between the agent's raw output and the persistence write — not before the
+      agent call, because the agent needs to read (and respond to) the user's
+      original message. The sanitizer sits at the one chokepoint where raw text
+      crosses the boundary into durable state.
+    implementation: |
+      `MemorySanitizer` Consumer subscribes to `MemoryExtracted` events emitted
+      by `SessionEntity`. Each event carries a list of `RawMemoryEntry` records
+      produced by `MemoryAgent`. The Consumer runs a pipeline of regex stages
+      (emails, phone numbers, SSN-like patterns, payment-card-like tokens),
+      a postal-address heuristic, a person-name heuristic, and an
+      account-id-token stage over each entry's `rawText`. It produces a
+      `MemoryEntry` with `sanitizedText` and records `piiCategoriesRedacted`.
+      It then calls `MemoryEntity.storeMemory(entry)`. The `RawMemoryEntry`
+      list is never written to `MemoryEntity`; only the sanitized form reaches
+      persistent state. Future `recallStep` invocations in `MemoryExtractionWorkflow`
+      query `MemoryView` (which projects `MemoryEntity` events) and pass only
+      `sanitizedText` values as the "memories.json" attachment to `MemoryAgent`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before memory persistence
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

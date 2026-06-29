@@ -1,0 +1,116 @@
+schema_version: 1
+sample_id: booking-support-agent
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block destructive tool calls before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: ownership-and-fare-rule-validator
+    enforcement: blocking
+    rationale: |
+      A customer support agent that can cancel or modify bookings is one tool
+      call away from acting on another customer's itinerary if the session
+      context is misread or the model hallucinates a booking reference. The
+      before-tool-call hook is the right cut: it runs against the proposed
+      arguments before the tool executes, so a cross-customer or fare-rule
+      violation is caught while the call is still hypothetical. Blocking here
+      is not advisory — the tool call is never executed for a rejected
+      proposal, and the agent receives a structured reason it can relay to
+      the customer.
+    implementation: |
+      `ToolCallGuardrail` is registered on `BookingSupportAgent` via the
+      agent's guardrail-configuration block, bound to the
+      `before-tool-call` hook. On each proposed call to `modifyBooking`,
+      `cancelBooking`, or `issueRefundCredit` it (1) resolves the target
+      `bookingRef` via `BookingStore.lookUpBooking`, (2) compares the
+      booking's `customerId` to the session's `customerId`
+      (OWNERSHIP_VIOLATION if they differ), (3) checks the booking's
+      `cancellationPermitted` or `seatChangePermitted` flag depending on
+      the requested operation (FARE_RULE_VIOLATION if the flag is false),
+      and (4) checks the session's recorded `ToolCall` log for an identical
+      change already applied in this turn (DUPLICATE_MUTATION if found).
+      Passing calls are forwarded to `BookingStore`. Rejected calls return
+      `Guardrail.block(<structured-reason>)`; the agent loop receives the
+      reason and replies to the customer without executing the tool.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Customers routinely include payment-card numbers, passport or ID
+      numbers, phone numbers, and email addresses in support messages —
+      either by habit or because they think the agent needs them. None of
+      those belong in an LLM call body. The cx-support domain has a
+      particularly high surface area for accidental PII disclosure because
+      the free-form message channel is open to any text the customer types.
+      Redaction runs in a Consumer before the agent call; the raw message
+      is preserved on the entity for the customer-service audit log but is
+      never the input the model sees.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `CustomerMessageReceived`
+      events emitted by `BookingSessionEntity`. It runs a pipeline of
+      regex stages (payment-card patterns, government-id-like tokens,
+      phone numbers, email addresses) and an account-number heuristic
+      stage. Outputs a `SanitizedMessage` carrying the redacted text and
+      the list of categories found. Calls
+      `BookingSessionEntity.attachSanitized(turnId, sanitized)`.
+      `BookingSessionWorkflow.agentTurnStep` then passes the
+      `sanitizedText` as the message content in the task instructions
+      to `BookingSupportAgent`; the raw payload remains accessible only
+      via `message.rawMessage` on the entity, never on the wire to the
+      model.
+    regulation_anchors: []
+
+  - id: H1
+    name: LLM-judge test assertions gate every build
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      A customer-facing agent that discusses bookings can hallucinate flight
+      numbers, departure times, and seat assignments — information that a
+      customer may rely on for travel decisions. Unit tests cannot detect
+      this class of failure because the failure is semantic, not structural.
+      LLM-judge assertions run the agent against fixed scenarios in mock
+      mode and evaluate replies with a judge prompt, catching hallucinated
+      details before the build reaches any deployment target. The gate is
+      build-time only — it adds no runtime latency to production sessions.
+    implementation: |
+      `JudgeAssertions.java` defines 5 test scenarios, each pairing a
+      fixed `customerId`, a `rawMessage`, and an expected reply property
+      expressed as a judge prompt (e.g., "does the reply include the
+      departure time from the booking record? does it reference any
+      flight number not present in the booking?"). During `mvn test`,
+      the agent processes each scenario against `MockModelProvider`; the
+      reply text is then sent to the configured model provider with the
+      judge prompt. A judge score below the pass threshold (3/5) fails
+      the test and blocks the build. One scenario intentionally feeds a
+      mock reply that contains a hallucinated flight number — verifying
+      that the judge catches it.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Destructive-tool ownership guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: H1
+    label: LLM-judge CI gate
+    mechanism: CI gate
+    implementation: test-gate
+    source: —

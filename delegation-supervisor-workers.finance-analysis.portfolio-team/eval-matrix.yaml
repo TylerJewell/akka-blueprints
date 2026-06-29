@@ -1,0 +1,71 @@
+# Eval Matrix for the portfolio-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (finance-analysis domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: portfolio-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: S1
+    name: Normalize and gate the submitted sector tag before analysis begins
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: blocking
+    rationale: >
+      Portfolio submissions arrive with a free-text sector field. Without normalization,
+      an agent might receive an ambiguous or prohibited sector label and produce analysis
+      that is out of scope or non-compliant. The sector sanitizer maps submitted tags to a
+      canonical registry and rejects prohibited sectors before any agent work starts, so
+      downstream agents always operate on a well-formed, permitted sector classification.
+    implementation: >
+      SectorRegistry.java holds the canonical sector list and the prohibited-sector set.
+      PortfolioWorkflow.sanitizeStep calls SectorRegistry.normalize(sector) at the start of
+      every workflow run. If the normalized value is in the prohibited set, the step calls
+      PortfolioReportEntity.block immediately and the workflow ends — no AutonomousAgent is
+      invoked. Valid sectors are stored on the PortfolioReport state for use in
+      HoldingsAnalyst and MarketContextAgent prompts.
+    regulation_anchors: []
+
+  - id: G1
+    name: Vet the consolidated portfolio report before it reaches the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: >
+      The consolidated portfolio report is the investment-facing artifact. Regulations in
+      multiple jurisdictions prohibit unlicensed AI systems from issuing explicit buy, sell,
+      or hold directives. An output guardrail intercepts the consolidated report and checks
+      for ungrounded price targets and direct investment instructions before the result is
+      surfaced. A flagged report enters BLOCKED so the user receives an explanation rather
+      than non-compliant investment advice.
+    implementation: >
+      A before-agent-response guardrail on PortfolioCoordinator runs inside
+      PortfolioWorkflow.guardrailStep. The step applies a deterministic pattern-match for
+      explicit recommendation phrases ("buy", "sell", "hold", price targets) followed by an
+      LLM judge that scores the report on a compliance rubric. If either check fails, the
+      workflow calls PortfolioReportEntity.block and the report enters BLOCKED with a
+      failureReason. The guardrail runs after every consolidation, including the degraded
+      partial-output path.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    name: Sector input sanitizer
+    mechanism: "sanitizer · sector"
+    short: Normalize sector tags and block prohibited sectors before any agent work begins.
+  - id: G1
+    name: Portfolio report output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block consolidated reports that contain explicit investment directives.

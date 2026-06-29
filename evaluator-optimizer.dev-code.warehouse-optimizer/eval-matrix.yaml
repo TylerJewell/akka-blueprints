@@ -1,0 +1,133 @@
+schema_version: 1
+sample_id: warehouse-optimizer
+coordination_pattern: evaluator-optimizer
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Block DDL proposals before the evaluator runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: input-policy
+    enforcement: blocking
+    rationale: |
+      DDL statements (CREATE, ALTER, DROP, TRUNCATE, RENAME) are irreversible
+      or destructive against a live warehouse schema. Sending a DDL proposal
+      directly to the evaluator treats schema changes on the same cost-and-
+      correctness rubric as query rewrites, which masks their structural risk.
+      A deterministic keyword scan before the evaluator fires catches DDL
+      proposals, routes them to the DBA approval gate, and ensures the evaluator
+      is invoked only after a human has explicitly approved the change.
+    implementation: |
+      Wired as the `guardrailStep` of `OptimizationWorkflow`, immediately
+      after `proposeStep`. A pure-function case-insensitive regex check on
+      `proposal.proposedSql` for the keywords CREATE, ALTER, DROP, TRUNCATE,
+      RENAME. On DDL detected, emits `AttemptGuardrailVerdictRecorded` with
+      `verdict.passed = false` and `reasonCode = "DDL_DETECTED"`, then
+      transitions the workflow to `dbaGateStep`, which pauses and waits for
+      a `DBADecisionRecorded` command. Non-DDL proposals emit
+      `verdict.passed = true` (reasonCode = "OK") and advance to
+      `evaluateStep`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require DBA approval before any DDL proposal reaches the evaluator
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      A DDL change proposed by the optimizer could alter a production table's
+      structure, drop an index relied on by other queries, or rename a column
+      referenced by downstream ETL pipelines. Even if the evaluator would score
+      the change highly on cost grounds, the risk of unintended side-effects is
+      too high for the system to proceed without a human checkpoint. Requiring an
+      explicit DBA approval before the workflow resumes ensures that no schema
+      change is advanced toward recommendation status without a knowledgeable
+      human reviewing the proposal text.
+    implementation: |
+      Wired as `dbaGateStep` of `OptimizationWorkflow`. When the DDL guardrail
+      fires, the workflow transitions the request to `AWAITING_DBA` and pauses
+      without calling any agent. The DBA reviews the proposal in the App UI and
+      submits a decision via `POST /api/requests/{id}/dba-decision` (handled by
+      `OptimizerEndpoint`). An approved decision delivers a `DBADecisionRecorded`
+      command to `OptimizationRequestEntity` and resumes the workflow into
+      `evaluateStep`. A rejected decision delivers the same command and
+      transitions the workflow directly to `rejectStep`, ending the loop in
+      `REJECTED_FINAL` without calling the evaluator. The `DBAApprovalGate`
+      TimedAction logs a reminder every 15 seconds for requests that have been in
+      `AWAITING_DBA` for more than 5 minutes.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every cycle's verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The evaluator's approve-or-revise verdict, combined with the proposal's
+      kind and the guardrail outcome, is the highest-signal data the loop
+      produces. Recording it as a typed event per attempt gives engineering teams
+      a continuous quality stream — approval rate per attempt number, frequency
+      of DDL proposals, proportion of proposals blocked by the DBA gate, and
+      score drift across revisions — without instrumenting the workflow itself.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `RequestsView.getAllRequests`, finds attempts that have been evaluated but
+      do not yet have a matching `EvalRecorded` event, and calls
+      `OptimizationRequestEntity.recordEval(attemptNumber, verdict, score,
+      ddlDetected)`. The call is idempotent on `(requestId, attemptNumber)`.
+      The workflow itself also emits one `EvalRecorded` event on the terminal
+      transition (RequestApproved or RequestRejectedFinal) carrying the whole
+      loop's outcome.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the loop gracefully at the attempt ceiling
+    mechanism:
+      kind: halt
+      flavor: graceful-degradation
+    enforcement: system-level
+    rationale: |
+      An optimizer-evaluator loop that never converges will run indefinitely,
+      accumulating LLM calls and consuming workflow resources. For a database
+      team consuming these recommendations, an endlessly iterating loop is
+      indistinguishable from a hung service. The halt mechanism ends the loop at
+      a configured ceiling, preserves every proposal and evaluation on the
+      entity, and surfaces the best-scoring proposal as a structured output so
+      an engineer can decide whether to intervene or reframe the objective.
+    implementation: |
+      `OptimizationWorkflow` reads `warehouse-optimizer.optimization.max-attempts`
+      (default 4) at start. Before scheduling the next `proposeStep`, it checks
+      `attemptCount < maxAttempts`. If the ceiling is hit, the workflow
+      transitions to `rejectStep`, which emits `RequestRejectedFinal` with the
+      highest-scoring proposal's SQL as the best-of and a structured
+      `rejectionReason` ("max attempts reached" plus the count).
+      `defaultStepRecovery(maxRetries(2).failoverTo(rejectStep))` ensures any
+      unrecoverable agent failure also lands in the same terminal state rather
+      than hanging.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: DDL guardrail · keyword scan
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: DBA approval gate · DDL proposals
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: E1
+    label: Per-attempt eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: HT1
+    label: Halt at attempt ceiling
+    mechanism: Halt
+    implementation: graceful-degradation
+    source: —

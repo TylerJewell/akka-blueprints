@@ -1,0 +1,40 @@
+schema_version: 1
+sample_id: react-math-wiki
+coordination_pattern: single-agent
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Sandbox every math expression before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: expression-grammar-validator
+    enforcement: blocking
+    rationale: |
+      The ReAct loop grants the agent free rein to choose its next tool. One of those
+      tools — evaluate_math — evaluates code. Without a hard boundary on what constitutes
+      a valid expression, the agent could emit an argument that triggers file I/O, network
+      calls, or reflection via an injected function name. The before-tool-call hook is the
+      right enforcement point: it runs before the expression reaches the evaluator, so the
+      evaluator never sees a forbidden construct. search_wikipedia carries no equivalent
+      risk and passes through unchecked.
+    implementation: |
+      `MathGuardrail` is registered on `ResearchAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook and scoped to the
+      `evaluate_math` tool only. On each invocation it tokenises the argument string and
+      checks: (1) only numeric literals, (2) operators in {+, -, *, /, ^, (, )}, (3)
+      function identifiers restricted to {sqrt, abs, log, exp}, (4) no other identifiers,
+      (5) no semicolons or statement separators. On any failure it returns
+      `Guardrail.reject(<structured-error>)` naming the forbidden token; the agent loop
+      counts the rejection as an iteration and may reformulate. `MathEvaluator` also
+      enforces the same grammar at runtime (belt-and-suspenders), but the guardrail is the
+      blocking gate — the evaluator is the backup.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Math expression sandbox
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

@@ -1,0 +1,85 @@
+# Eval Matrix for the collab-research-team Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community research-intelligence sample (research-intel domain)
+# with no industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally
+# an empty list across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: collab-research-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: team-shared-list
+  domain: research-intel
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: E1
+    name: Evaluate every synthesis conclusion for citation grounding
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A synthesis agent that merges findings from multiple researchers can produce
+      confident-sounding conclusions that are not traceable to any source in the
+      underlying findings. In a research context, an un-grounded conclusion is
+      indistinguishable from a hallucination in downstream use. Firing an eval
+      event per conclusion — rather than once for the whole report — isolates
+      exactly which claims lack support and lets the system flag the question for
+      human review rather than silently publishing an unreliable report. The eval
+      is non-blocking at inference time; it gates the question's status transition
+      from SYNTHESIZING to COMPLETED.
+    implementation: |
+      `SynthesisWorkflow.evalStep` iterates over each `ReportConclusion` in the
+      `ResearchReport` returned by `SynthesisAgent` and calls
+      `CitationEvaluator.evaluate(conclusion)` — a deterministic pure function that
+      checks whether `citedUrls` is non-empty and each URL is well-formed. If any
+      conclusion is not grounded, the workflow calls `QuestionEntity.flagForReview`
+      (-> `NEEDS_REVIEW`) and records the list of failed `CitationEvalResult` items
+      on the entity. An operator then calls `POST /api/questions/{id}/approve` or
+      `reject` to resolve the review. Only a fully-grounded report drives
+      `QuestionEntity.complete` (-> `COMPLETED`) without human intervention.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block a researcher findings report with insufficient source citations
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: after-llm-response
+    enforcement: blocking
+    rationale: |
+      A researcher agent that gathers too few sources produces a findings report
+      that the synthesis agent cannot ground. An after-llm-response guardrail that
+      requires a minimum of two distinct source URLs per sub-topic findings report
+      catches sparse output before it enters the shared board and poisons the
+      downstream synthesis. Blocking at the response boundary means the
+      insufficient report never reaches `FindingsSubmitted` on the entity — the
+      task is instead recorded `BLOCKED` with the guardrail reason, and the
+      researcher returns to polling so another researcher can pick up the task once
+      it is released.
+    implementation: |
+      An after-llm-response guardrail registered on `ResearcherAgent` inspects the
+      raw `FindingsReport` before the workflow calls `ResearchTaskEntity.submitFindings`.
+      It refuses the response when `sources` contains fewer than two distinct URL
+      values. On refusal, `ResearcherWorkflow.researchStep` calls
+      `ResearchTaskEntity.block(reason)` so the task is recorded `BLOCKED` with
+      the guardrail reason; the researcher returns to polling for other work.
+      `OperatorControl`'s halted flag is also read inside the guardrail so that a
+      halted team blocks every in-flight response regardless of source count.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Citation-grounding eval per conclusion
+    mechanism: Eval event
+    implementation: on-decision-eval
+    source: —
+  - id: G1
+    label: Minimum-source guardrail on researcher output
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —

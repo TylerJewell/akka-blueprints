@@ -1,0 +1,102 @@
+# Eval Matrix for the cv-matcher-fair Akka sample.
+#
+# Employment screening is a high-risk use under the EU AI Act (Annex III, point 4),
+# so controls carry regulation anchors.
+
+schema_version: 1
+sample_id: cv-matcher-fair
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: sequential-pipeline
+  domain: hr-recruiting
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: S1
+    name: Redact special-category signals before scoring
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: blocking
+    rationale: >
+      CVs carry protected-class signals (name, photo reference, address, age,
+      gender markers) that bias matching. They must be stripped before any
+      scoring sees the profile.
+    implementation: >
+      MatchingWorkflow.sanitizeStep runs a deterministic Redactor over the
+      CvProfile, records each stripped value as a RedactedSignal on
+      CandidateEntity, and passes only the redacted profile to MatchingAgent.
+    regulation_anchors:
+      - framework: eu-ai-act
+        provision: Annex III(4) — employment, recruitment, and selection
+      - framework: gdpr
+        provision: Art. 9 — special categories of personal data
+
+  - id: E1
+    name: Periodic fairness drift watch across slices
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: >
+      Hiring AI requires ongoing fairness monitoring. Selection-rate parity
+      across demographic slices is the standard adverse-impact signal.
+    implementation: >
+      FairnessMonitor TimedAction runs every 60s, queries MatchesView for
+      MATCHED candidates, groups by slice, computes the selection-rate parity
+      ratio, and flags any slice below 0.8.
+    regulation_anchors:
+      - framework: eu-ai-act
+        provision: Art. 10 — data and data governance (bias monitoring)
+
+  - id: H1
+    name: Human-on-the-loop oversight of matches
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: system-level
+    rationale: >
+      A high-risk hiring use requires deployer runtime monitoring with a human
+      able to intervene on the AI output.
+    implementation: >
+      Matched candidates are released for review; POST /api/candidates/{id}/review
+      records reviewer oversight on CandidateEntity without blocking the pipeline.
+    regulation_anchors:
+      - framework: eu-ai-act
+        provision: Art. 14 — human oversight; Art. 26 — deployer obligations
+
+  - id: A1
+    name: Test-gate before deployment
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: >
+      A high-risk pipeline must not deploy without passing tests covering the
+      extract -> sanitize -> match -> review flow.
+    implementation: >
+      Maven test phase plus an integration test driving the full flow end-to-end
+      against the in-memory testkit, asserting redactions are non-empty.
+    regulation_anchors:
+      - framework: eu-ai-act
+        provision: Art. 9 — risk management system
+
+simplified_view:
+  - id: S1
+    name: Redact special-category signals
+    mechanism: "sanitizer · special-category"
+    short: Strip name/photo/address/age/gender before scoring.
+  - id: E1
+    name: Fairness drift watch
+    mechanism: "eval-periodic · drift-fairness-watch"
+    short: Selection-rate parity check across slices every 60s.
+  - id: H1
+    name: Human-on-the-loop
+    mechanism: "hotl · deployer-runtime-monitoring"
+    short: Reviewer monitors matches; can intervene.
+  - id: A1
+    name: Test gate
+    mechanism: "ci-gate · test-gate"
+    short: Full-flow tests must pass before deploy.

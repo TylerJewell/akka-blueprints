@@ -1,0 +1,70 @@
+schema_version: 1
+sample_id: multi-agent-eval-harness
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: E1
+    name: Record every scenario result as a continuous eval event
+    mechanism:
+      kind: eval-periodic
+      hook: on-decision-eval
+      flavor: continuous-accuracy
+    enforcement: non-blocking
+    rationale: |
+      Multi-agent systems degrade silently: individual agent responses look
+      plausible in isolation while aggregate quality drifts. Capturing a typed
+      ScenarioEvalRecorded event per judged scenario gives operators a continuous
+      quality stream — per-suite pass rate, score distribution, and the frequency
+      of CI gate activations — without adding instrumentation to the workflow itself.
+      Trend data accumulated over many runs is the primary signal for deciding when
+      to retrain or swap a specialist agent.
+    implementation: |
+      EvalSampler (TimedAction) fires every 60 s. It queries EvalRunsView.getAllRuns,
+      identifies scenarios that have been judged but do not yet have a matching
+      ScenarioEvalRecorded event, and calls EvalRunEntity.recordScenarioEval(
+      scenarioId, verdict, score, thresholdMet). The call is idempotent on
+      (runId, scenarioId). The EvalRunWorkflow also emits one ScenarioEvalRecorded
+      event on each terminal transition (RunPassed or RunFailed) carrying the
+      loop-level aggregateScore and ciGateBlocked flag.
+    regulation_anchors: []
+
+  - id: CI1
+    name: Block CI promotion when aggregate score falls below threshold
+    mechanism:
+      kind: ci-gate
+      hook: post-workflow-completion
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      An evaluation harness is only useful if its outcome can halt a deployment.
+      Without a hard gate, a team might observe a failing score, file a ticket,
+      and ship anyway. The CI gate converts the eval verdict into a first-class
+      deployment signal: a CIGateBlocked event on the SSE stream and a
+      ciGateBlocked flag on the run record give external CI pipelines an
+      unambiguous binary to poll or subscribe to before promoting an artifact.
+      The threshold is deployer-configured so teams can tune the bar without
+      modifying application code.
+    implementation: |
+      ciGateStep is a pure-function Workflow step that runs after passStep and
+      failStep. It reads finalScore from the EvalRunEntity state and compares it
+      against the run's passThreshold. If finalScore < passThreshold and
+      ciGateBlocked is not already true on the entity, the step calls
+      EvalRunEntity.recordCIGate(), which emits CIGateBlocked{runId, finalScore,
+      passThreshold, blockedAt} and sets ciGateBlocked = true on the run state.
+      External CI pipelines consume the SSE stream at GET /api/runs/sse or poll
+      GET /api/runs/{id} for the ciGateBlocked field. The step is idempotent:
+      a second invocation for the same runId is a no-op if the flag is already set.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Continuous per-scenario eval recorder
+    mechanism: Eval · periodic
+    implementation: on-decision-eval
+    source: —
+  - id: CI1
+    label: CI gate · score threshold block
+    mechanism: CI gate
+    implementation: post-workflow-completion
+    source: —

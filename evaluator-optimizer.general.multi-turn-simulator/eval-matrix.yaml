@@ -1,0 +1,98 @@
+schema_version: 1
+sample_id: multi-turn-simulator
+coordination_pattern: evaluator-optimizer
+domain: general
+
+controls:
+  - id: G1
+    name: Block policy-violating target responses before the evaluator runs
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      The simulator's purpose is to score a target agent's behavior — but if the target
+      agent's response contains a policy violation (system-prompt disclosure, prompt-injection
+      artifacts), allowing the EvaluatorAgent to score it as a normal turn masks the
+      violation behind a rubric score. A deterministic pre-evaluator guardrail catches
+      the violation, synthesizes a zero-score POLICY_VIOLATION turn verdict, and ensures
+      the session is flagged regardless of the rubric-based scoring for other turns.
+      This also prevents the evaluator model from being trained on policy-violating text
+      as implicit positive examples.
+    implementation: |
+      Wired as the `guardrailStep` of `SimulationWorkflow`, immediately after
+      `targetStep`. A pure-function scan checks `TargetResponse.text` for a fixed
+      set of sensitive-pattern keywords (e.g., `[SYSTEM]`, `<|im_start|>`,
+      `<|endoftext|>`). On a match, the step emits
+      `TurnGuardrailVerdictRecorded` with `verdict.passed = false` and
+      `reasonCode = "POLICY_VIOLATION"`, then synthesizes a `TurnVerdict` with
+      `outcome = POLICY_VIOLATION`, `overallScore = 0`, and `driftFlagged = true`.
+      The `EvaluatorAgent` is not called for that turn. The workflow continues
+      to the next turn or closes with `outcome = FLAGGED` if any turn was flagged.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record per-turn drift and fairness verdicts for downstream analysis
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      Automated simulators generate high-volume traffic against a target agent. Without
+      continuous per-turn recording, behavioral drift — a gradual shift in response
+      quality, tone, or policy adherence across sessions — is invisible until a human
+      reviewer catches it. Recording every turn's score distribution and drift flag as
+      a typed event gives operators a quality stream that supports trend analysis and
+      alerting without instrumenting the target agent directly.
+    implementation: |
+      `DriftSampler` (TimedAction) fires every 45 s. Queries
+      `SessionsView.getAllSessions`, finds turns that have a `TurnVerdictRecorded`
+      event but do not yet have a matching `DriftEvalRecorded` event, and calls
+      `SessionEntity.recordDriftEval(turnNumber, outcome, overallScore,
+      driftFlagged)`. The call is idempotent on `(sessionId, turnNumber)`.
+      The `SimulationWorkflow` also emits one `DriftEvalRecorded` event on the
+      terminal `SessionClosed` transition, carrying the session-level verdict.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Halt the turn loop gracefully at the configured turn ceiling
+    mechanism:
+      kind: halt
+      flavor: graceful-degradation
+    enforcement: system-level
+    rationale: |
+      Multi-turn dialog loops can exhaust compute budget or hang indefinitely if a goal
+      is never signaled complete. A configurable turn ceiling ensures the loop always
+      terminates. Rather than stopping abruptly, the halt mechanism closes the session
+      with a structured verdict, preserves every turn record and every evaluator score
+      for audit, and surfaces a `HALTED` outcome the UI renders distinctly from both
+      `COMPLETED` and `FLAGGED`. Operators can raise the ceiling in configuration
+      without changing code.
+    implementation: |
+      `SimulationWorkflow` reads `multi-turn-simulator.simulation.max-turns`
+      (default 10) at start. Before scheduling the next `actorStep`, it checks
+      `turnCount < maxTurns`. If the ceiling is hit, the workflow transitions to
+      `haltStep`, which calls `EvaluatorAgent.CLOSE_SESSION` on the turns accumulated
+      so far, then emits `SessionClosed` with `outcome = HALTED` and a structured
+      `haltReason` ("turn ceiling reached: N"). `defaultStepRecovery(maxRetries(2)
+      .failoverTo(haltStep))` ensures any unrecoverable agent or network failure
+      also lands in the same observable terminal state.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · policy-violation block
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Per-turn drift & fairness recorder
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —
+  - id: HT1
+    label: Halt at turn ceiling
+    mechanism: Halt
+    implementation: graceful-degradation
+    source: —

@@ -1,0 +1,136 @@
+schema_version: 1
+sample_id: sre-incident-responder
+coordination_pattern: planner-executor
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Vet every probe and remediation action before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      Incident response agents operate against live infrastructure. A probe
+      decision that targets an out-of-scope service or reads outside the fixture
+      boundary can pollute the investigation ledger with irrelevant or sensitive
+      data. A remediation action with an incorrect target, an overly broad scope,
+      or a CRITICAL impact rating can widen the incident rather than contain it.
+      Two deterministic guardrails — one for probes, one for remediation — catch
+      these cases before any agent executes, forcing the commander to revise
+      within the safety boundary.
+    implementation: |
+      `ProbeGuardrail.vet(ProbeDecision)` is called by `IncidentWorkflow`'s
+      `probeGuardrailStep` before each `dispatchProbeStep`. It enforces the
+      probe-kind allow-list and the fixture-path scope. `RemediationGuardrail.vet(
+      RemediationAction)` runs in `remediationGuardrailStep` before the approval
+      request is sent. It enforces the action-kind allow-list, blocks CRITICAL-
+      impact actions, and validates the target service name format. On rejection
+      from either guardrail, the workflow records a `ProbeBlocked` entry on
+      `IncidentEntity` and routes back to the investigation loop so the
+      `IncidentCommanderAgent` sees the block reason and revises.
+    regulation_anchors: []
+
+  - id: HT1
+    name: Require SRE approval before any remediation action executes
+    mechanism:
+      kind: hitl
+      hook: null
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Remediation actions in incident response — service restarts, deployment
+      rollbacks, traffic shifts — carry real risk of extended outage if applied
+      to the wrong target or at the wrong time. An agent can misread telemetry
+      or select a plausible but incorrect fix. Requiring a named SRE to review
+      the proposed action, the supporting evidence, and the estimated impact
+      before execution ensures that a human with context authorises every change
+      to production infrastructure. Rejection feeds back into the investigation
+      loop, preventing the agent from silently retrying a refused action.
+    implementation: |
+      After `IncidentCommanderAgent` emits a `RemediationAction`, `IncidentWorkflow`
+      records an `ApprovalRequested` event on `ApprovalEntity` (keyed by
+      `incidentId`) and transitions the incident to `AWAITING_APPROVAL`. The
+      `awaitApprovalStep` polls `ApprovalEntity.getDecision` with a 30-minute
+      timeout. The SRE submits a decision via `POST /api/incidents/{id}/approve`.
+      On `approved=true` the workflow continues to `executeRemediationStep`; on
+      `approved=false` it routes to `replanOrFailStep`, emitting `ApprovalRejected`
+      on `IncidentEntity` and feeding the rejection reason back to the commander.
+      Approval timeout transitions the incident to `UNRESOLVED`.
+    regulation_anchors: []
+
+  - id: HT2
+    name: Halt the workflow automatically when post-execution safety conditions fail
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      Guardrails and human approval cover the pre-execution window. But a
+      remediation that was correctly approved can still produce an unexpected
+      outcome — a rollback that triggers a cascade failure, a traffic shift that
+      moves 100% of load with no canary, a restart that induces a restart storm.
+      A post-execution evaluator detects these signals from the `ActionOutcome`
+      and stops the workflow immediately, before the commander can interpret the
+      broken outcome as a reason to propose a further (potentially more damaging)
+      action.
+    implementation: |
+      `SafetyEvaluator.evaluate(ActionOutcome)` runs in `IncidentWorkflow`'s
+      `safetyEvalStep` after every `executeRemediationStep`. It flags UNSAFE on
+      ROLLBACK_DEPLOYMENT outcomes containing "cascade" or "unrecoverable" in
+      `observedEffect`, on SHIFT_TRAFFIC outcomes reporting a 100% shift without
+      "canary" in `parameters`, and on RESTART_SERVICE outcomes whose `errorDetail`
+      contains "timeout" (restart-storm signal). On UNSAFE the workflow transitions
+      to `haltedStep`, emitting `IncidentHaltedAutomatic` with the failure detail,
+      and ends the workflow with the incident in `HALTED`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score investigation quality and remediation accuracy after every incident closes
+    mechanism:
+      kind: eval-event
+      hook: null
+      flavor: on-incident-reporter
+    enforcement: non-blocking
+    rationale: |
+      Incident response agents accumulate latent errors that are invisible
+      in a single run — a bias toward certain probe kinds, a tendency to
+      propose high-impact actions before exhausting lower-risk options,
+      systematically missing a class of failure signal. A post-incident scorer
+      that runs against the completed investigation and remediation ledgers
+      surfaces these patterns per-incident and across a fleet of incidents,
+      enabling operators to tune agent prompts and guardrail thresholds before
+      the same gap surfaces in a real outage.
+    implementation: |
+      After `IncidentEntity` reaches `MITIGATED` or `UNRESOLVED`,
+      `IncidentWorkflow`'s `scoreIncidentStep` calls `IncidentCommanderAgent`
+      in `SCORE_INCIDENT` mode. The agent reads the full investigation ledger,
+      the remediation ledger, and the post-incident report, then returns an
+      `EvalScore { investigationCoverageScore, hypothesisAccuracyScore,
+      timeToMitigateMinutes, findings }`. The workflow emits `EvalScoreRecorded`
+      on `IncidentEntity`, which stores the score. The App UI renders the eval
+      score badge on the expanded incident row.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Probe + remediation guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call (ProbeGuardrail + RemediationGuardrail)
+    source: —
+  - id: HT1
+    label: SRE approval gate
+    mechanism: HITL
+    implementation: application (ApprovalEntity + awaitApprovalStep)
+    source: —
+  - id: HT2
+    label: Automatic safety halt
+    mechanism: Halt
+    implementation: automatic-safety-halt (SafetyEvaluator post-execution check)
+    source: —
+  - id: E1
+    label: Post-incident eval scorer
+    mechanism: Eval-event
+    implementation: on-incident-reporter (SCORE_INCIDENT mode on IncidentCommanderAgent)
+    source: —

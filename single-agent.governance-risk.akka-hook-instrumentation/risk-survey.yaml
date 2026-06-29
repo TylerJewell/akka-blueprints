@@ -1,0 +1,81 @@
+schema_version: 1
+sample_id: hook-instrumentation
+
+# ---- Purpose ----
+purpose:
+  primary_function: agent-activity-governance
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: operational-execution
+  user_type: platform-operator-or-developer
+
+# ---- Data ----
+data:
+  inputs:
+    - task-descriptions
+    - tool-registry-configuration
+    - tool-call-inputs-and-outputs
+    - assembled-llm-prompts
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    credentials-or-secrets: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  credential_handling: before-llm-call-hook-strips-before-model-sees-them
+
+# ---- Decisions ----
+decisions:
+  authority_level: operational-execution
+  decision_subject: tool-call-allowance-and-prompt-content
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: non-reversible-tool-calls-may-have-side-effects
+  reviewer_reads_every_outcome_before_action: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Failure ----
+failure:
+  blast_radius: single-task
+  failure_modes:
+    - blocked-tool-call-with-no-recovery-path
+    - false-positive-credential-redaction-degrades-prompt
+    - after-tool-call-redaction-removes-needed-data
+    - hook-chain-misconfiguration-passes-all-calls
+    - guardrail-bypass-via-tool-name-aliasing
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: TO_BE_COMPLETED_BY_DEPLOYER
+  human_on_loop: true
+  reviewer_role: platform-operator
+  hook_log_audit_available: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - registered-tool-invocations
+  rate_limit_per_observation: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  tool-registry-permitted-for-ai-invocation: TO_BE_COMPLETED_BY_DEPLOYER

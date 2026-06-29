@@ -1,0 +1,45 @@
+schema_version: 1
+sample_id: nexshift
+coordination_pattern: single-agent
+domain: hr-recruiting
+
+controls:
+  - id: G1
+    name: Validate every shift assignment before it is written
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: constraint-validator
+    enforcement: blocking
+    rationale: |
+      Workforce scheduling errors compound quickly: a single double-booking
+      cascades into an uncovered shift elsewhere; an assignment that breaches
+      a weekly hour cap exposes the deployer to labour-law liability; placing
+      an unqualified employee in a role creates a patient-safety or
+      operational-safety gap. Because the agent writes assignments directly
+      to the entity, the right intercept is the tool call itself — validating
+      before the write ensures the entity log never contains an invalid
+      assignment, even if the LLM proposes one.
+    implementation: |
+      `AssignmentGuardrail` is registered on `NexShiftAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook for
+      the `AssignShift` tool. On each candidate call it (1) confirms the
+      target employee's `availabilityWindows` overlap the shift's start and
+      end times, (2) checks that no other `ShiftAssignment` in the current
+      run's draft already occupies an overlapping window for that employee,
+      (3) verifies that adding the shift's duration to
+      `employee.hoursScheduledThisWeek` would not exceed `employee.weeklyHoursCap`,
+      and (4) confirms that `employee.qualifications` is a superset of
+      `shift.requiredQualifications`. On any failure it returns a structured
+      `Guardrail.reject(...)` naming the specific check and the offending
+      field; the agent receives the rejection as the tool's output and may
+      retry with a different employee. `ScheduleEntity.recordAssignment` is
+      only reached for calls that pass all four checks.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Assignment constraint guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

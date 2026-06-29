@@ -1,0 +1,41 @@
+schema_version: 1
+sample_id: personalized-shopper
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Strip shopper PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Shopper preference profiles carry a direct set of personal identifiers — name,
+      email address, phone number, loyalty-card number, and postal address — alongside
+      preference signals that are genuinely useful to a recommendation model. Routing
+      the raw profile to an LLM exposes those identifiers to a third-party model API
+      and creates a data-handling risk disproportionate to the value added (the model
+      does not need to know the shopper's name to rank products by category and brand
+      preference). Stripping PII before the agent call removes that risk at the
+      infrastructure level and is not reversible by the model or by an intermediary.
+    implementation: |
+      `ProfileSanitizer` Consumer subscribes to `SessionStarted` events emitted by
+      `ShoppingSessionEntity`. It strips the four PII fields on `PreferenceProfile`
+      (shopperName, shopperEmail, shopperPhone, loyaltyCardNumber) and applies a
+      regex+heuristic pass over `freeTextNote` to catch identifiers embedded in
+      natural language. Outputs a `SanitizedProfile` containing only preference
+      signals (categories, brands, price range, excluded categories, scrubbed free
+      text) plus the list of PII categories stripped. Calls
+      `ShoppingSessionEntity.attachSanitized(sanitized)`. `RecommendationWorkflow
+      .recommendStep` then passes `sanitized` as the `ShoppingAdvisorAgent` task
+      attachment; the raw PII fields remain accessible only via `profile.*` on the
+      entity, never on the wire to the model.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII stripping before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

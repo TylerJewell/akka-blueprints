@@ -1,0 +1,62 @@
+# Eval Matrix for the graphrag-assistant Akka sample.
+#
+# Schema note: framework/schema/control.schema.yaml requires regulation_anchors on
+# each control. This is a research-intel sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list
+# on every control.
+
+schema_version: 1
+sample_id: graphrag-assistant
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: single-agent
+  domain: research-intel
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Block answers not grounded in retrieved context
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      A retrieval-augmented answer must rest on the documents it retrieved. An
+      answer whose claims are not supported by the retrieved context is a
+      fabrication risk and must not reach the user.
+    implementation: >
+      A before-agent-response guardrail on ResearchAgent compares the drafted
+      Answer against the RetrievalResult chunks. If grounding is insufficient, the
+      guardrail blocks the response; QueryEndpoint calls QueryEntity.block and the
+      query terminates in BLOCKED with a grounding reason.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub PII from corpus chunks before prompt injection
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: non-blocking
+    rationale: >
+      Indexed documents can carry personal data. Personal data in a retrieved
+      chunk should not be copied into the model prompt or echoed back in the
+      answer.
+    implementation: >
+      A sanitizer runs over each RetrievalResult chunk inside QueryEndpoint.ask
+      before the chunks are handed to ResearchAgent, redacting email addresses,
+      phone numbers, and similar PII patterns so the prompt and the returned
+      answer carry redacted text only.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Grounding guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block answers not supported by retrieved context.
+  - id: S1
+    name: PII sanitizer
+    mechanism: "sanitizer · pii"
+    short: Redact PII from corpus chunks before the prompt.

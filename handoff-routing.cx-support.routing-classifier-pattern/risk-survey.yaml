@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: routing-classifier-pattern
+
+# ---- Purpose ----
+purpose:
+  primary_function: customer-support
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: customer-reply
+  user_type: customer-support-agent
+
+# ---- Data ----
+data:
+  inputs:
+    - inbound-customer-messages
+  data_classes:
+    pii: false
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: false   # no sanitizer in this baseline; deployer should add one if messages carry PII
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous-with-guardrail
+  decision_subject: customer
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible-until-published
+  routing_decisions_made_by_ai: true
+  routing_decisions_validated_by_guardrail: true
+  reply_decisions_made_by_ai: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-customer
+  failure_modes:
+    - wrong-route-decision
+    - route-bypass              # classifier returns route not in allowed set
+    - inappropriate-reply-content
+    - refund-claim-fabrication
+    - invented-legal-claim
+    - low-confidence-misrouting
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: customer-support-supervisor
+  reviewer_must_approve_every_outgoing: false
+  reviewer_must_unblock_reply_failures: true
+  route_blocked_messages_require_operator_action: false   # ROUTE_BLOCKED is terminal; no human override path
+  audit_frequency: weekly
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_message: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,66 @@
+schema_version: 1
+sample_id: workflow-observability
+coordination_pattern: continuous-monitor
+domain: governance-risk
+
+controls:
+  - id: M1
+    name: Export every agent span to the configured observability backend
+    mechanism:
+      kind: hotl
+      hook: post-step-completion
+      flavor: deployer-runtime-monitoring
+    enforcement: non-blocking
+    rationale: |
+      AI governance frameworks increasingly require deployers to demonstrate
+      ongoing runtime visibility into how their agents behave — what they process,
+      how long they take, and whether errors are occurring. This system surfaces
+      that visibility without coupling it to agent code: every span is captured
+      as a first-class event on WorkloadItemEntity and forwarded by TraceExporter
+      to whichever backend the deployer has configured. Because export failure is
+      non-blocking, a transient backend outage does not interrupt the processing
+      pipeline — but the structured log ensures nothing is silently lost.
+    implementation: |
+      `TraceExporter` Consumer subscribes to `SpanEmitted` events on
+      `WorkloadItemEntity`. For each span, it reads the `TRACE_BACKEND` env var
+      and dispatches: Arize Phoenix (OTLP-JSON POST to `ARIZE_PHOENIX_URL`),
+      Langfuse (batch ingestion POST to `LANGFUSE_HOST`), or built-in structured
+      log (default). The HTTP client uses a non-blocking fire-and-forget pattern;
+      failures are logged at WARN level but do not propagate. The `ObservabilityWorkflow`
+      emits `SpanEmitted` events with full timing, token counts, and status for both
+      the `RouterAgent` call and the `SummaryAgent` call.
+    regulation_anchors: []
+
+  - id: E1
+    name: Periodic quality evaluation of completed workload items
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      Trace data tells you how the system ran; eval data tells you whether it ran
+      well. For a governance-risk workload (policy-doc review, audit-trail digest,
+      incident summary), a degradation in summary quality or routing accuracy is
+      a risk signal the deployer needs to catch before it affects downstream decisions.
+      Periodic eval provides this signal on a cadence that is decoupled from per-item
+      processing, so it does not add latency to the critical path.
+    implementation: |
+      `EvalSampler` TimedAction fires every 30 minutes. It queries `ObservabilityView`
+      for up to 5 EXPORTED items that have no `evalScore`, oldest-first. For each,
+      it calls `EvalJudge` (an AutonomousAgent with a 1–5 rubric covering relevance,
+      factual grounding, and routing accuracy) and emits `EvalCompleted` carrying
+      the score and a one-sentence rationale. The score is surfaced on the App UI
+      tab's item detail pane and included in the `/api/traces/{id}` response.
+    regulation_anchors: []
+
+simplified_view:
+  - id: M1
+    label: Agent span export
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring
+    source: —
+  - id: E1
+    label: Completed-item eval
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: ghostwriter
+coordination_pattern: single-agent
+domain: content-editorial
+
+controls:
+  - id: S1
+    name: Redact PII from writing samples before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Writing samples that employees or teammates share as style references
+      routinely contain real names, work email addresses, EINs, phone numbers,
+      and postal addresses — information the author included naturally in their
+      drafts but that was never intended to leave the organisation's boundary.
+      Feeding these identifiers to a model creates an unnecessary leakage vector:
+      the model could echo them verbatim into the generated draft, surfacing them
+      in a publication channel. Redaction runs in a Consumer between raw submission
+      and the agent invocation; the raw samples are preserved on the entity for
+      audit but are never part of any model input.
+    implementation: |
+      `CorpusSanitizer` Consumer subscribes to `BriefSubmitted` events emitted by
+      `DraftEntity`. For each `VoiceSample` in the brief, it runs a pipeline of
+      regex stages (emails, phone numbers, EIN/SSN-like, payment-card-like tokens)
+      followed by a heuristic stage (person names, postal addresses, account-id
+      tokens). Outputs a `SanitizedCorpus` carrying a `SanitizedSample` per source
+      sample plus the union list of PII categories found. Calls
+      `DraftEntity.attachSanitizedCorpus(sanitizedCorpus)`. `DraftWorkflow.draftStep`
+      then passes each `SanitizedSample.redactedBody` as a separate
+      `GhostwriterAgent` task attachment; the raw payload remains accessible only
+      via `brief.samples[].rawBody` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block drafts that reproduce source text or leak redaction markers
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: voice-impersonation-and-leak-check
+    enforcement: blocking
+    rationale: |
+      A ghostwriter that reproduces long verbatim runs from the source corpus is
+      not producing original content — it is re-publishing the voice owner's work
+      under a different context, which raises attribution and consent concerns. Equally,
+      a draft that contains `[REDACTED-EMAIL]` or `[REDACTED-SSN]` tokens would
+      publish sanitizer artefacts to a public channel, making the redaction visible
+      and potentially hinting at the underlying data. The after-llm-response hook is
+      the correct cut: the check runs after the model responds but before the result
+      is committed to the entity log, so a failing draft never persists and the agent
+      loop retries within its iteration budget.
+    implementation: |
+      `DraftOutputGuardrail` is registered on `GhostwriterAgent` via the agent's
+      guardrail-configuration block, bound to the `after-llm-response` hook. On each
+      candidate response it (1) scans `DraftResult.draftBody` for any contiguous run
+      of 40 or more characters that appears verbatim in any of the sanitized corpus
+      samples — a match is a verbatim-reproduction failure; (2) checks that no
+      `[REDACTED-*]` token from the sanitizer appears in `draftBody`; (3) asserts
+      `fidelityScore` is in the range 0–100; (4) asserts `draftBody` is non-empty.
+      On any failure returns a structured rejection naming the failed check and, for
+      verbatim-reproduction failures, the matching substring; the agent loop consumes
+      one of its 3 iterations and retries. Passing responses flow through to
+      `draftStep`'s `recordDraft` call.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Voice-impersonation and leak guardrail
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —

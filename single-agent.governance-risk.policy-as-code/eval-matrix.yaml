@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: policy-as-code
+coordination_pattern: single-agent
+domain: governance-risk
+
+controls:
+  - id: G1
+    name: Block disallowed tool calls before they execute
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-allowlist
+    enforcement: blocking
+    rationale: |
+      A policy-enforcement agent that can freely call arbitrary external tools is a
+      contradiction: the system is supposed to apply encoded rules, not reach out to
+      unknown data sources that could supply policy-bypassing context. The before-tool-call
+      hook is the right cut point — it intercepts every outbound tool call before any
+      network or registry contact is made, validates the tool name against a declared
+      allowlist, and returns a structured rejection to the agent if the call is not
+      permitted. The agent then must reason from the attached change payload and the
+      permitted tools only, which is exactly the constraint a policy-as-code system should
+      enforce on its own decision-making component.
+    implementation: |
+      `ToolCallGuardrail` is registered on `PolicyEnforcementAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. It maintains
+      an allowlist set containing `lookup-policy-metadata` and `query-resource-registry`.
+      For each tool call initiated by the agent, it checks the tool name against the set.
+      Permitted calls pass through unchanged. Disallowed calls return
+      `Guardrail.reject(...)` carrying the tool name and a structured reason string; the
+      agent receives this as a tool-call error and continues without executing the blocked
+      call. The `EvaluationWorkflow.enforceStep` step timeout of 60 s covers the worst
+      case where the agent needs multiple permitted tool calls before producing a decision.
+    regulation_anchors: []
+
+  - id: C1
+    name: Block deployment when policy decision is DENY or CRITICAL
+    mechanism:
+      kind: ci-gate
+      flavor: configuration-gate
+    enforcement: build-gate
+    rationale: |
+      Producing a policy decision is only useful if downstream deployment steps must
+      honour it. Without a gate, a DENY decision is advisory and can be silently bypassed
+      by a CI pipeline that does not check the result. The CI gate enforces the
+      hard constraint: any change whose `PolicyDecision.outcome` is DENY, or that
+      carries any violation with `severity == CRITICAL`, sets `GateStatus = BLOCKED` and
+      causes the `GET /api/changes/{id}/gate` endpoint to return a non-OK gate. CI
+      pipeline steps poll this endpoint before proceeding; a BLOCKED gate must cause the
+      pipeline step to fail. This makes policy enforcement a structural prerequisite of
+      deployment, not a recommendation.
+    implementation: |
+      `GateEvaluator` runs inside `EvaluationWorkflow.gateStep`, fired immediately after
+      `DecisionRecorded` lands. The evaluator is deterministic and rule-based (no LLM call
+      — keeping the single-agent invariant honest). It reads `PolicyDecision.outcome` and
+      `PolicyDecision.violations`: if outcome is `DENY` or any `violation.severity` is
+      `CRITICAL`, the gate is set to `BLOCKED` with a reason string naming the triggering
+      condition; otherwise it is `OPEN`. `GateEvaluated` is emitted and lands on
+      `ChangeRequestEntity`. `PolicyEndpoint` exposes a dedicated `/api/changes/{id}/gate`
+      endpoint returning `{changeId, gateStatus, reason}` for CI system polling. A BLOCKED
+      gate is permanent for that change; there is no re-evaluation path — the deployer
+      must submit a revised change.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-call allowlist guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: C1
+    label: CI gate on DENY / CRITICAL
+    mechanism: CI gate
+    implementation: configuration-gate
+    source: —

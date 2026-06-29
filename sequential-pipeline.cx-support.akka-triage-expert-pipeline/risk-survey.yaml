@@ -1,0 +1,80 @@
+schema_version: 1
+sample_id: triage-expert-multi-agent-workflow
+
+# ---- Purpose ----
+purpose:
+  primary_function: cx-support-triage-and-recommendation-pipeline
+  sector: cx-support
+  decisions_surface: recommend-only
+  user_type: customer-or-support-agent
+
+# ---- Data ----
+data:
+  inputs:
+    - customer-supplied-issue-description
+    - in-process-customer-account-data
+    - in-process-knowledge-base-articles
+  data_classes:
+    pii: true            # name, email, accountId, phone collected during triage
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: cx-support-recommendation
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  support_agent_reviews_recommendation_before_customer_contact: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-support-case
+  failure_modes:
+    - guardrail-blocked-recommendation
+    - pii-leak-across-agent-boundary
+    - uncited-recommendation
+    - category-mismatch
+    - guardrail-bypass-on-retry-exhaustion
+    - incomplete-pii-scrub
+    - hallucinated-article-id
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reader_role: support-agent
+  support_agent_reviews_before_customer_contact: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_case: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 2
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  pii-minimization-enforced-at-agent-boundary: true   # PiiSanitizer in sanitizeStep

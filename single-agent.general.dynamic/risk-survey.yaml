@@ -1,0 +1,71 @@
+# Risk Survey for the dynamic-route-agent Akka sample.
+#
+# Pre-filled answers reflect what the sample's surface implies. Deployer-specific
+# answers are TO_BE_COMPLETED_BY_DEPLOYER and should be filled in before this
+# survey is used to materialize a deployer Eval Matrix.
+
+schema_version: 1
+sample_id: dynamic-route-agent
+
+purpose:
+  primary_function: Summarize or translate user-supplied text using one generic agent configured per request.
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: advisory-only
+  user_type: TO_BE_COMPLETED_BY_DEPLOYER
+
+data:
+  inputs:
+    - route selection (SUMMARIZE or TRANSLATE)
+    - free-text input
+    - target language (translate route only)
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+decisions:
+  authority_level: recommend-only
+  decision_subject: text transformation requested by the user
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully reversible (output is advisory text, nothing is acted on)
+
+failure:
+  blast_radius: single-user
+  failure_modes:
+    - low-quality summary or translation
+    - blocked request from an over-strict guardrail
+    - empty or truncated output
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_gpai: true
+  model_foundation: true
+  model_version_pinned: false
+  external_tool_calls: []
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+    content-generation: true
+    synthetic-media: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  declared_frameworks: TO_BE_COMPLETED_BY_DEPLOYER

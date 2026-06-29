@@ -1,0 +1,41 @@
+schema_version: 1
+sample_id: async-agent-endpoint
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Reject policy-violating tool calls before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: sandbox-policy-enforcer
+    enforcement: blocking
+    rationale: |
+      A code-running agent by its nature generates and executes arbitrary Python. Without
+      a pre-execution check, a single miscalibrated generation could invoke a shell
+      command, open a network socket, or spawn a subprocess — all of which escape the
+      intended sandbox. The before-tool-call hook is the correct interception point: the
+      check runs after the agent has committed to a tool call but before the tool runs,
+      so a violation is caught with zero side-effects. The agent can then rewrite the
+      code within its iteration budget and produce a compliant result.
+    implementation: |
+      `SandboxGuardrail` is registered on `CodeRunnerAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      `execute_code` tool call it scans the `code` argument with a pattern matcher
+      that flags: any import of `subprocess` or `socket`, any call to `os.system`,
+      any use of the built-in `__import__` function with a dynamic argument, and any
+      `eval` or `exec` call whose argument is not a string literal. On a match it
+      returns `Guardrail.reject(PolicyViolation{construct: "<name>"})`. The agent loop
+      increments its iteration counter and retries. Compliant calls pass through to
+      the tool immediately. If all three iterations are exhausted without a compliant
+      call, `AgentRunWorkflow.runStep` fails over to the error step and
+      `AgentRunEntity` transitions to `FAILED` with `FailureKind.GUARDRAIL_EXHAUSTED`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Sandbox policy check before tool execution
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

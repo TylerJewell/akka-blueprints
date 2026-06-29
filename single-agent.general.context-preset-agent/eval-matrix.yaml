@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: context-preset-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Block disallowed tool calls before they execute
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: role-based-tool-gate
+    enforcement: blocking
+    rationale: |
+      The agent adapts its behaviour based on the caller's preset (environment × role),
+      but the model itself cannot be trusted to self-police which tools it reaches for.
+      Without an enforcement point at the tool-call boundary, a model that over-reaches
+      could invoke adminActionTool for a guest caller, execute privileged operations in
+      production that a dev-only diagnostic tool should never touch, or silently ignore
+      the role constraint under unusual prompting. The before-tool-call hook intercepts
+      every attempted tool invocation before the tool executes, compares the tool name
+      against the resolved PresetDefinition.allowedTools list, and rejects calls that
+      are outside it. The rejection is structured so the agent receives a clear
+      permission-denied signal, can explain it to the caller, and does not retry the
+      blocked call — the task still completes, with the blocked attempt recorded in the
+      tool call log for audit.
+    implementation: |
+      `ToolGatingGuardrail` is registered on `ContextPresetAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      attempted tool invocation it (1) retrieves the resolved `PresetDefinition` from
+      the task context, (2) checks whether the tool name is present in
+      `PresetDefinition.allowedTools`, and (3) if not, returns
+      `Guardrail.reject(structured-error)` identifying the tool name and the active role.
+      The agent loop receives the rejection as a permission-denied signal, generates an
+      explanation for the caller, and proceeds to return `PresetRequestResult` with the
+      blocked entry in `toolCallLog` (status = BLOCKED). Passing tool calls are forwarded
+      normally. The block never prevents the task from completing — it only constrains
+      which side-effects the agent can trigger.
+    regulation_anchors: []
+
+  - id: C1
+    name: Validate preset configuration before build promotion
+    mechanism:
+      kind: ci-gate
+      flavor: configuration-gate
+    enforcement: build-gate
+    rationale: |
+      Request Context Presets define which model the agent uses, which tools it may call,
+      and what instruction context it receives — three axes of behaviour in a single JSON
+      file. A typo in `environment` (e.g. "production" instead of "prod"), a missing
+      `allowedTools` array, or an unsupported `modelId` would silently reach the running
+      agent and produce undefined behaviour: wrong model pricing, unexpected tool access,
+      or a runtime crash when the agent tries to resolve a preset that doesn't validate.
+      Catching these at build time, before the artifact is promoted to any environment,
+      closes the gap between authoring a preset and deploying one.
+    implementation: |
+      `tools/validate-presets.sh` iterates over every `src/main/resources/presets/*.json`
+      file and validates: all six required fields are present (`presetId`, `environment`,
+      `role`, `modelId`, `allowedTools`, `instructionAddendum`); `environment` is in
+      `{dev, staging, prod}`; `role` is in `{admin, guest}`; `modelId` is in the approved
+      model list `{claude-sonnet-4-6, gpt-4o, gemini-2.5-flash, mock}`; `allowedTools` is
+      a non-null array. The script exits non-zero with a human-readable error on any
+      violation. The Maven `pom.xml` wires it as a `validate` lifecycle phase via
+      `exec-maven-plugin` — `mvn package` (and therefore `/akka:build`) cannot produce
+      an artifact from a tree containing invalid preset files.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Role-based tool gate
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: C1
+    label: Preset schema validation
+    mechanism: CI gate
+    implementation: configuration-gate
+    source: —

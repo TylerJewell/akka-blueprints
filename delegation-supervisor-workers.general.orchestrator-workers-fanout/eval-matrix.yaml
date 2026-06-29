@@ -1,0 +1,44 @@
+# Eval Matrix for the orchestrator-workers-fanout Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (general domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: orchestrator-workers-fanout
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Validate the dynamic execution plan before dispatching workers
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: plan-validation
+    enforcement: blocking
+    rationale: >
+      The orchestrator generates an execution plan at runtime whose content cannot be
+      fully anticipated at design time. Validating the plan before any worker is
+      dispatched catches structurally malformed plans, out-of-scope sub-task instructions,
+      and instruction-injection attempts before they consume worker capacity or produce
+      outputs that require downstream remediation.
+    implementation: >
+      A before-agent-invocation guardrail runs in TaskWorkflow.planGuardrailStep
+      immediately after TaskOrchestrator returns an ExecutionPlan. The step checks that
+      every SubTask references a known workerRole (WriterWorker or AnalyzerWorker) and
+      that no instruction string contains disallowed patterns. On failure the workflow
+      calls TaskRequestEntity.block and the task enters BLOCKED without invoking either
+      worker.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Execution plan guardrail
+    mechanism: "guardrail · before-agent-invocation"
+    short: Block a task whose runtime plan is malformed or out of scope before workers run.

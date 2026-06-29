@@ -1,0 +1,66 @@
+schema_version: 1
+sample_id: support-multi-agent
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block specialist drafts that violate the support-policy rubric
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-rubric
+    enforcement: blocking
+    rationale: |
+      A three-specialist system amplifies the surface area for out-of-policy responses:
+      a billing specialist that fabricates a refund timeline, a technical specialist that
+      strays into medical advice, or an account specialist that echoes a [REDACTED] token
+      all represent distinct failure modes. Because the same guardrail check applies to
+      every specialist's draft before it reaches the customer, the policy boundary is
+      enforced consistently regardless of which routing branch fired. The customer-facing
+      channel means a blocked draft is always preferable to a published policy violation.
+    implementation: |
+      `DraftGuardrail` is a typed Agent whose system prompt encodes the policy rubric.
+      `SupportWorkflow.guardrailStep` invokes it with the `SanitizedCase` and whichever
+      specialist's `Resolution` draft arrived. The agent returns
+      `GuardrailVerdict { allowed, violations, rubricVersion }`. On `allowed=false` the
+      workflow emits `ResolutionBlocked` (terminal `BLOCKED`) and the operator can either
+      unblock via `POST /api/cases/{id}/unblock` or leave the case blocked for escalation.
+      The step timeout is 20 s with two retries before falling through to the error path.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Customer support requests arriving via email, chat, web-form, and phone consistently
+      carry personally identifiable information — email addresses, phone numbers,
+      payment-card numbers, and account identifiers — that no LLM component needs to
+      perform its role. The router only needs the semantic content of the request to pick
+      a specialist; the specialists only need the nature of the problem to draft a
+      response. Redacting before any agent call means that even a prompt-injection attempt
+      embedded in the body cannot exfiltrate raw PII through the model's output.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `TicketQueue` events. For each
+      `InboundCaseReceived` it runs a regex stage (well-known email / phone patterns,
+      Luhn-aware card-number match, `ACCT-\w+` / `CUST-\d+` token patterns) and a
+      heuristic stage (greeting-position names, address-shaped lines), produces a
+      `SanitizedCase` carrying the redacted text plus the list of PII categories found,
+      and calls `CaseEntity.registerIncoming` then `attachSanitized`. The categories
+      list is kept for audit; only the redacted text is passed to the agents downstream.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-response policy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

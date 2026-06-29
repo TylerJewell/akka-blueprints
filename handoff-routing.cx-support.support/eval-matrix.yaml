@@ -1,0 +1,90 @@
+schema_version: 1
+sample_id: support-handoff
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound support requests routinely carry emails, phone numbers, payment-card
+      numbers, order ids, and account ids. Neither the triage classifier nor the
+      specialists need any of it to do their jobs. Redaction happens inside a
+      Consumer before the request enters the workflow, so no LLM call ever sees
+      raw identifiers.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `RequestQueue` events. For each
+      `InboundRequestReceived` it runs a regex stage (well-known email / phone
+      patterns, Luhn-aware card-number match, `ORD-\d+` / `ACCT-\w+` token
+      patterns) and a heuristic stage (greeting-position names, address-shaped
+      lines), produces a `SanitizedRequest` carrying the redacted text plus the
+      list of categories found, and calls `TicketEntity.registerIncoming` then
+      `attachSanitized`. The categories list is kept for audit; only the
+      redacted text is passed to the agents.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block specialist drafts that violate the support-policy rubric
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-rubric
+    enforcement: blocking
+    rationale: |
+      A specialist agent can return a draft whose fields are well-formed but
+      whose content is policy-violating — promising a specific refund timeline outside the published
+      SLA, giving medical or legal advice outside its scope, or echoing a
+      `[REDACTED]` token. The before-agent-response guardrail checks the draft
+      against a rubric and blocks it before it reaches the user.
+    implementation: |
+      `ResponseGuardrail` is a typed Agent. `SupportWorkflow.guardrailStep`
+      invokes it with the `SanitizedRequest` and the specialist's `Resolution`
+      draft. The agent returns `GuardrailVerdict { allowed, violations,
+      rubricVersion }`. On `allowed=false` the workflow emits `ResolutionBlocked`
+      (terminal `BLOCKED`) and the operator can either unblock via
+      `POST /api/tickets/{id}/unblock` or leave the ticket blocked.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every triage decision inline
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The routing decision is the most consequential step of the handoff: a
+      mis-routed ticket gets the wrong specialist's response style and rubric.
+      An on-decision eval gives a continuous, per-ticket signal independent of
+      the operator's spot checks — and surfaces in the UI as a per-ticket
+      score chip.
+    implementation: |
+      `TriageEvalScorer` Consumer subscribes to `TicketEntity` events. On every
+      `TriageDecided` it calls `TriageJudge` (typed Agent) with the
+      `SanitizedRequest` and the `TriageDecision`. The judge returns
+      `TriageScore { score: 1–5, rationale }`. The Consumer then calls
+      `TicketEntity.recordTriageScore` which emits `TriageScored`. The score is
+      non-blocking — a low score does not change the workflow flow; it surfaces
+      on the App UI tab and (in a deployed setting) would feed a system-level
+      alert.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Before-response policy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision triage eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

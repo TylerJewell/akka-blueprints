@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: booking-support-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: customer-support-booking-management
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: full-execution
+  user_type: customer
+
+# ---- Data ----
+data:
+  inputs:
+    - customer-natural-language-messages
+    - booking-records
+    - session-history
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: true
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: full-execution
+  decision_subject: customer-booking
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+  reviewer_reads_every_verdict_before_action: false
+
+# ---- Failure ----
+failure:
+  blast_radius: single-customer-booking
+  failure_modes:
+    - cross-customer-booking-access
+    - hallucinated-booking-detail
+    - pii-leakage-via-llm
+    - double-cancel
+    - unauthorized-cancellation-of-non-flexible-fare
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: customer-service-supervisor
+  reviewer_must_read_verdict_before_action: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - booking-lookup
+  rate_limit_per_session: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  booking-data-origin-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER

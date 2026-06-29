@@ -1,0 +1,40 @@
+schema_version: 1
+sample_id: rewoo-fixed-plan
+coordination_pattern: planner-executor
+domain: general
+
+controls:
+  - id: G1
+    name: Vet every tool call against an allow-list before it executes
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      ReWOO's distinguishing property is that the plan is written in full before
+      any tool runs. This makes the plan inspectable but does not make individual
+      tool calls safe — the Planner may have composed an inputExpression that
+      resolves, after #En substitution, into a path traversal, a shell injection,
+      or a request to an untrusted host. The guardrail is the only enforcement
+      point between the resolved input and the tool simulation; it must be
+      evaluated on the fully-resolved input (not the raw expression) so that
+      indirect references cannot bypass policy checks.
+    implementation: |
+      `ToolCallGuardrail.vet(PlanStep step, String resolvedInput)` runs in
+      `QueryWorkflow`'s `guardrailStep` between `resolveStep` and `executeStep`.
+      It enforces four per-tool-kind policies: WEB_SEARCH inputs must name only
+      hosts in the allow-list (akka.io, doc.akka.io, github.com); FILE_READ
+      paths must be under `sample-data/files/`; CODE_EVAL and CALCULATE
+      expressions must not contain shell metacharacters and must not reference
+      paths outside `/sandbox/`. On any rejection the workflow emits `StepBlocked`
+      on `QueryEntity` and transitions the query to `FAILED` — there is no replan
+      budget in this pattern.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-call guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call (resolved-input vetter)
+    source: —

@@ -1,0 +1,52 @@
+schema_version: 1
+sample_id: content-creator-flow
+coordination_pattern: composite-multi-team
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Block off-brand content before it reaches a campaign
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: |
+      The three writer agents produce public-facing content. Anything off-brand
+      or unsafe must be stopped before it is committed to the campaign and
+      surfaced in the public view.
+    implementation: |
+      ContentWorkflow.reviewStep calls BrandReviewer (Agent) with the topic and
+      all three outputs. A BrandVerdict with passed=false drives
+      CampaignEntity.recordReviewBlocked, moving the campaign to BLOCKED and
+      withholding the outputs from CampaignsView consumers.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score each completed campaign against brand guidelines
+    mechanism:
+      kind: eval-event
+      hook: ~
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Passing brand review is a floor, not a quality bar. A decision-time
+      evaluation records how well the generated content matches brand
+      guidelines so quality is visible in the UI and trackable over time.
+    implementation: |
+      After BrandReviewPassed, ContentWorkflow.evaluateStep calls
+      QualityEvaluator (Agent), which returns a QualityResult{score,notes}.
+      The score and notes are written on the QualityEvaluated event and
+      projected by CampaignsView for the App UI tab.
+
+simplified_view:
+  - id: G1
+    label: Brand-safety review before content surfaces
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: BrandReviewer
+  - id: E1
+    label: Quality score against brand guidelines
+    mechanism: Eval-event
+    implementation: on-decision-eval
+    source: QualityEvaluator

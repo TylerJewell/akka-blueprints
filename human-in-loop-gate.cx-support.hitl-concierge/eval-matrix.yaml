@@ -1,0 +1,94 @@
+# Eval Matrix for the hitl-concierge Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (cx-support domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: hitl-concierge
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: cx-support
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Pause the concierge pipeline at a specialist approval gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      A proposed customer resolution can have direct service or financial
+      consequences. Letting an agent fulfil a request without a specialist
+      reviewing the proposed resolution removes the last human check on
+      accuracy and appropriateness. The approval gate between triage and
+      fulfilment is the defining characteristic of this pattern, and its
+      absence would make the system an autonomous fulfilment pipeline rather
+      than a concierge.
+    implementation: >
+      ConciergeWorkflow pauses in awaitApprovalStep, polling CaseEntity
+      status every 5 seconds. POST /api/cases/{id}/approve and POST
+      /api/cases/{id}/decline transition the entity via commands; the workflow
+      resumes on the next poll cycle and either proceeds to fulfilStep or
+      terminates.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the fulfilment tool unless the case is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Fulfilment writes a commitment on behalf of the business — reservations,
+      refunds, account modifications, or service dispatches in a production
+      analog. A pre-tool guardrail ensures FulfillmentAgent cannot invoke this
+      tool on a case the specialist has not reviewed, even if the workflow
+      graph is driven into the fulfilment step by an unexpected path.
+    implementation: >
+      A before-tool-call guardrail on FulfillmentAgent re-reads
+      CaseEntity.status immediately before the simulated fulfilment tool
+      executes. When status is not APPROVED the guardrail blocks the call and
+      the tool invocation never occurs.
+    regulation_anchors: []
+
+  - id: G2
+    name: Quality-check the triage result before specialist review
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      A triage result that is incoherent or lacks a concrete proposed
+      resolution wastes specialist time and may cause a poor customer
+      experience if the specialist approves without scrutiny. An output
+      guardrail intercepts incomplete or contradictory triage outputs before
+      they are persisted for review, keeping the specialist queue free of
+      noise.
+    implementation: >
+      A before-agent-response guardrail on TriageAgent checks that the
+      TriageResult contains a non-empty proposedResolution, a valid urgency
+      level, and a summary that references the original request before the
+      result is written to CaseEntity.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Specialist approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for specialist approve/decline.
+  - id: G1
+    name: Guard fulfilment tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block fulfilment unless status is APPROVED.
+  - id: G2
+    name: Triage quality gate
+    mechanism: "guardrail · before-agent-response"
+    short: Block incomplete triage results from reaching the specialist.

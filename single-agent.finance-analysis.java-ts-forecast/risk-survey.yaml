@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: tsforecast
+
+# ---- Purpose ----
+purpose:
+  primary_function: time-series-forecasting
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-only
+  user_type: financial-analyst-or-data-scientist
+
+# ---- Data ----
+data:
+  inputs:
+    - submitted-tabular-time-series
+    - forecast-configuration
+  data_classes:
+    financial_time_series: true
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+    proprietary-market-data: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  series_may_contain_material_nonpublic_information: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: numeric-forecast-over-time-horizon
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_forecast_before_action: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-series-forecast
+  failure_modes:
+    - horizon-overconfidence
+    - distributional-shift-undetected
+    - missing-seasonality
+    - interval-inversion
+    - point-forecast-extrapolation-beyond-training-support
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: financial-analyst-or-quant
+  reviewer_must_read_forecast_before_action: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_forecast: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  regulated-financial-advice: TO_BE_COMPLETED_BY_DEPLOYER
+  mifid2-or-equivalent-applicable: TO_BE_COMPLETED_BY_DEPLOYER
+  model-risk-management-policy-in-place: TO_BE_COMPLETED_BY_DEPLOYER

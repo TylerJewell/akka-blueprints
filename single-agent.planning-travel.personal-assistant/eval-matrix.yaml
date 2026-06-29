@@ -1,0 +1,76 @@
+schema_version: 1
+sample_id: personal-assistant
+coordination_pattern: single-agent
+domain: planning-travel
+
+controls:
+  - id: G1
+    name: Block invalid calendar and task writes before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: write-validator
+    enforcement: blocking
+    rationale: |
+      Calendar and task writes are stateful effects: a mis-dated event, a write to
+      the wrong user's context, or an event with an empty title cannot be undone by
+      a retry. The before-tool-call hook is the right intervention point — it
+      intercepts the agent's proposed mutation before any state change occurs,
+      validates the call against a fixed rule set, and either passes it through or
+      forces the agent to reconsider. Catching bad writes at this point is strictly
+      safer than catching them after the fact, because the entity log is append-only
+      and there is no compensating command.
+    implementation: |
+      `WriteGuardrail` is registered on `AssistantAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      candidate tool call it (1) asserts the `actionType` is in the allowed enum
+      `{CREATE_EVENT, CREATE_TASK, UPDATE_TASK, COMPLETE_TASK, SET_REMINDER,
+      NO_ACTION}`, (2) asserts any `date` field on a new event is not in the past
+      relative to the server clock, (3) asserts any `title` or `taskTitle` field is
+      non-empty, and (4) asserts the call is scoped to the authenticated user's
+      `requestId` context. On any failure it returns a structured rejection naming
+      the failed check; the agent loop counts one of its 3 iterations and retries.
+      Passing calls flow through to the `actStep` result path.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact personal identifiers from context before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      A personal assistant context snapshot routinely contains contact email
+      addresses, phone numbers, physical addresses, and person names in attendee
+      lists and task descriptions. None of those belong in an LLM call body.
+      Redaction runs in a Consumer between the raw context submission and the agent
+      invocation; the raw snapshot is preserved on the entity for audit but is
+      never the input seen by the model. Without this control, the agent would
+      receive and potentially echo personal identifiers belonging to the user's
+      contacts — a significant privacy risk in a planning-travel context where
+      hotel addresses, airline confirmation contacts, and travel companion details
+      are common.
+    implementation: |
+      `ContextSanitizer` Consumer subscribes to `RequestSubmitted` events emitted
+      by `AssistantEntity`. It serializes the `rawContext` ContextSnapshot to JSON
+      and runs a pipeline of regex stages (email, phone, postal address patterns),
+      a heuristic stage (person names appearing in `attendees` or task `description`
+      fields), and an account-id-token stage. Outputs a `SanitizedContext` carrying
+      the redacted JSON string plus the list of categories found. Calls
+      `AssistantEntity.attachSanitized(sanitized)`. `AssistantWorkflow.actStep`
+      then passes `sanitized.redactedSnapshot` as the `AssistantAgent` task
+      attachment; the raw payload remains accessible only via `request.rawContext`
+      on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Write guardrail before tool execution
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

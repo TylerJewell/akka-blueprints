@@ -1,0 +1,68 @@
+# Eval Matrix for the supervisor-subagents Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (general domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: supervisor-subagents
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Policy-check the supervisor routing decision before invoking any subagent
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: before-agent-invocation
+    enforcement: blocking
+    rationale: >
+      In a supervisor-subagent hierarchy the routing decision determines which agents run
+      and what inputs they receive. A routing plan that violates policy — by targeting a
+      disallowed subagent, requesting prohibited data, or exceeding the authorised scope —
+      can propagate downstream before any subagent output check can intercept it. A blocking
+      guardrail at the invocation boundary prevents that propagation entirely: if the routing
+      plan does not pass policy, no subagent is invoked and the task is blocked immediately.
+    implementation: >
+      A before-agent-invocation guardrail runs in TaskOrchestrationWorkflow.guardrailStep,
+      immediately after TaskSupervisor returns a RoutingPlan and before fetchDataStep or
+      summariseStep are scheduled. On failure the workflow calls TaskEntity.blockTask and
+      the task enters BLOCKED. On pass the workflow transitions to IN_PROGRESS and launches
+      the parallel fan-out.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score the supervisor routing decision for accuracy after task completion
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The supervisor's routing decision is the single most consequential choice in this
+      pattern: a mis-routed task produces outputs that are out-of-scope or incomplete even
+      if both subagents execute correctly. Measuring routing accuracy via a periodic rubric
+      judge surfaces systematic misclassification without blocking delivery; the scores
+      accumulate into a quality signal that can drive prompt or routing-logic improvement.
+    implementation: >
+      RoutingEvalSampler (TimedAction, every 5 minutes) queries TaskView for the oldest
+      COMPLETED task lacking an evalScore, runs a 1-5 routing-accuracy rubric judge over
+      the RoutingPlan and the final TaskResult, and calls TaskEntity.recordEval(score,
+      rationale), emitting RoutingEvalScored. The score appears in the App UI beside the
+      task row.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Routing guardrail
+    mechanism: "guardrail · before-agent-invocation"
+    short: Block a task whose routing plan violates policy before any subagent runs.
+  - id: E1
+    name: Routing accuracy eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the supervisor's routing decision after task completion.

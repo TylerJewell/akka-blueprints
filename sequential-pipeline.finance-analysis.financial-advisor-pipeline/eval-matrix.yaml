@@ -1,0 +1,85 @@
+schema_version: 1
+sample_id: financial-advisor-pipeline
+coordination_pattern: sequential-pipeline
+domain: finance-analysis
+
+controls:
+  - id: G1
+    name: Inject regulated finance-advice disclaimer before every agent response
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Financial advisory content carries regulatory obligations in most jurisdictions:
+      any system that produces investment-related guidance must clearly identify itself as
+      educational and non-licensed, and that notice must appear on every output, not just
+      at session start. A before-agent-response guardrail is the right cut because it fires
+      on every outbound LLM response before the result reaches the workflow or the client,
+      so no phase can produce advisory text without the accompanying disclaimer. Skipping
+      this control would allow the STRATEGIZE or EXECUTE phase to emit allocation
+      recommendations that a reader could act on without seeing the required notice. The
+      guardrail also writes an audit event per injection, giving compliance teams a complete
+      record of every response and its disclaimer status.
+    implementation: |
+      `DisclaimerGuardrail` is registered on `FinancialAdvisorAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook. On every
+      outbound response the guardrail prepends the standard regulated text: *"This content
+      is for educational purposes only and does not constitute licensed financial advice.
+      Consult a qualified financial professional before making investment decisions."* It
+      then calls `AdvisoryEntity.recordDisclaimerInjection(advisoryId, disclaimerText,
+      now())` so the injection appears in the entity's `disclaimerLog` and in the UI's
+      disclaimer-log strip. If the injection call fails, the guardrail returns
+      `Guardrail.reject("disclaimer-failure: ...")` and the workflow step retries within
+      its budget. On the happy path, every advisory's `disclaimerLog` has exactly four
+      entries — one per phase response.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact prohibited financial-sector language before recording advisory content
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: non-blocking
+    rationale: |
+      Even a well-intentioned LLM response in the financial domain can inadvertently
+      produce language that violates sector-specific rules: guaranteed-return phrasing
+      ("guaranteed", "risk-free", "certain return") overstates certainty in a way that
+      securities regulators prohibit; directive securities recommendations ("you must buy",
+      "sell immediately") cross the line from education into unlicensed advice; and
+      unlicensed tax directives ("you owe", "declare this as") create liability. A sector
+      sanitizer that pattern-matches and redacts these phrases before they are written to
+      the entity prevents prohibited content from ever landing in the audit log or the UI,
+      without blocking the entire response. The sanitizer is non-blocking by design: a
+      response with redactions is still useful; only the offending fragments are replaced.
+      Each redaction is recorded as a `SanitizerFired` event so the compliance team can
+      review what the model attempted to produce and whether the redaction rate is
+      increasing.
+    implementation: |
+      `SectorSanitizer` is registered on `FinancialAdvisorAgent` and runs on every
+      outbound response text immediately after `DisclaimerGuardrail`. Three case-insensitive
+      pattern matchers cover the three prohibited classes: (1) guaranteed-return language
+      matching `/guaranteed|risk.?free|certain return|no.?risk/`; (2) directive securities
+      recommendations matching `/you must buy|sell immediately|put everything into/`;
+      (3) unlicensed tax directives matching `/you owe|you will owe|declare this as/`.
+      Each match is replaced in-place with `[REDACTED — compliance]`. For every match the
+      sanitizer calls `AdvisoryEntity.recordSanitizerFired(matchedPattern,
+      redactedFragment, now())`, which appends a `SanitizerFired` event to the entity's
+      `sanitizerLog`. The redacted text is then returned to the workflow step for
+      recording. The mock-LLM's `define-strategy.json` includes one entry with a
+      guaranteed-return phrase so J3 verifies the sanitizer fires and the redaction
+      appears in the UI's sanitizer-event strip.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Finance disclaimer guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: Financial-sector content sanitizer
+    mechanism: Sanitizer
+    implementation: sector
+    source: —

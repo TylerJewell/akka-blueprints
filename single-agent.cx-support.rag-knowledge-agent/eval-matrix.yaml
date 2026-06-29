@@ -1,0 +1,52 @@
+schema_version: 1
+sample_id: rag-knowledge-agent
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Refuse answers not supported by the retrieved passages
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: |
+      Grounded question answering must not assert claims the document set does
+      not support. A pre-response grounding check keeps the agent from
+      hallucinating beyond its sources and forces an explicit refusal instead.
+    implementation: |
+      KnowledgeAgent runs a grounding check before its answer is returned. When
+      the produced answer is not supported by the retrieved Citation set, the
+      agent sets grounded=false with a refusalReason and KnowledgeEndpoint
+      records a QueryRefused event on QuerySessionEntity instead of an answer.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every answer for faithfulness to its retrieved passages
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Even grounded answers vary in how closely they track their sources. A
+      per-answer faithfulness score surfaces drift and gives reviewers a signal
+      to audit, without blocking the user-facing response.
+    implementation: |
+      FaithfulnessEvalConsumer subscribes to QuerySessionEntity events; on
+      QueryAnswered it calls FaithfulnessAgent.score with the answer and the
+      session's retrieved passages, then records FaithfulnessEvaluated with the
+      score and verdict. The score renders next to the answer in the App UI.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Grounded refusal
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Faithfulness eval
+    mechanism: Eval-event
+    implementation: on-decision-eval
+    source: —

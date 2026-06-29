@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: memory-tool-router
+
+# ---- Purpose ----
+purpose:
+  primary_function: conversational-assistant-with-tool-use
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: assisted-action
+  user_type: end-user
+
+# ---- Data ----
+data:
+  inputs:
+    - free-text-user-messages
+    - per-session-memory-items
+    - knowledge-fixture-content
+    - web-snippet-content
+    - code-execution-output
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: act-with-guardrails
+  decision_subject: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: partially-reversible
+
+# ---- Failure ----
+failure:
+  blast_radius: single-session-scope
+  failure_modes:
+    - wrong-tool-selected
+    - forbidden-tool-invocation
+    - pii-retained-in-memory
+    - stuck-conversation-no-progress
+    - memory-corruption-across-sessions
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  audit_frequency: continuous
+  operator_pause_control: true
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - simulated-calculator
+    - simulated-knowledge-base-lookup
+    - simulated-web-lookup
+    - simulated-code-execution
+  rate_limit_per_user: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER

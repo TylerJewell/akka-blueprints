@@ -1,0 +1,146 @@
+schema_version: 1
+sample_id: autonomous-agent-pattern
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Gate every tool call before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-allowlist-and-confinement
+    enforcement: blocking
+    rationale: |
+      A coding agent with open-ended tool access — including shell execution and
+      arbitrary file writes — is one unvalidated call away from deleting workspace
+      content, exfiltrating files, or executing untrusted downloaded scripts. The
+      before-tool-call hook is the right cut: it runs before any side effect
+      occurs, so a blocked call leaves the environment unchanged. The agent
+      receives the structured block reason and can propose an alternative within
+      the same iteration; destructive calls are never silently swallowed.
+    implementation: |
+      `ToolCallGuardrail` is registered on `CodingAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On
+      each proposed tool call it runs four checks: (1) the `toolName` is in the
+      declared allowlist `{readFile, writeFile, runShell, searchCodebase}`;
+      (2) any `path` parameter is a sub-path of the declared workspace prefix
+      (prevents directory traversal); (3) any `command` parameter does not match
+      shell-danger patterns (`rm -rf`, `curl | sh`, `chmod 777`, `sudo`,
+      pipe-to-shell constructs); (4) the per-minute tool-call count for this
+      `taskId` has not exceeded the configured cap. On any failure returns a
+      structured `Guardrail.reject(<block-reason>)` naming which check failed.
+      Passing calls flow through to the tool executor. Blocked calls are recorded
+      as `ToolCall{status: BLOCKED, blockReason: ...}` via
+      `AgentTaskEntity.recordToolCall`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Halt the agent loop on operator signal
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      An autonomous loop with real shell and file-write access must have an
+      external kill switch that any privileged operator can pull without waiting
+      for the current task to finish. A loop that has gone off-script — consuming
+      unexpected resources, attempting disallowed operations repeatedly, or
+      waiting indefinitely — needs to be stoppable without restarting the entire
+      service. The halt mechanism gives operators that power with auditability:
+      a `HaltRequested` event lands on the entity, a `TaskHalted` event marks the
+      terminal state, and the partial trace is preserved for post-mortem review.
+    implementation: |
+      `POST /api/tasks/{id}/halt` on `AgentTaskEndpoint` calls
+      `AgentTaskEntity.requestHalt()`, which emits `HaltRequested` and sets
+      `haltRequested = true` on the entity state. `HaltChecker`, called by
+      `AgentTaskWorkflow` at the start of each `executeStep` iteration, reads
+      `AgentTaskEntity.getTask().haltRequested()`. If true, it calls
+      `AgentTaskEntity.haltTask()` (emits `TaskHalted`) and the workflow
+      transitions to its `error` step, which does not retry. The partial
+      `toolTrace` accumulated up to that iteration is preserved on the entity
+      and visible in the UI. The halt check uses the entity as source of truth;
+      no JVM thread interrupts are used.
+    regulation_anchors: []
+
+  - id: C1
+    name: Require human approval before any writes execute
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      An autonomous coding agent can produce a syntactically plausible plan
+      that is semantically wrong — deleting the wrong files, modifying the wrong
+      branch, or misidentifying the root cause. The plan phase produces an
+      `AgentPlan` that lists exactly which files will change and the intended
+      approach. A human reviewer reading that plan before any write occurs is the
+      last reliable gate between a hallucinated intention and a real side effect.
+      The checkpoint also surfaces suspiciously broad plans (many files changed
+      for a narrow bug) before they run.
+    implementation: |
+      `AgentTaskWorkflow.checkpointStep` runs after `planStep` completes. It
+      emits `CheckpointPending` on `AgentTaskEntity` and polls the entity every
+      2 s (up to a 305 s step timeout) for `CheckpointApproved` or
+      `CheckpointRejected`. `AgentTaskEndpoint` exposes `POST /api/tasks/{id}/approve`
+      and `POST /api/tasks/{id}/reject` — either writes the corresponding event
+      to the entity. On approval the workflow advances to `executeStep` and the
+      agent begins calling file-write and shell tools. On rejection the entity
+      transitions to `FAILED` with reason `checkpoint-rejected` and no writes
+      occur. The UI's right pane shows the proposed plan (file list and approach)
+      in the Checkpoint panel with Approve / Reject buttons.
+    regulation_anchors: []
+
+  - id: M1
+    name: Monitor tool-call patterns at runtime without blocking the loop
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: non-blocking
+    rationale: |
+      A before-tool-call guardrail and a human checkpoint cover known-bad patterns
+      at decision time. But an agent loop can drift into anomalous behaviour that
+      is individually valid yet collectively alarming — a sudden spike in shell
+      calls, repeated tool failures on the same path, or commands referencing
+      sensitive system directories. These patterns are only visible in aggregate
+      across the full tool trace. A runtime monitor that watches the event stream
+      and alerts without stopping the loop gives the deployer a live view of agent
+      behaviour without adding latency to the critical path.
+    implementation: |
+      `RuntimeMonitor` Consumer subscribes to `ToolCallExecuted` events on
+      `AgentTaskEntity`. For each event it runs three anomaly rules: (1) rate-spike
+      detection — counts `ToolCallExecuted` events for the same `taskId` in a
+      rolling 60 s window; if the count exceeds 10 it emits
+      `MonitorAlert{kind: RATE_SPIKE}`; (2) repeated-failure detection — if the
+      last 3 consecutive `ToolCallExecuted` events for this `taskId` have
+      `status = FAILED` it emits `MonitorAlert{kind: REPEATED_FAILURE}`; (3)
+      shell-pattern detection — if `toolName == "runShell"` and the `command`
+      parameter references `/etc/passwd`, `/proc`, or `/sys` it emits
+      `MonitorAlert{kind: SHELL_PATTERN}`. On any alert the Monitor calls
+      `AgentTaskEntity.raiseMonitorAlert(alert)`, which records
+      `MonitorAlertRaised` without interrupting the agent loop. Alert chips appear
+      on the UI's task detail panel; deployers may wire an external webhook on the
+      `MonitorAlertRaised` event for paging.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-call allowlist + confinement
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Operator kill switch
+    mechanism: Halt
+    implementation: operator-regulator-stop
+    source: —
+  - id: C1
+    label: Human plan-approval checkpoint
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: M1
+    label: Runtime tool-pattern monitor
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring
+    source: —

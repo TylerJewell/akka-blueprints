@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: akka-llm-pipeline-workflow
+
+# ---- Purpose ----
+purpose:
+  primary_function: content-generation-pipeline
+  sector: content-editorial
+  decisions_surface: recommend-only
+  user_type: content-author-or-editor
+
+# ---- Data ----
+data:
+  inputs:
+    - user-supplied-topic
+    - user-supplied-word-target
+  data_classes:
+    pii: false
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: blog-post-draft
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reader_reads_every_draft_before_publication: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-post
+  failure_modes:
+    - schema-invalid-outline
+    - editorial-policy-violation
+    - draft-word-count-out-of-bounds
+    - section-coverage-gap
+    - prohibited-topic-phrase
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reader_role: content-author-or-editor
+  reader_must_review_draft_before_publication: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion-outline
+    - llm-completion-draft
+  rate_limit_per_post: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 0
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  content-originality-policy: TO_BE_COMPLETED_BY_DEPLOYER

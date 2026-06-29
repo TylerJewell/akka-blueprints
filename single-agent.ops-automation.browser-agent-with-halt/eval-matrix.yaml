@@ -1,0 +1,105 @@
+schema_version: 1
+sample_id: web-navigation-agent
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Screen every browser action before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: action-policy-enforcer
+    enforcement: blocking
+    rationale: |
+      A browser agent operating on real websites can submit forms, trigger purchases,
+      change account settings, or navigate to attacker-controlled domains — all by
+      selecting the wrong action at the wrong moment. The before-tool-call hook is the
+      correct interception point: the action is known before it executes, the allowed-domain
+      list and forbidden-action set can be checked deterministically, and high-stakes
+      actions can be flagged for human review before any irreversible side effect lands.
+      Checking after execution is not a governance control — it is an incident report.
+    implementation: |
+      `ActionGuardrail` is registered on `WebNavigatorAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      candidate `BrowserAction` it performs three checks in order: (1) the `targetUrl`
+      field is parsed and its hostname checked against a deployer-configurable allowed-domain
+      list — unknown domains return `Guardrail.block("domain-not-allowed")`; (2) the
+      `actionType` is checked against a forbidden-action set (configurable; default empty) —
+      a match returns `Guardrail.block("action-type-forbidden")`; (3) the action is
+      classified as high-stakes if `actionType` is NAVIGATE to a path matching `/checkout`,
+      `/purchase`, `/account/settings`, or `/password`, or if the agent declared
+      `highStakes=true` — a positive classification returns `Guardrail.flagHitl()`.
+      Blocked actions cause the agent loop to consume one iteration and replan. HITL-flagged
+      actions cause `NavigationWorkflow` to enter `hitlStep` rather than executing.
+    regulation_anchors: []
+
+  - id: H1
+    name: Stop all active sessions on operator halt signal
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      Autonomous browser agents can enter runaway states — navigating through dozens of
+      pages without completing their goal, accumulating costs, or taking unintended actions
+      in the background. An operator or automated regulator monitor must be able to stop
+      all activity immediately with a single API call, without waiting for the current
+      action step to finish its retry budget. Persisting the halt flag in an EventSourcedEntity
+      (rather than an in-memory flag) ensures the stop signal survives service restarts and
+      remains in effect until explicitly cleared.
+    implementation: |
+      `HaltController` is a single-instance `EventSourcedEntity` (id = `"global"`) whose
+      state carries a `halted` boolean. `SessionEndpoint` exposes `POST /api/halt` and
+      `DELETE /api/halt`, which write `HaltSet` and `HaltCleared` events respectively.
+      `NavigationWorkflow.actionStep` reads `HaltController.getHalt()` as the first operation
+      before invoking the agent or executing any browser action. If `halted=true`, the step
+      immediately transitions to `haltedStep`, which writes `SessionHalted` to `SessionEntity`
+      and ends the workflow. Because the check runs before the agent call, a halted session
+      never starts a new LLM invocation or browser action. Sessions already in `hitlStep`
+      also check the halt flag on each resume attempt.
+    regulation_anchors: []
+
+  - id: HITL1
+    name: Pause and require human approval for high-stakes browser actions
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Not all browser actions carry the same risk. Scrolling a page or clicking a navigation
+      link is low-stakes and should not interrupt the autonomous flow. Submitting a purchase
+      form, confirming an account deletion, or entering credentials is irreversible and
+      must pause until a human confirms the action is intended. An application-level HITL
+      gate inserted into the workflow — rather than a network-perimeter block — gives the
+      operator a precise, per-action decision surface, and keeps the action log auditable
+      whether the human approves or rejects.
+    implementation: |
+      When `ActionGuardrail` returns `flagHitl` for a candidate action, `NavigationWorkflow`
+      writes `HitlRequested{pendingAction}` to `SessionEntity` (transitioning it to
+      `AWAITING_APPROVAL`) and enters `hitlStep`, which suspends execution. The App UI tab
+      renders the pending action's type, target URL, selector, and the agent's rationale for
+      the human reviewer. The reviewer calls `POST /api/sessions/{id}/approve` or
+      `/api/sessions/{id}/reject`. `SessionEndpoint` calls `NavigationWorkflow.resume(decision)`,
+      which records a `HitlResolved` event and either executes the action (on APPROVED) or
+      sends a structured rejection message to the agent loop (on REJECTED), consuming one
+      of the session's iteration budget. A `hitlStep` timeout of 300 s causes the workflow
+      to fail the session if no human decision arrives, preventing indefinite suspension.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Action-policy guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Operator halt switch
+    mechanism: Halt
+    implementation: operator-regulator-stop
+    source: —
+  - id: HITL1
+    label: High-stakes action approval
+    mechanism: HITL
+    implementation: application
+    source: —

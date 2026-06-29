@@ -1,0 +1,74 @@
+schema_version: 1
+sample_id: slack-lead-qualifier
+
+# ---- Purpose ----
+purpose:
+  primary_function: sales-lead-qualification
+  sector: sales-marketing
+  decisions_surface: automated-post-with-threshold
+  user_type: sales-development-representative
+
+# ---- Data ----
+data:
+  inputs:
+    - slack-member-join-events
+    - web-search-enrichment-results
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: automated-post-above-threshold
+  decision_subject: prospective-lead
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: irreversible-post-sent
+
+# ---- Failure ----
+failure:
+  blast_radius: single-lead
+  failure_modes:
+    - pii-leakage-in-slack-post
+    - false-positive-hot-lead-post
+    - aggressive-tone-in-outbound-message
+    - missed-disqualification-of-non-icp-lead
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: sales-operations
+  reviewer_must_approve_every_outgoing: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - web-search
+    - slack-post  # simulated in dev; real Slack API in production
+  rate_limit_per_message: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER

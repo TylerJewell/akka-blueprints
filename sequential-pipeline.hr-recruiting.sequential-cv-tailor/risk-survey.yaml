@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: sequential-cv-tailor
+
+# ---- Purpose ----
+purpose:
+  primary_function: cv-tailoring-pipeline
+  sector: hr-recruiting
+  decisions_surface: recommend-only
+  user_type: recruiter-or-hiring-manager
+
+# ---- Data ----
+data:
+  inputs:
+    - candidate-profile-fixture
+    - job-posting-fixture
+  data_classes:
+    pii: true            # candidateName, email, phone, address, dateOfBirth present in CandidateProfile
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: cv-tailoring-for-posting
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  recruiter_reviews_cv_before_submission: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-cv-request
+  failure_modes:
+    - pii-leak-to-model
+    - keyword-hallucination
+    - missing-experience-entries
+    - alignment-score-mismatch
+    - base-cv-not-forwarded-to-tailor
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reader_role: recruiter-or-hiring-manager
+  recruiter_reviews_cv_before_sending_to_candidate: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_request: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 2
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  candidate_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  candidate_profile_origin_permitted_for_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER

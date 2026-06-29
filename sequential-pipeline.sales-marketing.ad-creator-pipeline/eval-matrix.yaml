@@ -1,0 +1,90 @@
+schema_version: 1
+sample_id: ad-creator-pipeline
+coordination_pattern: sequential-pipeline
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Block agent responses containing brand-safety violations before they are accepted
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Ad copy is the most direct brand-facing output the pipeline produces.
+      A single disallowed superlative, competitor reference, or claim about a
+      prohibited product category — published even once — carries reputational
+      and regulatory exposure that cannot be undone after the fact. Catching the
+      violation at the agent–response boundary, before the workflow accepts the
+      typed `AdCopy` result, is the right cut: the agent can self-correct inside
+      its iteration budget without the bad copy ever landing in the entity log.
+      A post-hoc content filter applied to the stored record would not prevent
+      the violation from propagating to downstream consumers if the filter were
+      missed or delayed. The `before-agent-response` hook is the only place that
+      guarantees zero-escape for brand-policy violations.
+    implementation: |
+      `BrandSafetyGuardrail` is registered on `AdCreatorAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      It loads brand policy from `src/main/resources/config/brand-policy.json`
+      at startup: `disallowed_superlatives`, `competitor_names`, and
+      `prohibited_categories`. On every agent response during the COPY phase,
+      the guardrail scans the response text for any listed term. If a match is
+      found it returns `Guardrail.reject(List<BrandViolation>)`, where each
+      `BrandViolation` names the matched rule, the offending text fragment, and
+      a rewrite suggestion. The agent loop must produce a clean response within
+      `maxIterationsPerTask(4)`. On rejection, `BrandSafetyGuardrail` also calls
+      `AdJobEntity.recordBrandSafetyRejection(violations)` so the UI's
+      rejection-log strip and the entity's audit trail both capture the event.
+    regulation_anchors: []
+
+  - id: G2
+    name: Reject browser-automation tool calls that target URLs outside the scraping allow-list
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The SCRAPE phase uses browser-automation tools (`fetchProductPage`,
+      `extractAttributes`) to pull product data. Without a URL allow-list, the
+      agent could be coaxed — through adversarial product descriptions or prompt
+      injection in the fetched page — into scraping competitor sites, internal
+      admin pages, or third-party services that have not consented to automated
+      access. Enforcing the allow-list at the tool-call boundary means the
+      disallowed HTTP request is never issued: the tool body never executes, the
+      network stack is never touched, and the violation is logged before any data
+      leaves the process. A post-scrape filter checking where the data came from
+      would be too late — the request would already have been made. The same hook
+      doubles as a phase-order enforcer so that COPY and VISUAL tools cannot fire
+      while earlier phases are still in progress.
+    implementation: |
+      `ScrapingPolicyGuardrail` is registered on `AdCreatorAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      Each function-tool method in `ScrapeTools`, `CopyTools`, and `VisualTools`
+      carries an `AdPhase` constant (SCRAPE / COPY / VISUAL). On every tool call
+      the guardrail reads the candidate's `AdPhase` and the current
+      `AdJobEntity.status` (looked up via the `adJobId` carried in the in-flight
+      `TaskDef.metadata`) and applies the phase-status accept matrix:
+      SCRAPE tools require `status ∈ {CREATED, SCRAPING}`;
+      COPY tools require `status ∈ {SCRAPED, COPYING}` AND `profile.isPresent()`;
+      VISUAL tools require `status ∈ {COPIED, GENERATING_VISUAL}` AND
+      `copy.isPresent()`. For `fetchProductPage` and `extractAttributes` calls
+      the guardrail additionally checks the first String argument against the
+      allow-list stored on `AdJobEntity.allowedUrls`. On reject, the guardrail
+      returns a structured `scraping-policy-violation` error to the agent loop
+      and calls `AdJobEntity.recordScrapingRejection(url, reason)`. On accept,
+      the call proceeds.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Brand-safety response guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: G2
+    label: Scraping-policy tool guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

@@ -1,0 +1,94 @@
+# Eval Matrix for the deep-research-hitl Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (research-intel domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: deep-research-hitl
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: research-intel
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human review gate before delivery
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      A synthesised research report carries factual claims and cited sources that
+      a domain expert must verify before the report is delivered. Automated
+      synthesis can introduce errors, misattributed sources, or out-of-scope
+      conclusions that are not detectable by the model itself. The approval gate
+      between synthesis and delivery is the defining characteristic of the
+      human-in-loop-gate pattern applied to research intelligence workflows.
+    implementation: >
+      ResearchWorkflow pauses in awaitReviewStep, polling ResearchEntity status
+      on a 5-second timer. POST /api/reports/{id}/approve and POST
+      /api/reports/{id}/reject transition the entity; the workflow resumes on
+      the next poll. On rejection the workflow loops back to synthesiseStep with
+      the reviewer's revision notes injected into SynthesisAgent context.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the deliver tool unless the report is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Delivery of a research report is a consequential write — the output may
+      inform decisions across an organisation. The before-tool-call guardrail
+      ensures that a report rejected during review, or one that has not yet
+      received a review decision, cannot be marked as delivered through a
+      race condition or workflow re-entry. The guard re-reads the authoritative
+      entity state immediately before the tool executes.
+    implementation: >
+      A before-tool-call guardrail on the delivery step inside ResearchWorkflow
+      re-reads ResearchEntity.status at the moment the simulated deliver tool is
+      about to execute. The tool is allowed only when status is APPROVED;
+      otherwise the call is blocked and the workflow remains in AWAITING_REVIEW.
+    regulation_anchors: []
+
+  - id: G2
+    name: Quality-check the synthesised draft before it reaches the reviewer
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      Research reports can be long, thin on citations, or drift off-topic when
+      individual sub-topic findings are inconsistent. An output guardrail on
+      SynthesisAgent catches drafts that fall below a minimum quality bar —
+      insufficient body length, absent source citations, or missing title —
+      before the draft is persisted and surfaced to the human reviewer. Catching
+      these failures early avoids unnecessary review cycles.
+    implementation: >
+      A before-agent-response guardrail on SynthesisAgent verifies that the
+      ReportDraft has a non-empty title, body above a minimum character count,
+      and at least one entry in sourcesUsed before the draft is written to
+      ResearchEntity and the status transitions to AWAITING_REVIEW.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human review gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/reject before delivery.
+  - id: G1
+    name: Guard deliver tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block delivery unless status is APPROVED.
+  - id: G2
+    name: Synthesis quality gate
+    mechanism: "guardrail · before-agent-response"
+    short: Block thin or uncited drafts from reaching the reviewer.

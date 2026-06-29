@@ -1,0 +1,70 @@
+# Eval Matrix for the akka-parallel-best-of-n Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (general domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: akka-parallel-best-of-n
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Vet the selected translation before it reaches the caller
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      When a supervisor picks from N competing variants, the selected output is the only
+      artifact the caller receives. An output guardrail runs immediately after selection to
+      catch policy-violating content (e.g., prohibited terminology, harmful phrasing) that
+      any individual worker branch may have introduced. Without this check, a single
+      misbehaving branch that happens to rank highest would pass through unchallenged.
+      Blocking enforcement ensures the job never transitions to SELECTED with content that
+      failed the guardrail; it moves to BLOCKED instead and the caller is not exposed.
+    implementation: >
+      A before-agent-response guardrail on TranslationSupervisor runs a deterministic
+      content vetter plus an LLM judge over the SelectionResult in
+      TranslationWorkflow.guardrailStep. The vetter checks for prohibited word patterns;
+      the LLM judge verifies the selected translation does not introduce meaning not present
+      in the source text. On failure the workflow calls TranslationJobEntity.blockJob and
+      the job enters BLOCKED with a failureReason.
+    regulation_anchors: []
+
+  - id: E1
+    name: Log the best-of-N selection decision for quality tracking
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      Choosing one variant from N parallel outputs is a non-deterministic decision: the
+      supervisor weighs fluency, register accuracy, and fidelity in a single LLM call.
+      Recording that decision as a scored eval-event creates an auditable trace of how the
+      selection criterion performed over time, enabling detection of systematic bias toward
+      one register or degradation in selection quality without requiring synchronous
+      human-in-the-loop review.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries TranslationView for the oldest
+      SELECTED job lacking an evalScore, runs a 1-5 rubric judge over the SelectionResult
+      (assessing fidelity, register appropriateness, and rationale quality), and calls
+      TranslationJobEntity.recordEval(score, rationale), emitting SelectionEvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Translation output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a selected translation that contains prohibited content or meaning drift.
+  - id: E1
+    name: Selection decision eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the supervisor's best-of-N selection decision.

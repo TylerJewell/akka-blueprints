@@ -1,0 +1,68 @@
+schema_version: 1
+sample_id: story-teller
+coordination_pattern: single-agent
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Reject malformed stories before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A creative generation system that produces an empty body, a genre mismatch,
+      or a missing author's note delivers a broken experience that reaches the end
+      user with no opportunity for correction after the fact. The before-agent-response
+      hook is the right cut: validate the candidate story while still inside the
+      agent's iteration loop, force a retry on structural failure, and only let
+      well-formed stories leave the agent boundary and enter the entity log.
+    implementation: |
+      `StoryGuardrail` is registered on `StoryTellerAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate response it (1) parses the response into `GeneratedStory`,
+      (2) asserts `title` is non-empty, (3) asserts `body` is at least 150 characters,
+      (4) asserts `genre` matches the genre submitted with the request (case-insensitive,
+      drawn from the allowed set: Fantasy / Mystery / Sci-Fi / Romance / Horror), and
+      (5) asserts `authorNote` is non-empty. On any failure it returns a structured
+      rejection naming the failed check; the agent loop consumes one of its 3 iterations
+      and retries. Passing responses flow through to `generationStep`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every story for narrative quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      A guardrail only catches structural failures; it cannot catch a well-formed story
+      that is narratively hollow — an empty author's note padded to minimum length, a
+      body that ignores the requested genre, or a 600-word piece with no paragraph
+      breaks. An on-decision quality evaluator surfaces these patterns as a 1–5 score
+      without blocking the story itself, giving downstream consumers a fast signal
+      about which outputs merit human review before publication.
+    implementation: |
+      `QualityScorer` runs inside `StoryWorkflow.qualityStep`, fired immediately after
+      `StoryRecorded` lands. The scorer is deterministic and rule-based (no LLM call —
+      keeping the single-agent invariant honest): checks that `body` is non-empty and
+      meets the requested `wordCountTarget` within 20%, that `body` contains at least
+      one paragraph break for stories over 200 words, that `genre` appears consistent
+      with the submitted request, and that `authorNote` is at least 30 characters and
+      does not duplicate the title verbatim. Emits `QualityScored` with a 1–5 score and
+      a one-line rationale. Stories with score ≤ 2 are flagged in the App UI with a red
+      card border.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Story-form guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: On-decision quality eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

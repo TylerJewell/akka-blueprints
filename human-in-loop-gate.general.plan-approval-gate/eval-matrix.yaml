@@ -1,0 +1,88 @@
+# Eval Matrix for the plan-approval-gate Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (general domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an
+# empty list across all controls.
+
+schema_version: 1
+sample_id: plan-approval-gate
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human plan-approval gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      An agent-generated plan represents a commitment to a sequence of actions that may
+      have real-world consequences when executed. Allowing execution to proceed without a
+      human reviewing and approving the plan removes the human's ability to catch
+      reasoning errors, scope drift, or unsafe steps before they run. The approval gate
+      is the defining control of the human-in-loop-gate coordination pattern.
+    implementation: >
+      PlanWorkflow pauses in awaitApprovalStep, polling PlanEntity status every 5 seconds.
+      POST /api/plans/{id}/approve and POST /api/plans/{id}/cancel transition the entity;
+      the workflow resumes on the next poll. The PATCH /api/plans/{id}/edit endpoint lets
+      the reviewer correct steps while the plan remains in PLANNED before approving.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the execute tool unless the plan is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      ExecutionAgent's execute tool triggers consequential downstream actions. A
+      before-tool-call guardrail acts as a second enforcement point independent of the
+      workflow state machine: even if the workflow's await-approval logic were bypassed
+      or the execution step were invoked out of order, the guardrail re-reads
+      PlanEntity.status and refuses to proceed unless it is APPROVED.
+    implementation: >
+      before-tool-call guardrail on ExecutionAgent re-reads PlanEntity.status immediately
+      before the execute tool call. If status is not APPROVED the call is blocked,
+      ExecutionAgent returns an error, and no outcome or PlanExecuted event is written.
+    regulation_anchors: []
+
+  - id: G2
+    name: Validate plan structure before human review
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      A plan sent to human review must be structurally sound: it must have at least one
+      non-empty step and a non-empty rationale. Surfacing malformed or empty plans to a
+      reviewer wastes their time and may lead to approvals of plans that the execution
+      agent cannot act on. The output guardrail enforces this minimum bar before
+      PlanEntity stores the plan.
+    implementation: >
+      before-agent-response guardrail on PlanningAgent checks that steps is a non-empty
+      list, each step is a non-empty string, and rationale is present and non-empty.
+      Plans that fail this check are rejected and PlanningAgent is asked to retry.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human plan-approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/cancel before execution.
+  - id: G1
+    name: Guard execute tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block execution unless plan status is APPROVED.
+  - id: G2
+    name: Plan structure gate
+    mechanism: "guardrail · before-agent-response"
+    short: Block malformed or empty plans from reaching the reviewer.

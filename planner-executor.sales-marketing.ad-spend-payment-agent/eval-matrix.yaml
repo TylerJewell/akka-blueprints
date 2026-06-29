@@ -1,0 +1,101 @@
+schema_version: 1
+sample_id: ad-spend-payment-agent
+coordination_pattern: planner-executor
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Vet every payment dispatch against the campaign budget and allow-list before the on-chain call fires
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      On-chain crypto payments are irreversible. A planner that proposes a payment
+      above the declared campaign budget cap, to a non-allow-listed wallet, or in
+      an unsupported token would cause an unrecoverable financial loss. A
+      deterministic guardrail at the dispatch hook checks all three conditions
+      before the PaymentExecutorAgent is ever invoked, blocking the call and
+      forcing the planner to revise the placement or abandon the step entirely.
+    implementation: |
+      `PaymentGuardrail.vet(DispatchDecision, remainingBudgetWei)` is called by
+      `CampaignWorkflow`'s `guardrailStep` between `proposeStep` and `dispatchStep`.
+      It checks (a) `proposedSpendWei <= remainingBudgetWei` (budget cap),
+      (b) `destinationWallet` is present in `sample-data/wallet-allowlist.json`
+      (placement allow-list), and (c) `token` is one of `ETH` or `USDC`
+      (supported-token list). On rejection the workflow records a `CreativeBlocked`
+      entry on the creative ledger with the rejection reason and loops back to
+      `proposeStep` so the planner sees the blocker. Non-payment dispatches
+      (executor = COPYWRITER) pass through unconditionally.
+    regulation_anchors: []
+
+  - id: HI1
+    name: Require a named human approver before any placement spend is executed
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Ad spend in crypto is immediate and publicly traceable on-chain. A system
+      that fires payments without a human sign-off exposes the campaign owner to
+      mis-targeted spend, wallet errors, and financial control violations. The
+      approval gate ensures that every payment instruction is reviewed by a named
+      approver — distinct from the entity submitting the brief — before the
+      PaymentExecutorAgent is called. Neither the planner nor the copywriter can
+      bypass this gate; the workflow is architecturally blocked until the
+      ApprovalEntity transitions to APPROVED.
+    implementation: |
+      `CampaignWorkflow`'s `approvalGateStep` is entered whenever the planner
+      proposes a `DispatchDecision` with `executor = PAYMENT` and the guardrail
+      passes. The step calls `ApprovalEntity.requestApproval(placementId,
+      amountWei, destinationWallet, token)`, emits `PaymentApprovalRequested` on
+      `CampaignEntity` (moving the campaign to `AWAITING_APPROVAL`), and polls
+      `ApprovalEntity.get` in a loop with a 600 s timeout. The UI's pending-
+      approvals pane exposes `POST /api/campaigns/{id}/approvals/{placementId}/
+      approve` and `…/reject`. On `ApprovalGranted` the workflow proceeds to
+      `dispatchStep`; on `ApprovalRejected` it loops back to `proposeStep` with
+      the rejection reason visible in the payment ledger.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Allow an operator or regulator to stop all new payment dispatches immediately
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      The on-chain payment capability in this system warrants an emergency stop
+      that can be triggered by an operator or a regulator without needing to kill
+      individual campaigns. A treasury or compliance team may need to freeze
+      payment activity instantly in response to a suspicious transaction pattern,
+      a wallet compromise, or a regulatory instruction. The halt applies to all
+      payment dispatches across all active campaigns simultaneously, while allowing
+      copywriter work that is already in-flight to complete without data loss.
+    implementation: |
+      `SystemControlEntity` (single instance keyed by literal `"global"`) holds
+      the halt flag. The App UI tab's operator controls pane exposes Halt / Resume
+      buttons backed by `POST /api/control/halt` and `POST /api/control/resume`.
+      Every `CampaignWorkflow` reads the flag in its `checkHaltStep` at the top of
+      each loop iteration, before `guardrailStep` or `approvalGateStep`. On
+      `halted=true` the workflow finishes the in-flight copywriter task (if any),
+      then emits `CampaignHaltedOperator` and ends the campaign in `HALTED`. The
+      `control-update` SSE event propagates the halt state to the UI in real time.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Payment dispatch guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call (budget cap + wallet allow-list + token check)
+    source: —
+  - id: HI1
+    label: Human spend-approval gate
+    mechanism: HITL
+    implementation: application (ApprovalEntity + approval pane in UI)
+    source: —
+  - id: HO1
+    label: Operator / regulator halt
+    mechanism: Halt
+    implementation: operator-regulator-stop (SystemControlEntity + dashboard)
+    source: —

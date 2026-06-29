@@ -1,0 +1,110 @@
+schema_version: 1
+sample_id: aws-ops-assistant
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Block disallowed AWS resource targets before any API call
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: resource-allow-list
+    enforcement: blocking
+    rationale: |
+      A cloud operations agent has write access to infrastructure that can affect production
+      workloads at scale. Allowing the agent to call arbitrary AWS service APIs without
+      restriction creates an unbounded blast radius — a single mistaken or injected instruction
+      could modify IAM policies, delete S3 buckets, or terminate EC2 fleets. The
+      before-tool-call hook is the right cut: every planned MCP tool call is checked against
+      the configured allow-list before any network traffic leaves the process, so a blocked
+      action can never partially execute. The guardrail runs on READ calls too, preventing
+      reconnaissance against services the deployer has not explicitly approved.
+    implementation: |
+      `ActionGuardrail` is registered on `AwsOpsAgent` via the agent's guardrail-configuration
+      block, bound to the `before-tool-call` hook. Before each MCP tool invocation it extracts
+      the target `awsService` (e.g., `"DynamoDB"`) and `resourceArn` from the planned call and
+      checks them against `akka.javasdk.app.allowed-aws-services` in `application.conf`
+      (default: `["EC2", "S3", "Lambda", "IAM", "CloudWatch"]`). If the service is outside the
+      list, it returns `Guardrail.reject("blocked-resource: " + awsService)`; `AwsOpsAgent`
+      records a BLOCKED `ActionResult` for that action and continues planning the next one.
+      Passing calls flow through to `AwsMcpStubs` (or the real MCP surface in a deployed
+      environment).
+    regulation_anchors: []
+
+  - id: H1
+    name: Require explicit human approval before every mutating AWS call
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Cloud mutation calls — instance type changes, function code updates, IAM role
+      modifications — are not easily reversible and can cause service disruption when applied
+      to the wrong resource or at the wrong time. An automated agent working through a
+      multi-step operations plan can accumulate a sequence of individually plausible but
+      collectively destructive mutations. Pausing for explicit per-action confirmation before
+      each mutating call keeps a human in the decision loop at exactly the moment of
+      consequence, without requiring the operator to understand the agent's full plan upfront.
+      Declined actions are recorded as SKIPPED, not silently dropped — the audit trail shows
+      what was proposed and what the operator chose.
+    implementation: |
+      `OpsWorkflow.confirmStep` fires before each action where `ActionKind == MUTATING`. The
+      workflow calls `OpsRequestEntity.requestConfirmation(ConfirmationRequest)`, which emits
+      `ConfirmationRequested` and transitions the entity to `AWAITING_CONFIRMATION`.
+      `ConfirmationConsumer` subscribes to `ConfirmationRequested` events and calls
+      `OpsRequestEntity.recordConfirmationDelivered` to confirm the UI received the prompt.
+      `OpsEndpoint` exposes `POST /api/ops-requests/{id}/confirm` with body
+      `{actionId, outcome, decidedBy}`; on receipt it calls
+      `OpsRequestEntity.receiveConfirmation(ConfirmationDecision)`, emitting
+      `ConfirmationReceived`. The workflow polls for `ConfirmationReceived` every 2 s within
+      a 600 s step timeout; expiry records the action as SKIPPED. `AwsOpsAgent` only
+      proceeds to call the MCP stub after the APPROVED signal arrives.
+    regulation_anchors: []
+
+  - id: X1
+    name: Halt the agent immediately on operator or circuit-breaker command
+    mechanism:
+      kind: halt
+      flavor: operator-regulator-stop
+    enforcement: system-level
+    rationale: |
+      A cloud operations agent working through a large plan — listing resources, resizing
+      instances, updating function code — can touch dozens of resources in under a minute.
+      If an operator notices the agent has misunderstood the scope, is operating in the wrong
+      account, or is about to cross a budget threshold, they need a way to stop all further
+      AWS calls immediately without waiting for the current plan to finish. The halt control
+      is the wide-blast-radius safety valve: it transitions the entity to HALTED, which the
+      workflow observes between action dispatches and interprets as a stop signal. The running
+      agent receives no more tasks; any action currently executing completes (one atomic MCP
+      call), and no further calls are issued. The partial report is preserved on the entity
+      for audit.
+    implementation: |
+      `OpsEndpoint` exposes `POST /api/ops-requests/{id}/halt` with body `{haltedBy}`. On
+      receipt it calls `OpsRequestEntity.halt(haltedBy, now())`, emitting `RequestHalted` and
+      transitioning the entity to `HALTED`. `OpsWorkflow` checks
+      `OpsRequestEntity.getRequest().status == HALTED` at the top of each step before
+      dispatching the next action — between `planStep` and `confirmStep`, between
+      `confirmStep` iterations, and between individual actions in `executeStep`. When the halt
+      flag is observed the workflow calls `OpsRequestEntity.recordReport` with
+      `ReportStatus.HALTED` and the partial list of `ActionResult` entries collected so far,
+      then transitions to the `error` step which ends the workflow instance. The UI shows a
+      red HALTED badge and the partial action table.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Resource allow-list guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Per-mutating-action confirmation
+    mechanism: HITL
+    implementation: application
+    source: —
+  - id: X1
+    label: Operator halt
+    mechanism: Halt
+    implementation: operator-regulator-stop
+    source: —

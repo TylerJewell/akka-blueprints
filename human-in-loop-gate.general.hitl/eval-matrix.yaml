@@ -1,0 +1,91 @@
+# Eval Matrix for the hitl-agent Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (general domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an
+# empty list across all controls.
+
+schema_version: 1
+sample_id: hitl-agent
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: general
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human approval gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      The core risk of an autonomous action pipeline is that the agent executes
+      without a person verifying the proposed action is appropriate for the specific
+      context. An approval gate between propose and execute makes human judgment
+      structurally mandatory, not advisory. The workflow cannot reach executeStep
+      unless a human has explicitly called the approve endpoint.
+    implementation: >
+      ActionWorkflow pauses in awaitApprovalStep, polling ActionEntity status every
+      5 seconds. POST /api/actions/{id}/approve and POST /api/actions/{id}/reject
+      transition the entity; the workflow resumes on the next poll and either
+      advances to executeStep or terminates with REJECTED.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the execution tool unless the action is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Even if the workflow state machine advances correctly, a defence-in-depth check
+      at the tool boundary prevents execution from being reached through unexpected
+      control flows such as replay, retry, or out-of-order events. By re-reading
+      ActionEntity.status immediately before the simulated tool call, the guardrail
+      remains authoritative regardless of how the workflow arrived at executeStep.
+    implementation: >
+      A before-tool-call guardrail on ExecutionAgent re-reads ActionEntity.status
+      and allows the simulated execution tool only when status is APPROVED. If status
+      is not APPROVED the tool call is blocked and an error is returned to the
+      workflow without mutating any state.
+    regulation_anchors: []
+
+  - id: G2
+    name: Quality-check the proposal before human review
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      A proposal that lacks a legible summary, a reasoned rationale, or a declared
+      risk level cannot be meaningfully evaluated by a reviewer. An output guardrail
+      on ProposalAgent enforces structural completeness and prevents degenerate
+      outputs — empty fields, implausible risk levels, responses that do not
+      conform to the ActionProposal schema — from being persisted and presented to
+      the reviewer as if they were valid.
+    implementation: >
+      A before-agent-response guardrail on ProposalAgent checks that all three
+      fields (summary, rationale, riskLevel) are non-empty and that riskLevel is
+      one of the accepted values (LOW, MEDIUM, HIGH) before the ActionProposal is
+      persisted via recordProposal on ActionEntity.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/reject.
+  - id: G1
+    name: Guard execution tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block execution unless status is APPROVED.
+  - id: G2
+    name: Proposal quality gate
+    mechanism: "guardrail · before-agent-response"
+    short: Block incomplete or malformed proposals from reaching the reviewer.

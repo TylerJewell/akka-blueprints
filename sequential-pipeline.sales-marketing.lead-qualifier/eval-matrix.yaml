@@ -1,0 +1,86 @@
+schema_version: 1
+sample_id: lead-qualifier
+coordination_pattern: sequential-pipeline
+domain: sales-marketing
+
+controls:
+  - id: G1
+    name: Reject tool calls that violate phase order or CRM schema constraints
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: |
+      In a lead-qualification pipeline, CRM writes are external side-effects with
+      real operational consequences — a lead written at the wrong stage, with a
+      missing owner, or before scoring is complete can trigger automated follow-up
+      sequences, skew pipeline reporting, and expose incomplete contact records to
+      sales teams. The before-tool-call hook is the correct enforcement point:
+      it intercepts every tool invocation before the tool body executes, checks
+      both that the pipeline phase precondition is satisfied (qualification must
+      precede CRM write) and that the proposed CRM payload is schema-valid (stage
+      in allowed enum, required fields present). Catching violations here rather
+      than post-hoc means no partial CRM write ever lands, no matter how the agent
+      constructs its tool arguments.
+    implementation: |
+      `CrmWriteGuardrail` is registered on `InquiryAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      Each function-tool class (`CaptureTools`, `QualifyTools`, `EnrichTools`)
+      carries a `Phase` constant on its methods. On every tool call the guardrail
+      reads the candidate's `Phase` and the current `LeadEntity.status` (looked
+      up via the `leadId` carried in the in-flight `TaskDef.metadata`) and applies
+      the matrix: `CAPTURE` tools require `status ∈ {CREATED, CAPTURING}`;
+      `QUALIFY` tools require `status ∈ {CAPTURED, QUALIFYING}` AND
+      `form.isPresent()`; `ENRICH` tools require `status ∈ {QUALIFIED, ENRICHING}`
+      AND `score.isPresent()`. For ENRICH-phase CRM-write tools (`writeCrmStage`,
+      `assignOwner`) the guardrail additionally validates that `stage` is in
+      `{New, Qualified, MQL, SQL, Disqualified}` and that `leadId` in the payload
+      matches the in-flight workflow's `leadId`. On reject, the guardrail returns a
+      structured error (`phase-violation` or `schema-violation`) to the agent loop
+      and calls `LeadEntity.recordGuardrailRejection` so the rejection is visible
+      in the UI's rejection-log strip. On accept, the guardrail delegates to
+      `PiiSanitizer` before the tool body runs.
+    regulation_anchors: []
+
+  - id: S1
+    name: Mask personal contact fields before every outbound CRM tool call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: system-level
+    rationale: |
+      Lead capture necessarily collects personal contact data — raw email address,
+      phone number, and full name — to identify the prospect. That data is required
+      for the capture phase but must not travel beyond the service boundary in
+      plaintext. CRM systems, tool logs, and SSE event streams are all downstream
+      consumers that should receive only anonymised identifiers. If the sanitizer
+      were optional or caller-invoked, a single missed call site would silently leak
+      PII; placing it as a mandatory gate inside `CrmWriteGuardrail` — the single
+      choke point for all ENRICH-phase tool calls — eliminates the missed-call risk
+      and makes the enforcement auditable from one class.
+    implementation: |
+      `PiiSanitizer` is a pure deterministic class (no LLM call) called exclusively
+      from `CrmWriteGuardrail` immediately before any ENRICH-phase tool call proceeds.
+      It receives the outbound payload and applies three substitutions: `rawEmail` is
+      replaced with the first 8 hex characters of its SHA-256 digest followed by
+      `@masked`; `rawPhone` is replaced with `[REDACTED]`; any `fullName` field is
+      replaced with initials derived by taking the first character of each
+      whitespace-separated token. The sanitizer returns the masked payload; the tool
+      body never sees the original values. Raw PII fields (`rawEmail`, `rawPhone`)
+      are stored only on `LeadEntity` and are excluded from every `LeadRow` projection,
+      every SSE event payload, and every API response body. `PiiSanitizer` has no
+      external dependencies and is covered by unit tests in the generated test suite.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: CRM write + phase-gate guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: PII masking on CRM tool calls
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

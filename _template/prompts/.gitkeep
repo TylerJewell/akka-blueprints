@@ -1,0 +1,3 @@
+# One file per agent named in SPEC.md §4. Filename = kebab-case of the agent class.
+# Each prompt is the system prompt the generated AutonomousAgent (or Agent) runs with.
+# See AGENT-PROMPT format in BLUEPRINT-AUTHORING-GUIDE.md §9.

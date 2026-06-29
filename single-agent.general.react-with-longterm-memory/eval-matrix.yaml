@@ -1,0 +1,71 @@
+schema_version: 1
+sample_id: mem0-react-agent
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: S1
+    name: Redact PII before persisting any memory fact
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      A ReAct agent with long-term memory is at particular risk of accumulating
+      identifiers over time. Each store-memory tool call carries raw user text that
+      may contain emails, phone numbers, government identifiers, payment-card-like
+      tokens, postal addresses, and person names. These must be removed before the
+      fact is written to the persistent store, because facts can accumulate across
+      many sessions and be recalled in future LLM calls. The raw text is retained
+      on the entity for audit but never enters the clean memory path or future
+      recall queries.
+    implementation: |
+      `FactSanitizer` Consumer subscribes to `FactStoreRequested` events emitted
+      by `MemoryEntity`. It runs a pipeline of regex stages (well-known formats),
+      a heuristic stage (person names, postal addresses), and an account-id-token
+      stage against the `rawText` field. Outputs a `SanitizedFact` carrying the
+      redacted text plus the list of categories found. Calls
+      `MemoryEntity.attachSanitized(sanitized)`. `MemoryWriteWorkflow.persistStep`
+      then writes only `sanitized.cleanText` to the persistent store; the raw
+      payload remains accessible only via `request.rawText` on the entity, never
+      in the `MemoryView` facts list that the agent queries during recall.
+    regulation_anchors: []
+
+  - id: H1
+    name: Signal memory drift when per-user fact count crosses threshold
+    mechanism:
+      kind: hotl
+      hook: deployer-runtime-monitoring
+      flavor: deployer-runtime-monitoring
+    enforcement: non-blocking
+    rationale: |
+      Long-term memory accumulation is a form of slow drift: facts can become
+      stale, contradict each other, or exceed what a deployer intended to retain
+      per user. Unlike a guardrail that blocks individual responses, the right
+      intervention is visibility — a deployer-operated dashboard that surfaces
+      when a user's memory store grows beyond a configured threshold, prompting
+      a human review of accumulated facts. The agent's loop is not blocked; the
+      monitor fires asynchronously after persistence completes.
+    implementation: |
+      `DriftMonitor` Consumer subscribes to `FactPersisted` events emitted by
+      `MemoryEntity`. After each event it queries `MemoryView.countByUserId` for
+      the affected user. When the count meets or exceeds the configured threshold
+      (default 50, set via `akka.javasdk.agent.memory.drift-threshold` in
+      `application.conf`), it emits a `MemoryDriftSignaled{userId, factCount,
+      threshold, signaledAt}` event that lands in `MemoryView`'s drift-signal
+      projection. The App UI's memory panel polls this projection via SSE and
+      renders warning banners per affected user. No agent call is delayed or
+      cancelled.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before memory persist
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: H1
+    label: Memory drift monitor
+    mechanism: HotL · runtime
+    implementation: deployer-runtime-monitoring
+    source: —

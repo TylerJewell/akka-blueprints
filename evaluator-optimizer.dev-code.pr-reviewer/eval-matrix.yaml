@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: pr-reviewer
+coordination_pattern: evaluator-optimizer
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Block personal-critique language before the alignment agent runs
+    mechanism:
+      kind: guardrail
+      hook: after-llm-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      Code review is a high-stakes collaborative signal. Feedback that targets
+      the author personally — rather than the code — violates professional
+      norms and can cause lasting harm to team dynamics. A deterministic scan
+      for personal-critique patterns after the reviewer agent responds, before
+      the alignment agent evaluates, ensures non-compliant feedback never
+      propagates downstream. The guardrail returns structured rewrite guidance
+      to the reviewer rather than silently discarding the attempt, preserving
+      the iterative loop and keeping every attempt auditable.
+    implementation: |
+      Wired as the `guardrailStep` of `ReviewWorkflow`, immediately after
+      `reviewStep`. A pure-function scan of `FeedbackDraft.comments()` for
+      first/second-person singular references directed at the commit author
+      (patterns such as "you should", "you wrote", "you didn't"). On failure,
+      emits `FeedbackGuardrailVerdictRecorded` with `verdict.passed = false`
+      and `reasonCode = "PERSONAL_CRITIQUE"`, then transitions back to
+      `reviewStep` with a fixed `AlignmentNotes("Feedback contains personal
+      critique directed at the author; rewrite as impersonal observations
+      about the code.")`. The ReviewerAgent's next call sees the structured
+      note as prior alignment feedback. The cycle still counts toward
+      `maxAttempts`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every alignment verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The alignment agent's approve-or-revise verdict is the quality signal
+      for the entire review pipeline. Recording it as a typed event per
+      attempt enables continuous measurement of review quality — approval
+      rate by attempt number, average alignment score over time, frequency
+      of personal-critique guardrail triggers — without coupling the
+      measurement logic to the workflow itself. These metrics let operators
+      detect prompt drift or rubric-satisfaction degradation before it
+      reaches end users.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `ReviewsView.getAllReviews`, finds attempts that have been alignment-
+      checked but do not yet have a matching `EvalRecorded` event, and calls
+      `ReviewEntity.recordEval(attemptNumber, verdict, score,
+      personalCritiqueBlocked)`. The call is idempotent on
+      `(reviewId, attemptNumber)`. The workflow itself also emits one
+      `EvalRecorded` event on the terminal transition (ReviewApproved or
+      ReviewRejectedFinal) carrying the whole loop's outcome, including
+      `personalCritiqueBlocked` set to `true` if any guardrail trigger
+      occurred during the review's lifecycle.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · personal-critique block
+    mechanism: Guardrail
+    implementation: after-llm-response
+    source: —
+  - id: E1
+    label: Per-attempt alignment eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

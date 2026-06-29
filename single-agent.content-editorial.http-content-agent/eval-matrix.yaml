@@ -1,0 +1,42 @@
+schema_version: 1
+sample_id: http-content-agent
+coordination_pattern: single-agent
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Reject non-compliant drafts before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A content-generation agent operating without an exit check will occasionally
+      produce drafts that are structurally incomplete (missing title or body),
+      violate word-count expectations, or contain prohibited phrases that breach
+      brand-safety policy. Because the output goes directly to callers and may be
+      published, catching these failures inside the agent loop — before the draft
+      ever reaches the entity or the client — is cheaper and safer than after-the-fact
+      moderation. The before-agent-response hook is the right cut point: the agent
+      receives a structured explanation of which check(s) failed and can correct
+      specifically that issue in its next iteration, rather than starting over.
+    implementation: |
+      `DraftGuardrail` is registered on `ContentGeneratorAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate response it (1) parses the response into `GeneratedContent`,
+      (2) asserts `title`, `body`, and `format` are all non-empty strings, (3) asserts
+      `wordCount` is within ±50 % of the `wordCountHint` supplied in the brief, and
+      (4) scans `body` for any string from the prohibited-word list loaded at startup
+      from `src/main/resources/brand-rules/prohibited-words.txt`. On any failure it
+      returns a structured rejection naming every failed check; the agent loop consumes
+      one of its 3 iterations and retries. Passing drafts flow through to
+      `ContentWorkflow.generateStep`, which calls `ContentJobEntity.approveContent`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Brand-safety draft guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

@@ -1,0 +1,106 @@
+schema_version: 1
+sample_id: case-management-agent
+coordination_pattern: single-agent
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Redact customer PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound customer messages in a support channel routinely carry emails,
+      phone numbers, payment-card tokens, postal addresses, account identifiers,
+      and person names. A support case is a long-lived record that will be read
+      by multiple agents and operators — PII that enters the LLM call body can
+      surface in model reasoning, logs, and downstream tool calls far outside
+      the original message context. Sanitizing before the agent call means the
+      model operates on a clean representation while the raw text stays in the
+      entity's audit log, accessible only through the typed API.
+    implementation: |
+      `MessageSanitizer` Consumer subscribes to `MessageReceived` events emitted
+      by `CaseEntity`. It runs a pipeline of regex stages (well-known formats:
+      email, phone, payment card, SSN-like), a heuristic stage (person names,
+      postal addresses), and an account-id-token stage. Outputs a
+      `SanitizedMessage` carrying the redacted text plus the list of categories
+      found. Calls `CaseEntity.attachSanitized(sanitized)`. `CaseWorkflow.agentStep`
+      then passes `sanitizedMessage.redactedText` as the `SupportAgent` task
+      instruction text; the raw payload remains accessible only via
+      `lastMessage.rawText` on the entity, never on the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject malformed case actions before the agent returns
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: structured-output-validator
+    enforcement: blocking
+    rationale: |
+      A CRM write that originates from a malformed action proposal — missing
+      priority, an unknown actionType, or a mutating action without a target
+      case id — can corrupt the case record and create audit gaps. Catching the
+      bad response before it leaves the agent loop forces a retry within the
+      same task iteration budget, so the CRM store only ever receives
+      well-formed write commands. Blocking the response inside the loop is
+      preferable to filtering after the fact because the model can reason about
+      the rejection and revise its output on the next iteration.
+    implementation: |
+      `ActionGuardrail` is registered on `SupportAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      On each candidate response it (1) parses the response into `CaseAction`,
+      (2) asserts `actionType` is one of `{CREATE, UPDATE, ESCALATE, CLOSE}`,
+      (3) asserts `priority` is one of `{LOW, MEDIUM, HIGH, CRITICAL}`,
+      (4) asserts `tier` is one of `{TIER_1, TIER_2, TIER_3}`, and (5) asserts
+      that `targetCaseId` is present for UPDATE, ESCALATE, and CLOSE actions.
+      On any failure returns a structured rejection naming the failed check; the
+      agent loop consumes one of its 3 iterations and retries.
+    regulation_anchors: []
+
+  - id: G2
+    name: Enforce CRM write policy before each tool call
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: policy-enforcement
+    enforcement: blocking
+    rationale: |
+      Even a structurally valid `CaseAction` can violate CRM write policy: an
+      escalation that skips a tier, a close on a case that is already resolved,
+      or a write to a case id that does not exist in the store. Enforcing these
+      constraints at the `before-tool-call` hook means the check fires at the
+      last responsible moment — after the agent has produced a well-formed
+      action and chosen a tool, but before the write reaches the in-process CRM
+      store. Separating this guard from G1 keeps structural validation and
+      policy enforcement as two independent, auditable layers.
+    implementation: |
+      `ToolCallGuardrail` is registered on `SupportAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. For
+      every CRM write tool call it (1) verifies the target case id exists for
+      UPDATE, ESCALATE, and CLOSE operations, (2) enforces the
+      escalation-path policy — TIER_1 may only escalate to TIER_2; TIER_2 may
+      only escalate to TIER_3; TIER_3 escalation is blocked (already at top
+      tier), and (3) rejects any write carrying a blank summary or a blank
+      agentReasoning field. On violation returns a structured policy-violation
+      reason; the agent loop receives the reason, may revise its tool arguments,
+      and retries within its iteration budget.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Action-structure guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: G2
+    label: CRM write-policy guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

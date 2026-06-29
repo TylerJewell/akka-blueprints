@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: ghostwriter
+
+# ---- Purpose ----
+purpose:
+  primary_function: ai-assisted-content-drafting
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: generative-assist
+  user_type: content-author-or-communications-professional
+
+# ---- Data ----
+data:
+  inputs:
+    - writing-brief
+    - voice-owner-writing-samples
+  data_classes:
+    pii: true
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  pii_handled_by_sanitizer_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: generative-assist
+  decision_subject: content-draft-for-human-review
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_draft_before_publication: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-draft
+  failure_modes:
+    - verbatim-reproduction
+    - voice-mismatch
+    - pii-leakage-via-llm
+    - low-fidelity-draft
+    - redaction-marker-in-output
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: content-author-or-editor
+  reviewer_must_approve_before_publication: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_draft: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  voice-owner-consent-to-ai-style-training: TO_BE_COMPLETED_BY_DEPLOYER
+  writing-samples-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  attribution-policy-for-ai-assisted-content: TO_BE_COMPLETED_BY_DEPLOYER

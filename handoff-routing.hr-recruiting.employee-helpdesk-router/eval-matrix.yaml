@@ -1,0 +1,69 @@
+schema_version: 1
+sample_id: employee-helpdesk-router
+coordination_pattern: handoff-routing
+domain: hr-recruiting
+
+controls:
+  - id: S1
+    name: Redact employee identifiers before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Employee questions about leave requests, benefit elections, disciplinary matters,
+      and IT access routinely include employee ids, personal email addresses, and phone
+      numbers. None of these identifiers help the routing or answering agents do their
+      jobs — but if they reach an LLM, they create a traceability risk: a single
+      transcript could link a sensitive HR question back to a named individual. Redaction
+      runs inside a Consumer before the question enters the workflow, so no agent call
+      ever receives a raw employee identifier.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `QuestionQueue` events. For each
+      `InboundQuestionReceived` it runs a regex redaction pipeline — well-known email
+      and phone patterns, plus `EMP-\d+` employee id tokens — against both the subject
+      and body, producing a `SanitizedQuestion` with the redacted text and a
+      `piiCategoriesFound` list kept for audit. It then calls
+      `QuestionEntity.registerIncoming` and `attachSanitized`, and starts a
+      `HelpWorkflow` with the sanitized payload. The `TopicRouter`, `HRSpecialist`,
+      `ITSpecialist`, and `PolicySpecialist` agents each receive only the
+      `SanitizedQuestion`.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block specialist drafts that violate the internal-policy rubric
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-rubric
+    enforcement: blocking
+    rationale: |
+      A specialist agent can return a well-formed `Answer` whose content still violates
+      internal policy: citing a policy document id that does not exist, stating a
+      specific benefit amount that was not established in the question, giving legal or
+      medical advice beyond the agent's scope, or echoing a `[REDACTED]` token in the
+      response body. These errors are particularly damaging in an employee-facing context
+      because employees treat HR and policy answers as authoritative. The
+      before-agent-response guardrail intercepts every draft before it is published and
+      holds any rubric-violating answer for HR-team review.
+    implementation: |
+      `AnswerGuardrail` is a typed Agent. `HelpWorkflow.guardrailStep` invokes it with
+      the `SanitizedQuestion` and the specialist's `Answer` draft. The agent returns
+      `GuardrailVerdict { allowed, violations, rubricVersion }`. On `allowed=false` the
+      workflow emits `AnswerBlocked` (terminal `BLOCKED`) and the HR team can either
+      publish the draft via `POST /api/questions/{id}/unblock` or leave the question
+      blocked indefinitely. On `allowed=true` the workflow emits `AnswerPublished`
+      (terminal `ANSWERED`).
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Before-response policy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

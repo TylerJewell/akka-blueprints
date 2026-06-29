@@ -1,0 +1,43 @@
+# Eval Matrix for the helloworld Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain community sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list. Treat the
+# requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: helloworld
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: single-agent
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Screen the answer before it reaches the user
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The returned answer is user-facing. A before-agent-response check on
+      confidence and content is the minimum sensible control for a single agent
+      with no other safeguards: a low-confidence or empty answer should not be
+      shown as if it were trustworthy.
+    implementation: >
+      A before-agent-response guardrail on QuestionAnswerer inspects the Answer
+      it is about to return. If confidence < 0.4 or the text is blank, the
+      guardrail blocks the response; AnswerConsumer then records an AnswerBlocked
+      event on QuestionEntity (with a short reason) instead of AnswerRecorded,
+      and the UI shows BLOCKED with the reason and no answer text.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Answer output check
+    mechanism: "guardrail · before-agent-response"
+    short: Block low-confidence or empty answers before they reach the user.

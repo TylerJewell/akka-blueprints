@@ -1,0 +1,69 @@
+schema_version: 1
+sample_id: routing-classifier
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Block handler drafts that violate the support-policy rubric
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: policy-rubric
+    enforcement: blocking
+    rationale: |
+      A handler agent can return a draft whose fields are well-formed but whose content
+      is policy-violating — committing to same-day resolution outside the published SLA,
+      offering advice outside its specialist scope, or echoing a [REDACTED] token that
+      signals PII leakage. Because the classifier routes tickets to three distinct handlers
+      with different domains (billing, technical, account), the risk of a handler
+      over-stepping its scope is higher than in a single-specialist system. The
+      before-agent-response guardrail is the last line of defence before a reply reaches
+      the customer.
+    implementation: |
+      `ResponseGuardrail` is a typed Agent. `RoutingWorkflow.guardrailStep` invokes it
+      with the `SanitizedTicket` and the handler's `HandlerReply` draft. The agent
+      returns `GuardrailVerdict { allowed, violations, rubricVersion }`. On `allowed=false`
+      the workflow emits `ReplyBlocked` (terminal `BLOCKED`) and the operator can either
+      unblock via `POST /api/cases/{id}/unblock` or leave the case blocked for further
+      review. The step timeout for `guardrailStep` is 20 s; on timeout the case is
+      escalated via the default step recovery.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound support tickets can carry emails, phone numbers, payment-card numbers,
+      and account identifiers. The classifier and all three handler agents need none of
+      this to do their jobs — the classifier routes on the subject matter, not the
+      customer's contact details; the handlers compose replies from policy and product
+      knowledge, not from raw personal data. Redacting before any LLM call eliminates
+      the class of failure where a model echoes or inadvertently memorises a real
+      identifier. The categories of PII found are retained on the sanitized record for
+      audit; only the redacted text is passed to agents.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `TicketQueue` events. For each
+      `InboundTicketReceived` it runs a regex stage (well-known email / phone patterns,
+      Luhn-aware card-number match, `ACCT-\w+` token patterns) and a heuristic stage
+      (greeting-position names, address-shaped lines), produces a `SanitizedTicket`
+      carrying the redacted text plus the list of PII categories found, and calls
+      `CaseEntity.registerIncoming` then `attachSanitized`. The categories list is kept
+      for audit; only the redacted text is passed to the `ClassifierAgent` and to
+      whichever handler the workflow selects.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Before-response policy guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —

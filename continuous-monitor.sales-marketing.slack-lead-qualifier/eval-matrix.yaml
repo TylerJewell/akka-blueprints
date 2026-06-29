@@ -1,0 +1,69 @@
+schema_version: 1
+sample_id: slack-lead-qualifier
+coordination_pattern: continuous-monitor
+domain: sales-marketing
+
+controls:
+  - id: S1
+    name: Strip PII from enriched lead data before scoring LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Web-search enrichment routinely surfaces email addresses, phone numbers,
+      personal URLs, and sub-city location strings from public profiles. The
+      scoring model has no need to see identifiers — it needs company, title,
+      industry, and headcount. Stripping PII inside a Consumer after the
+      LeadEnriched event and before the LeadScoringAgent call prevents
+      identifiers from appearing in model inputs, model logs, or any downstream
+      analytics that consumes scoring output.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `LeadEnriched` events on `LeadEntity`.
+      For each event it applies: an RFC-5322 email regex, an E.164 phone pattern,
+      a URL-personal-token heuristic (linkedin.com/in/, twitter.com/),
+      and a geographic sub-city classifier. Strips matches from all string fields
+      of `EnrichmentResult`, builds `SanitizedEnrichment` with a `piiCategoriesStripped`
+      list, and calls `LeadEntity.attachSanitized`. If the enrichment is the
+      unknown-sentinel, it calls `LeadEntity.markFailed` instead of sanitizing.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block Slack post on tone violation or residual PII
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tone-and-pii
+    enforcement: blocking
+    rationale: |
+      The Slack post is the only external write this system makes. A single
+      outbound message that contains a personal identifier, an aggressive sales
+      claim, or a score that does not meet the configured threshold would
+      undermine trust with the channel's audience and expose the company to
+      privacy complaints. Because the post is drafted programmatically, a
+      guardrail at the tool boundary provides a deterministic last line of
+      defence that is independent of the scoring agent's output quality.
+    implementation: |
+      Wired on the `postToSlack(channel, body)` tool's `before-tool-call` hook
+      inside `LeadWorkflow`. The hook performs three checks in sequence:
+      (1) score read from workflow context must be >= the configured
+      `akka.javasdk.lead-qualifier.posting-threshold`; (2) the draft `body`
+      field is scanned with the same RFC-5322 email and E.164 phone regexes
+      used by `PiiSanitizer`; (3) a keyword blocklist (configurable; defaults
+      include "guaranteed", "immediately buy", "don't miss") is checked against
+      the body. Any failing check causes the hook to return a structured
+      `GuardrailViolation{reason, checkName}` and `LeadWorkflow` emits
+      `LeadFailed` with the violation details.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction on enriched profile
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Slack post tone + PII guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

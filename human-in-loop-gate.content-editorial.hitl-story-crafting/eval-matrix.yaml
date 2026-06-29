@@ -1,0 +1,71 @@
+# Eval Matrix for the hitl-story-crafting Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (content-editorial domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: hitl-story-crafting
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: content-editorial
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Pause the workflow after each chapter until the reader provides direction
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Interactive story crafting is inherently turn-based: the reader's direction
+      determines what the next chapter covers. Without a blocking human gate, the
+      workflow would produce chapters that ignore the reader's intent. The gate is
+      also the mechanism that lets the reader end the story at any turn rather than
+      having the agent produce a fixed number of chapters autonomously.
+    implementation: >
+      StoryWorkflow pauses in awaitDirectionStep after each chapter is written,
+      polling StoryEntity status on a 5-second timer. POST /api/stories/{id}/continue
+      calls directionProvided on the entity, transitioning status to DRAFTING;
+      the next poll moves the workflow into draftChapterStep for the next turn.
+      POST /api/stories/{id}/end calls storyCompleted, and the next poll terminates
+      the workflow.
+    regulation_anchors: []
+
+  - id: G1
+    name: Screen each chapter draft for content policy before persisting it for the reader
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      Story content is reader-facing creative text that could, if unchecked, carry
+      harmful material into the output stream. Running ContentGuardAgent between the
+      draft step and the persistence step ensures that no chapter reaches the reader
+      or the entity state unless it passes a content policy check. A failed screen
+      terminates the story in SCREENED_OUT rather than silently suppressing the
+      chapter and retrying, making the outcome transparent to both the reader and any
+      operator auditing the story history.
+    implementation: >
+      screenDraftStep in StoryWorkflow invokes ContentGuardAgent with the
+      ChapterDraft produced by StoryDrafterAgent. If GuardResult.passed is false,
+      the workflow calls storyScreenedOut on StoryEntity with the guard's reason,
+      transitions the story to terminal SCREENED_OUT, and ends without writing the
+      chapter. Only when passed is true does the workflow proceed to chapterAdded.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Reader direction gate
+    mechanism: "hitl · application"
+    short: Workflow pauses after each chapter for reader continue-or-end input.
+  - id: G1
+    name: Chapter content screen
+    mechanism: "guardrail · before-agent-response"
+    short: Block content-policy-failing drafts before they reach the reader.

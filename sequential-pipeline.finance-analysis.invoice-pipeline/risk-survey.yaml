@@ -1,0 +1,79 @@
+schema_version: 1
+sample_id: invoice-processing
+
+# ---- Purpose ----
+purpose:
+  primary_function: invoice-extraction-and-posting-pipeline
+  sector: finance-analysis
+  decisions_surface: financial-posting
+  user_type: accounts-payable-staff-and-finance-reviewers
+
+# ---- Data ----
+data:
+  inputs:
+    - vendor-invoice-document-text
+    - in-process-gl-account-table
+  data_classes:
+    pii: true                        # vendor contact fields (email, phone) — redacted by S1
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: execute            # pipeline posts journal entries autonomously (below threshold)
+  decision_subject: invoice-journal-posting
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: reversible-with-correcting-entry
+  high_value_decisions_require_human_approval: true   # H1 gate at configured threshold
+
+# ---- Failure ----
+failure:
+  blast_radius: single-invoice-posting
+  failure_modes:
+    - incorrect-gl-account-assignment
+    - unbalanced-journal-entry
+    - duplicate-invoice-posted
+    - phase-violation-during-extraction
+    - vendor-pii-retained-without-sanitization
+    - approval-timeout-on-high-value-invoice
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true                 # H1 gate for high-value invoices
+  human_on_loop: true                 # finance reviewer monitors live list; PostingQualityScorer flags issues
+  reviewer_role: finance-reviewer
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+    - in-process-ledger-stub
+  rate_limit_per_invoice: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  vendor-invoice-data-permitted-for-ai-processing: TO_BE_COMPLETED_BY_DEPLOYER
+  pii-sanitization-mechanism-in-place: true      # S1 — VendorPiiSanitizer

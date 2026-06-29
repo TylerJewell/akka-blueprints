@@ -1,0 +1,71 @@
+schema_version: 1
+sample_id: memory-tool-router
+coordination_pattern: planner-executor
+domain: general
+
+controls:
+  - id: G1
+    name: Vet every tool dispatch before the tool-executor agent runs
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      The RouterAgent selects from four tool-executor agents with varying
+      blast radii. A CODE_RUNNER dispatch carrying a forbidden system call,
+      a WEB_LOOKUP to a non-allow-listed host, or a CALCULATOR expression
+      that exploits expression-injection all represent mis-classification
+      errors that should never reach the executor. A deterministic guardrail
+      wired at the dispatch hook stops the tool call before it executes and
+      forces the RouterAgent to revise the turn plan — typically to a
+      direct reply with no tool.
+    implementation: |
+      `ToolDispatchGuardrail.vet(RoutingDecision)` is called by
+      `ConversationWorkflow`'s `guardrailStep` between `routeStep` and
+      `executeStep`. The vetter checks (a) the tool allowlist (CALCULATOR,
+      KNOWLEDGE_BASE, WEB_LOOKUP, CODE_RUNNER, NONE), (b) a per-tool content
+      policy (CODE_RUNNER forbidden-import patterns, WEB_LOOKUP host
+      allowlist, CALCULATOR 512-character limit). On reject, the workflow
+      records a `TurnBlocked` entry on `ConversationEntity` and calls
+      `RouterAgent.REVISE_TURN` so the agent can produce a direct reply.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub PII from every memory item before it is persisted
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      The MemoryAgent extracts facts from user messages and tool results
+      and writes them to a persistent per-session store that outlives
+      individual conversations. If a user mentions a personal email address,
+      phone number, or national identifier — whether directly or embedded
+      in a tool result — leaving it in the memory store creates a
+      long-lived PII exposure that violates data-minimisation obligations.
+      The PII sanitizer makes redaction unconditional and runs before any
+      write to MemoryEntity, so raw personal identifiers never reach
+      the persistent store.
+    implementation: |
+      `PiiScrubber.scrub(List<MemoryItem>)` runs in `ConversationWorkflow`'s
+      `sanitizeMemoriesStep` between `extractMemoriesStep` and `storeMemoriesStep`.
+      It applies a sequence of labelled-replacement regexes (email, E.164
+      phone, US SSN, UK NINO, IPv4, IPv6) to each `MemoryItem.value`. Tagged
+      replacements — `[REDACTED:email]`, `[REDACTED:phone]`,
+      `[REDACTED:national-id]`, `[REDACTED:ip-address]` — land in the
+      `MemoryItemsAdded` event that `MemoryEntity` persists, so the entity's
+      event journal never contains raw PII.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool dispatch guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: PII memory sanitizer
+    mechanism: Sanitizer
+    implementation: pii (regex redactor on MemoryItem values)
+    source: —

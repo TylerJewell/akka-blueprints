@@ -1,0 +1,87 @@
+# Eval Matrix for the shared-memory-multi-agent Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a general-domain sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is intentionally an empty list
+# across all controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: shared-memory-multi-agent
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: team-shared-list
+  domain: general
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Refuse writes to protected memory block sections before they execute
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: |
+      When multiple agents share a memory block, any one of them could write to
+      sections that the block owner has designated as immutable or system-managed
+      (such as schema headers, audit trails, or consolidation metadata). Without a
+      gate in front of the write, an agent acting on a confused or adversarially
+      crafted instruction could corrupt those sections in a way that is invisible
+      until the next consolidation pass — by which point the bad data has already
+      been merged into the shared snapshot. The guardrail fires before the write
+      call executes, so the block is never touched.
+    implementation: |
+      A before-tool-call guardrail registered on `WriterAgent` inspects each
+      outbound write. It refuses the call when the target section name matches
+      a protected pattern (`_system`, `_immutable`, any section listed in the
+      block's locked-sections field), when the write attempts to overwrite the
+      consolidated snapshot directly, or when the block is currently in
+      `CONSOLIDATING` status. On a refusal, `WriteWorkflow.contributeStep` calls
+      `FragmentEntity.reject(reason)` so the fragment is recorded `REJECTED` with
+      the guardrail reason; the writer loop continues to its next cycle.
+    regulation_anchors: []
+
+  - id: S1
+    name: Redact special-category attributes from fragments before committing to shared memory
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: non-blocking
+    rationale: |
+      Shared memory blocks accumulate contributions from multiple agents that may
+      each have access to different data streams. An agent working on a "project
+      context" block might inadvertently include personal identifiers, health
+      indicators, or financial identifiers gathered during its prior reasoning
+      steps — not because the agent was asked to, but because those values leaked
+      from a prompt or a retrieved document. Once such a value is committed to the
+      shared block, every subsequent agent that reads the block is exposed to it,
+      and the consolidated snapshot can propagate it further. The sanitizer
+      intercepts the fragment body after the agent returns and before the fragment
+      is written, so the raw value never lands in shared memory.
+    implementation: |
+      After `WriterAgent` returns a `MemoryFragment`, `WriteWorkflow.sanitizeStep`
+      runs the fragment content through a pattern-based special-category scanner.
+      Any field value matching a personal-identifier pattern (email address, phone
+      number), a health indicator pattern (ICD code, medication name), or a
+      financial identifier pattern (IBAN, credit-card number) is replaced with a
+      typed placeholder (e.g., `[REDACTED:EMAIL]`). If any substitution is made,
+      `FragmentEntity.sanitize(sanitizedNote)` is called to set the fragment status
+      to `SANITIZED` and record which field types were redacted. The fragment is
+      still committed — the knowledge contribution is preserved — but the raw
+      protected value is not. The `sanitizedNote` is surfaced in the UI's fragment
+      detail panel and in the SSE stream.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Protected-section write guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: S1
+    label: Special-category attribute sanitizer
+    mechanism: Sanitizer
+    implementation: special-category
+    source: —

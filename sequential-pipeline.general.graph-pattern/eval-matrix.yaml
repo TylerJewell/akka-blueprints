@@ -1,0 +1,8 @@
+schema_version: 1
+sample_id: graph-pattern
+coordination_pattern: sequential-pipeline
+domain: general
+
+controls: []
+
+simplified_view: []

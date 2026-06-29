@@ -1,0 +1,67 @@
+schema_version: 1
+sample_id: feed-monitor
+coordination_pattern: continuous-monitor
+domain: research-intel
+
+controls:
+  - id: G1
+    name: Block postToSlack to channels outside the allow-list
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: channel-scope
+    enforcement: blocking
+    rationale: |
+      A scheduled monitor posting to Slack can silently broadcast to unintended
+      channels if the LLM's classification produces an unexpected targetChannel value
+      or if a future code change wires a different channel string. The risk is not
+      a single bad message but a continuous stream of mis-routed posts accumulating
+      before anyone notices. The guardrail runs inside SlackNotifier before every
+      postToSlack invocation, validates the channel against a deployer-configured
+      allow-list, and hard-rejects the call if the channel is absent. This makes
+      the channel boundary explicit and testable rather than implicit in application
+      logic.
+    implementation: |
+      `SlackNotifier` Consumer subscribes to `NotifyRequested` events on
+      `FeedItemEntity`. Before calling the `postToSlack` stub, it loads the
+      allow-list from `application.conf` (`feed-monitor.slack.allowed-channels`),
+      reads `classificationResult.targetChannel`, and checks membership. If the
+      channel is absent, it calls `FeedItemEntity.markFailed(itemId,
+      "guardrail:channel-not-allowed")`, records `guardrailPassed = false` in
+      the `SlackPost` record, and returns without calling the stub. If the channel
+      is present, the stub is called, `guardrailPassed = true`, and `ItemPosted`
+      is emitted.
+    regulation_anchors: []
+
+  - id: E1
+    name: Periodic eval of posted summaries
+    mechanism:
+      kind: eval-periodic
+      flavor: performance-monitor
+    enforcement: non-blocking
+    rationale: |
+      A scheduled feed monitor runs unattended. Without a quality signal, silent
+      degradation — where the LLM starts producing generic or hallucinated summaries
+      that still pass classification — is invisible until a human complains. Sampling
+      POSTED items on a 30-minute cadence gives an objective, rolling score across
+      three axes (summary quality, classification accuracy, channel appropriateness)
+      that can trigger alerts or trigger a halt if scores fall below threshold.
+    implementation: |
+      `EvalRunner` TimedAction fires every 30 minutes. It queries `FeedView.getAllItems`,
+      selects up to 5 POSTED items with no `evalScore` (oldest-first), and calls
+      `EvalJudge` (AutonomousAgent with a 1–5 rubric) for each. The result is written
+      back via `FeedItemEntity.recordEval(itemId, score, rationale)`, emitting
+      `EvalScored`. Scores appear on the App UI tab's feed cards and in the detail pane.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: postToSlack channel guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: E1
+    label: Posted-summary eval
+    mechanism: Eval · periodic
+    implementation: performance-monitor
+    source: —

@@ -1,0 +1,71 @@
+# Eval Matrix for the retail-ai-location-strategy Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (finance-analysis domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: retail-ai-location-strategy
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: finance-analysis
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Vet the site recommendation before it reaches the requester
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      A site recommendation influences capital allocation decisions — opening a store in the
+      wrong location carries real financial consequences. An output guardrail intercepts the
+      synthesised recommendation before it leaves the LocationCoordinator, checking for
+      unsupported scoring claims (e.g., a score derived from a data field that was never
+      populated) and data-integrity violations such as out-of-range score values. A flawed
+      recommendation is blocked rather than presented as authoritative, preventing downstream
+      misuse in a finance decision context.
+    implementation: >
+      A before-agent-response guardrail on LocationCoordinator runs a deterministic vetter
+      (score bounds check, required-field presence) plus an LLM judge over the
+      SiteRecommendation in LocationWorkflow.guardrailStep. On failure the workflow calls
+      CandidateSiteEntity.block and the evaluation enters BLOCKED with a failureReason
+      describing which check failed.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the coordinator synthesis decision for recommendation quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The coordinator merges two independently-run assessments — market conditions and
+      demographics — into a single scored recommendation. That merge step is the highest-
+      lever for quality drift: if one analyst's output dominates inappropriately or
+      the coordinator ignores contradictory signals, the recommendation score will diverge
+      from what a human analyst would assign. Periodic eval sampling surfaces a rubric score
+      alongside every finished recommendation without blocking delivery, giving operators a
+      running quality signal they can act on before the pattern degrades at scale.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries LocationView for the oldest
+      RECOMMENDED or NOT_RECOMMENDED site lacking an evalScore, runs a 1-5 rubric judge
+      over the SiteRecommendation content (checking score calibration, insight coverage,
+      and internal consistency), and calls CandidateSiteEntity.recordEval(score, rationale),
+      emitting EvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Recommendation output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a recommendation with unsupported scores or data-integrity violations.
+  - id: E1
+    name: Synthesis quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the coordinator's site recommendation synthesis decision.

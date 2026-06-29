@@ -1,0 +1,105 @@
+schema_version: 1
+sample_id: spot-edge-agent
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Validate every motion command before it reaches the robot
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: motion-command-validator
+    enforcement: blocking
+    rationale: |
+      Robot motion commands issued by an AI agent are physically irreversible at the
+      moment of execution. A command that enters a forbidden zone, exceeds the terrain-
+      appropriate velocity limit, or requests a gait the robot's current ground contact
+      cannot support can cause collision, joint damage, or falls before any human can
+      intervene. The before-tool-call hook is the correct interception point: it fires
+      inside the agent loop before the command reaches the MCP channel, giving the agent
+      a chance to replan rather than the robot a chance to comply with a bad instruction.
+    implementation: |
+      `CommandGuardrail` is registered on `SpotNavigatorAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On every
+      proposed Spot command it (1) checks the target waypoint coordinates against a static
+      set of forbidden-zone polygons loaded from application.conf, (2) checks the requested
+      velocity against the terrain-type velocity cap stored in the waypoint map attachment,
+      (3) verifies the requested gait (walk/amble/crawl/stair) is compatible with the
+      waypoint's declared terrain type, and (4) verifies the command name is in the allowed
+      Spot SDK command set (`spot.navigate_to`, `spot.capture_image`, `spot.change_gait`,
+      `spot.dock`, `spot.halt`). On any violation, returns `Guardrail.reject(reason)` with
+      a structured message naming the constraint broken; the agent loop increments its
+      iteration counter and the agent must propose a compliant alternative.
+    regulation_anchors: []
+
+  - id: H1
+    name: Halt the robot automatically on safety-threshold breach
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      A legged robot operating in an industrial or public environment must stop
+      immediately when sensor data indicates imminent danger — low battery, joint
+      stress approaching the mechanical limit, unexpected close-range obstacles, or
+      an asserted E-stop signal. Relying on the agent loop to detect and act on these
+      conditions introduces an unacceptable latency: the agent may be mid-iteration,
+      awaiting an LLM token stream, or retrying a guardrail-rejected command. The
+      safety halt must be an independent, synchronous path that bypasses the agent
+      entirely and de-energizes the drive system before the condition worsens.
+    implementation: |
+      `TelemetryMonitor` Consumer subscribes to `MissionStarted` events on
+      `MissionEntity`. Once a mission begins executing, the monitor polls
+      `SimulatedSpotMcp.readTelemetry()` every 500 ms and evaluates four thresholds:
+      battery below 15 %, `jointLoadMax` above 0.9, `obstacleProximityM` below 0.3 m,
+      and `estopSignal == true`. On any breach it (1) calls
+      `MissionEntity.triggerSafetyHalt(haltReason)` to write `SafetyHaltTriggered` and
+      transition the entity to HALTED, and (2) dispatches `SimulatedSpotMcp.halt()` to
+      de-energize the drive system. This path runs entirely outside the
+      `MissionWorkflow`; the workflow detects the HALTED status on its next entity read
+      and terminates `executeStep` without writing `MissionCompleted`.
+    regulation_anchors: []
+
+  - id: A1
+    name: Require human approval before executing non-trivial maneuvers
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Certain Spot maneuvers — tipping the robot body for payload manipulation, stair
+      climbing, and any gait that increases fall risk — carry consequences that are
+      difficult or impossible to reverse quickly once the robot is mid-motion. An
+      operator who has visibility into the physical environment must confirm the proposed
+      command sequence before the agent proceeds. Automating these decisions without a
+      human check would transfer liability to the system in situations where context the
+      agent cannot perceive (persons nearby, surface condition, load weight) is decisive.
+    implementation: |
+      `MissionWorkflow.approvalGateStep` is entered whenever `SpotNavigatorAgent`'s
+      planning pass classifies any command as `ManeuverClass.NON_TRIVIAL`. The step
+      writes `ApprovalRequested` — carrying an `ApprovalSummary` with a plain-English
+      command sequence and the `ManeuverClass` — to `MissionEntity`, then suspends via
+      `Workflow.pause()`. `MissionEndpoint` exposes `POST /api/missions/{id}/approve`
+      and `POST /api/missions/{id}/reject`; each calls `MissionEntity.decideApproval`
+      and resumes the workflow via its resume callback. If no decision arrives within
+      10 minutes (the `approvalGateStep` timeout), the step fires the timeout branch,
+      which calls `decideApproval("REJECTED")` and transitions to the error step.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Motion-command guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Automatic safety halt
+    mechanism: Halt
+    implementation: automatic-safety-halt
+    source: —
+  - id: A1
+    label: Human approval for non-trivial maneuvers
+    mechanism: HITL
+    implementation: application
+    source: —

@@ -1,0 +1,135 @@
+schema_version: 1
+sample_id: financial-research-pipeline
+coordination_pattern: evaluator-optimizer
+domain: finance-analysis
+
+controls:
+  - id: E1
+    name: Record every verification cycle's verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The verifier's approve-or-revise verdict is the sharpest quality signal
+      the pipeline produces. Recording it as a typed event per draft gives
+      operators a continuous view of verification pass rate, average score
+      per draft number, frequency of word-ceiling overruns, and sector-level
+      quality drift — without coupling the workflow itself to any analytics
+      infrastructure. In a financial research context this stream also
+      provides the audit trail required to investigate why a report was
+      revised or rejected.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 45 s. It queries
+      `ReportsView.getAllReports`, finds drafts that have been verified but
+      do not yet have a matching `EvalRecorded` event, and calls
+      `ResearchEntity.recordEval(draftNumber, verdict, score,
+      wordCeilingExceeded)`. The call is idempotent on
+      `(reportId, draftNumber)`. `ResearchWorkflow` also emits one
+      `EvalRecorded` event on each terminal transition (ReportApprovedPending
+      or ReportRejectedFinal) capturing the whole loop's outcome.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip disallowed financial identifiers from analyst output before writing
+    mechanism:
+      kind: sanitizer
+      flavor: sector
+    enforcement: blocking
+    rationale: |
+      Analyst agents operating over retrieved source material can surface
+      unverified ticker symbols, un-sourced price targets, or proprietary
+      identifiers that a financial firm may not be authorised to propagate
+      in a published report. A deterministic sector sanitiser removes these
+      items before the writer ever sees them, keeping the content boundary
+      crisp and auditable. The sanitiser log provides a per-report record of
+      what was removed, supporting any downstream compliance assertion that
+      the released report is free of the disallowed class.
+    implementation: |
+      `ResearchWorkflow.sanitiseStep` is a pure-function workflow step that
+      runs immediately after `AnalystAgent` returns, before `WriterAgent` is
+      called. It applies the regex list from
+      `financial-research-pipeline.sanitiser.disallowed-patterns` to every
+      `AnalysisSection.claims` string. Matched strings are removed and
+      recorded. The step emits `SanitizerLogRecorded` on `ResearchEntity`
+      with `changed`, the list of removed items, and `reasonCode =
+      "SECTOR_SCRUB"`. `WriterAgent` receives only the sanitised section
+      list; the raw analyst output is preserved on the entity for audit.
+    regulation_anchors: []
+
+  - id: G1
+    name: Enforce word-count ceiling on report drafts before the verifier runs
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      Financial research reports often have strict word-count requirements set
+      by editorial policy or distribution channel constraints. An over-length
+      draft that reaches the verifier wastes a verification cycle and may
+      distort the verifier's rubric score on conciseness. A deterministic
+      pre-verifier guardrail catches the violation immediately, returns
+      structured feedback to the writer, and keeps the verifier focused on
+      content quality rather than length compliance.
+    implementation: |
+      `ResearchWorkflow.guardrailStep` is a pure-function workflow step that
+      runs immediately after `WriterAgent` returns, before `VerifierAgent` is
+      called. It checks `draft.wordCount() <= report.wordCeiling`. On failure,
+      it emits `DraftGuardrailVerdictRecorded` with `passed = false` and
+      `reasonCode = "OVER_WORD_CEILING"`, then transitions back to
+      `writeStep` with a structured `VerificationNotes("Draft exceeds the
+      configured word ceiling; condense and resubmit.")`. The writer receives
+      this as the prior verification notes on its `REVISE_DRAFT` call. The
+      guardrail-blocked draft still counts toward `maxVerifyAttempts`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Route every approved report through a compliance review queue before release
+    mechanism:
+      kind: hotl
+      flavor: live-compliance-review
+    enforcement: non-blocking
+    rationale: |
+      Automated verifiers can approve content that nonetheless requires a
+      human compliance review before it is released — for example to check
+      for material non-public information references or to satisfy a firm's
+      internal pre-publication review policy. The HOTL control parks the
+      workflow after a verifier APPROVE and enqueues a
+      ComplianceReviewRequest that a designated reviewer must explicitly
+      clear. This separates the verifier's quality gate from the human
+      compliance gate without blocking the runtime's event loop.
+    implementation: |
+      When `VerifierAgent` returns `APPROVE`, `ResearchWorkflow.complianceStep`
+      emits `ReportApprovedPending` on `ResearchEntity` (transitioning to
+      `AWAITING_COMPLIANCE`) and parks the workflow. The report appears in
+      `ReportsView` with status `AWAITING_COMPLIANCE`. A compliance reviewer
+      calls `POST /api/reports/{id}/approve-compliance` on
+      `ResearchEndpoint`, which sends an `approveCompliance` command to
+      `ResearchEntity`, emitting `ReportApproved` and transitioning the
+      report to `APPROVED`. The workflow resumes and ends. If the reviewer
+      calls `POST /api/reports/{id}/reject-compliance`, a `ReportRejectedFinal`
+      event is emitted instead.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-verification eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: S1
+    label: Sector identifier sanitiser
+    mechanism: Sanitizer
+    implementation: sector
+    source: —
+  - id: G1
+    label: Output guardrail · word ceiling
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: H1
+    label: Compliance review queue (HOTL)
+    mechanism: HOTL
+    implementation: live-compliance-review
+    source: —

@@ -1,0 +1,68 @@
+# Eval Matrix for the voyage-virtuoso-multi-agent Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (planning-travel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: voyage-virtuoso-multi-agent
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: planning-travel
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Vet the assembled itinerary before it reaches the traveller
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The assembled itinerary is the customer-facing output of a premium travel advisory
+      service. Fabricated fares, non-existent properties, or unsafe travel guidance carry
+      direct financial and safety consequences for the traveller. An output guardrail on
+      ItineraryDirector intercepts the assembled plan before it is persisted as ASSEMBLED,
+      ensuring that no hallucinated routing, fraudulent lodging reference, or policy-violating
+      travel advisory reaches the end user.
+    implementation: >
+      A before-agent-response guardrail on ItineraryDirector runs a deterministic vetter
+      (checks that fare class codes and property category values fall within known enumerations)
+      plus an LLM judge over the full ItineraryPlan in ItineraryWorkflow.guardrailStep.
+      On failure the workflow calls TravelRequestEntity.block and the request enters BLOCKED
+      with a failureReason describing which pillar triggered the rejection.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the director assembly decision for itinerary quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The ItineraryDirector's assembly step merges four independent specialist outputs into
+      one coherent itinerary. The quality of that merge — logical sequencing, pillar
+      consistency, absence of internal contradictions — is difficult to verify deterministically.
+      A periodic rubric judge surfaces a quality score that the traveller sees beside the
+      itinerary without blocking delivery, enabling continuous improvement of the director
+      prompt and the specialist coordination strategy.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries TravelRequestView for the oldest
+      ASSEMBLED request lacking an evalScore, runs a 1-5 rubric judge over the itinerary
+      synopsis and each of the four pillar plans, and calls TravelRequestEntity.recordEval
+      (score, rationale), emitting EvalScored. The eval does not gate delivery.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Itinerary output guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block an itinerary containing fabricated fares, invalid properties, or unsafe advisories.
+  - id: E1
+    name: Assembly quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the director's four-pillar assembly decision.

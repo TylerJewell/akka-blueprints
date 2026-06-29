@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: corrective-rag-workflow
+coordination_pattern: evaluator-optimizer
+domain: research-intel
+
+controls:
+  - id: E1
+    name: Record every retrieval cycle's relevance verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The relevance evaluator's SUFFICIENT / INSUFFICIENT judgment is the
+      decision that determines whether the workflow routes to the answer
+      synthesizer directly or fires a web-search correction. Recording that
+      judgment — along with the per-chunk scores and whether a fallback was
+      subsequently triggered — gives operators a continuous quality signal:
+      corpus coverage rate, average retrieval score, frequency of corrective
+      fallbacks, and answer-source breakdown. Without this stream, silent
+      degradation in corpus coverage is invisible until users report bad answers.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `QueryView.getAllQueries`, finds retrieval attempts that have a completed
+      `RelevanceVerdictRecorded` event but do not yet have a matching
+      `EvalRecorded` event, and calls `QueryEntity.recordEval(attemptNumber,
+      judgment, averageScore, webSearchFired)`. The call is idempotent on
+      `(queryId, attemptNumber)`. The workflow itself also emits one
+      `EvalRecorded` event on the terminal transition (`QueryAnswered` or
+      `QueryDegraded`) capturing the loop-level outcome and the final
+      `AnswerSource`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Gate the web-search tool call against disallowed query patterns
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: on-decision-eval
+    enforcement: blocking
+    rationale: |
+      The web-search fallback is an external tool call that sends the user's
+      query to an outside service. Certain query patterns — personal
+      identifiers, regulated data categories, blocked domain references —
+      must not leave the service boundary. A deterministic pre-call guardrail
+      that checks the query against a configurable disallowed-pattern list
+      ensures these queries never reach the web-search agent. When blocked, the
+      system degrades gracefully to the best available retrieved context rather
+      than refusing to answer at all.
+    implementation: |
+      Wired as the `guardrailStep` of `CorrectiveRagWorkflow`, which runs only
+      on the `INSUFFICIENT` branch immediately before `webSearchStep`. The step
+      checks `query.question` against each pattern in
+      `corrective-rag.guardrail.disallowed-patterns` (loaded from
+      application.conf; defaults include `\bSSN\b`, `\bpassport\b`,
+      `\bcredit.card\b`). On a match, emits `GuardrailVerdictRecorded` with
+      `cleared=false` and `reasonCode="DISALLOWED_PATTERN"`, then transitions
+      to `degradeStep`, which emits `QueryDegraded` with the best-scoring
+      retrieved chunk as the degraded answer. No LLM call is made; the check
+      is in-process and typically completes in under 1 ms.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Per-retrieval eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —
+  - id: H1
+    label: Web-search guardrail · disallowed patterns
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

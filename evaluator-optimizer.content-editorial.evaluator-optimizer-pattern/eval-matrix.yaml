@@ -1,0 +1,70 @@
+schema_version: 1
+sample_id: evaluator-optimizer-workflow
+coordination_pattern: evaluator-optimizer
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Enforce per-headline word ceiling before the reviewer runs
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-policy
+    enforcement: blocking
+    rationale: |
+      The writer-reviewer loop depends on the reviewer judging editorial
+      quality, not mechanics. A headline that exceeds the word ceiling is a
+      structural violation — sending it to the reviewer risks the reviewer
+      giving stylistic feedback that obscures the deterministic failure and
+      consumes a retry slot. A pure-function guardrail intercepts the draft
+      immediately after the writer returns, emits a structured verdict, and
+      routes structured feedback back to the writer so the next attempt
+      targets the actual constraint.
+    implementation: |
+      Wired as the `guardrailStep` of `HeadlineWorkflow`, immediately after
+      `draftStep`. A pure-function check on `draft.wordCount() <=
+      headline.wordCeiling`. On failure, emits
+      `AttemptGuardrailVerdictRecorded` with `verdict.passed = false` and
+      `reasonCode = "OVER_CEILING"`, then transitions back to `draftStep`
+      with a fixed `ReviewNotes("Draft exceeds the configured word ceiling;
+      shorten and resubmit.")`. The writer's next call sees the structured
+      feedback as the prior review. The cycle still counts toward
+      `maxAttempts`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every cycle's verdict as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The reviewer's approve-or-revise verdict is the highest-information
+      quality signal the loop produces. Recording it as a typed event per
+      attempt gives operators a continuous stream of editorial quality data —
+      approval rate by attempt number, drift in average score, frequency of
+      over-ceiling drafts — without burdening the workflow with instrumentation
+      logic. The signal is non-blocking so a sampler failure never stalls an
+      in-progress optimization cycle.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 30 s. Queries
+      `HeadlinesView.getAllHeadlines`, finds attempts that have been reviewed
+      but do not yet have a matching `EvalRecorded` event, and calls
+      `HeadlineEntity.recordEval(attemptNumber, verdict, score,
+      ceilingExceeded)`. The call is idempotent on `(headlineId,
+      attemptNumber)`. The workflow itself also emits one `EvalRecorded`
+      event on the terminal transition (HeadlineApproved or
+      HeadlineRejectedFinal) carrying the whole loop's outcome.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Output guardrail · word ceiling
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: E1
+    label: Per-attempt eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

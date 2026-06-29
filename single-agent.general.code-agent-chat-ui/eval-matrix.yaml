@@ -1,0 +1,77 @@
+schema_version: 1
+sample_id: code-agent-chat-ui
+coordination_pattern: single-agent
+domain: general
+
+controls:
+  - id: G1
+    name: Validate every tool call before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-call-policy
+    enforcement: blocking
+    rationale: |
+      A code-executing agent that can call web-search and code-execution tools without
+      restriction is a direct path to prompt-injection attacks, file-system escape from
+      the sandbox, and uncontrolled outbound network requests. The before-tool-call hook
+      is the narrowest intervention point: it fires per invocation, before the tool runs,
+      giving the system a chance to block or rewrite a call without disrupting the agent's
+      overall task. In a general-purpose chat UI where users can freely type requests,
+      the input space is unbounded — blocking at the tool boundary is the only reliable
+      constraint.
+    implementation: |
+      `ToolCallPolicy` is registered on `CodeAssistantAgent` via the agent's guardrail
+      configuration block, bound to the `before-tool-call` hook. On each pending tool
+      invocation it dispatches by tool name: for `code-execution` calls it checks the
+      input code string for disallowed patterns (filesystem paths outside `/sandbox`,
+      socket-open syscalls, subprocess spawn calls); for `web-search` calls it checks
+      query length (≤ 512 chars) and a blocked-domain list. On any failure it returns
+      `Guardrail.reject` carrying a structured `tool-blocked` payload that names the
+      policy that triggered. The agent loop receives the rejection, may rephrase the
+      call, and retries within its 12-iteration budget. Approved calls flow through to
+      `WebSearchTool` or `CodeExecutionTool` unchanged. Each call outcome is recorded
+      via `ChatSessionEntity.ToolCallRequested` / `ToolCallResolved` for audit.
+    regulation_anchors: []
+
+  - id: G2
+    name: Reject malformed or unsafe agent responses before display
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: output-content-validator
+    enforcement: blocking
+    rationale: |
+      A chat UI that streams agent output directly to users is exposed to a class of
+      failures that structural validators miss: empty responses (the agent timed out and
+      returned nothing), raw JSON dumps (the agent mistakenly returned its internal
+      tool-call result as the final answer), bare stack traces (a code-execution error
+      leaked into the output), and responses containing `[CONTEXT_SECRET]` markers that
+      indicate the agent echoed request-context material. None of these are detectable
+      by the before-tool-call guardrail — they arise in the final synthesis step, which
+      is exactly where before-agent-response operates. Blocking them before streaming
+      ensures the user never sees a degraded or information-leaking response.
+    implementation: |
+      `ResponseGuardrail` is registered on `CodeAssistantAgent` via the agent's guardrail
+      configuration block, bound to the `before-agent-response` hook. On each candidate
+      response it runs four checks: (1) response text is non-empty; (2) response text
+      is not a raw JSON object (does not match `^\s*\{` with no surrounding prose); (3)
+      response text does not begin with a Java or Python stack trace marker
+      (`Exception in thread`, `Traceback (most recent call last)`); (4) response text
+      does not contain the literal string `[CONTEXT_SECRET]`. On any failure it returns
+      `Guardrail.reject` with a structured error naming the check that failed. The agent
+      loop retries within its 12-iteration budget. Passing responses flow through to the
+      SSE stream and the `AssistantMessageRecorded` event on `ChatSessionEntity`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-call policy guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: G2
+    label: Response content guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

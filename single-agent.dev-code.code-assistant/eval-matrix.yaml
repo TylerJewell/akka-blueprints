@@ -1,0 +1,71 @@
+schema_version: 1
+sample_id: code-assistant
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Block disallowed tool calls before the agent executes them
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-allowlist
+    enforcement: blocking
+    rationale: |
+      A code-assistant agent has natural access to analysis tools, but the same
+      tool-calling interface that lets it read files also exposes shell execution and
+      direct file-write paths. Without an interception point, a hallucinated or
+      adversarially-injected tool call could write to disk, delete files, or run
+      arbitrary commands during analysis — all before the developer sees the result.
+      The before-tool-call hook is the right cut: every tool invocation passes through
+      the guardrail before execution, so the agent's side-effect surface is bounded by
+      the allowlist regardless of what the model decides to call.
+    implementation: |
+      `ToolCallGuardrail` is registered on `CodeAssistantAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook. On each
+      candidate tool call it reads the tool name and checks it against the allowlist
+      `{read_file, list_directory, search_code, run_tests}`. Any tool name containing
+      `shell`, `exec`, or `bash`, and the explicit names `write_file`, `delete_file`,
+      and `move_file`, are blocked. On a blocked call the guardrail returns a structured
+      `tool-blocked` rejection naming the disallowed tool; the agent loop consumes one
+      of its 4 iterations and retries. Allowed calls flow through unmodified to the
+      agent's tool executor.
+    regulation_anchors: []
+
+  - id: C1
+    name: Gate every proposed edit through the project test suite before surfacing it
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      A code assistant that proposes edits which break the project's own tests hands
+      the developer a broken codebase under the guise of a fix. The CI gate closes
+      this gap by running the test suite against the proposed changes in-process before
+      the edit plan status advances to "ready". A developer who sees a GATE_PASSED
+      badge has concrete evidence the proposed changes did not regress the existing
+      tests; a GATE_FAILED card surfaces the failure output inline so the developer
+      can decide whether to request a revised plan.
+    implementation: |
+      `CIGate` Consumer subscribes to `EditProposed` events on `EditEntity`. On receipt
+      it reconstructs the repository snapshot from `request.repoSnapshot()`, applies the
+      `EditPlan.changes()` list to an in-memory copy (ADD/MODIFY/DELETE per `ChangeType`),
+      then runs `plan.testCommand()` in a sandboxed JVM subprocess against the modified
+      snapshot. It captures stdout and stderr, counts passing and failing tests from the
+      output, and builds a `GateResult{status, testOutput, testsPassed, testsFailed,
+      evaluatedAt}`. It calls `EditEntity.recordGateResult(gateResult)`, which emits
+      either `GatePassed` or `GateFailed`. `EditWorkflow.awaitGateStep` polls the entity
+      until `gateResult().isPresent()` before completing.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Tool-call allowlist guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: C1
+    label: Test-suite CI gate
+    mechanism: CI gate
+    implementation: test-gate
+    source: —

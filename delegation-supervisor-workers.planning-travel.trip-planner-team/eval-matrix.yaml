@@ -1,0 +1,61 @@
+# Eval Matrix for the trip-planner-team Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on
+# each control. This is a community planning-travel sample with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all
+# controls. Treat the requirement as relaxed for non-anchored samples.
+
+schema_version: 1
+sample_id: trip-planner-team
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: planning-travel
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Guard the scrape tool against non-allowlisted travel sites
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: scope-enforcement
+    enforcement: blocking
+    rationale: >
+      The local-expert agent scrapes travel pages. Fetching arbitrary URLs is a
+      request-forgery and robots-compliance risk, so the scrape tool is fenced to
+      an allowlist with a robots check before the call runs.
+    implementation: >
+      before-tool-call guardrail on LocalExpertAgent checks the scrape url against
+      travel.allowed-hosts in application.conf and a robots rule; a blocked url
+      returns "blocked: not allowlisted" and the agent proceeds search-only.
+    regulation_anchors: []
+
+  - id: G2
+    name: Require the itinerary to be grounded in gathered insights
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The itinerary is the user-facing decision input. Places the agent invents
+      that were not gathered by the local-expert mislead the traveler, so the
+      response is checked for grounding before it leaves the step.
+    implementation: >
+      before-agent-response guardrail on ItineraryAgent verifies every place named
+      in the returned Itinerary appears in the localInsights passed into the step;
+      an ungrounded itinerary is rejected so the step retries.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Scrape allowlist guard
+    mechanism: "guardrail · before-tool-call"
+    short: Block scrape of non-allowlisted travel URLs.
+  - id: G2
+    name: Itinerary grounding check
+    mechanism: "guardrail · before-agent-response"
+    short: Itinerary must reference only gathered insights.

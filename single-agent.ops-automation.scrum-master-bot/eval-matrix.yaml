@@ -1,0 +1,40 @@
+schema_version: 1
+sample_id: scrum-master-bot
+coordination_pattern: single-agent
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Gate every ticket write against the sprint's authorized scope
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: scope-validator
+    enforcement: blocking
+    rationale: |
+      An autonomous ops agent that posts ticket updates has direct write access to a project
+      management system. Without a scope gate, a hallucinated or misrouted ticket id could
+      update a ticket belonging to a different sprint, team, or project — potentially
+      overwriting another team's work or leaking sprint-internal commentary into unrelated
+      tickets. The before-tool-call hook is the right enforcement point: it fires before the
+      simulated (or real) ticket client is invoked, while the agent still has the full call
+      payload available for inspection, and it returns a structured rejection the agent loop
+      can reason about rather than silently swallowing.
+    implementation: |
+      `TicketWriteGuardrail` is registered on `ScrumMasterAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook on the
+      `postTicketUpdate` tool. On each invocation it extracts the `ticketId` argument from
+      the tool-call payload and checks it against `sprintContext.authorizedTicketIds()` held
+      in `StandupEntity`. If the id is absent, it returns
+      `Guardrail.reject("out-of-scope-ticket: " + ticketId)` with a structured error code;
+      the agent loop records the rejection, decrements its iteration budget, and must
+      continue without posting to that ticket. Calls carrying ids that pass the check
+      proceed to `TicketPostingService`.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Ticket-scope guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

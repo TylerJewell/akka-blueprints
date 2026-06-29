@@ -1,0 +1,75 @@
+schema_version: 1
+sample_id: version-upgrade-planner
+coordination_pattern: planner-executor
+domain: dev-code
+
+controls:
+  - id: HI1
+    name: Require explicit human approval before applying any destructive migration phase
+    mechanism:
+      kind: hitl
+      hook: before-tool-call
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      Airflow version upgrades involve database schema migrations, provider package
+      changes, and DAG serialisation format shifts — all of which are difficult to
+      reverse once applied to a production environment. The upgrade planner operates
+      autonomously through compatibility checks and dry-run phases, but a human
+      reviewer must explicitly approve before any phase that modifies the Airflow
+      metadata database or alters provider packages is dispatched. This gate ensures
+      that the consequences of each destructive step are understood and accepted by a
+      designated reviewer before any irreversible action is taken.
+    implementation: |
+      When the planner's `DECIDE_PHASE` output carries `requiresApproval=true`,
+      `UpgradeWorkflow`'s `approvalGateStep` writes an `ApprovalRequest` to
+      `ApprovalEntity` and emits `ApprovalRequested` on `UpgradeJobEntity`, moving
+      the job to `AWAITING_APPROVAL`. The step then polls `ApprovalEntity` until an
+      `ApprovalResolved` event arrives. On `approved=true`, the workflow emits
+      `ApprovalGranted` and continues to `dispatchStep`. On `approved=false`, it
+      emits `ApprovalRejected`, records a `PhaseBlocked` progress entry with
+      `verdict=BLOCKED_BY_APPROVAL`, and returns control to `plannerDecideStep` so
+      the planner can revise the plan — for example, by removing the rejected phase
+      or substituting a safer alternative.
+    regulation_anchors: []
+
+  - id: CI1
+    name: Validate the test suite passes after every applied migration before the next phase dispatches
+    mechanism:
+      kind: ci-gate
+      hook: after-tool-call
+      flavor: test-gate
+    enforcement: non-blocking
+    rationale: |
+      Each migration phase may introduce regressions — broken DAG imports, failed
+      provider API calls, or scheduler incompatibilities that only surface once the
+      migration script has run. Running the full test suite after each migration,
+      before the next phase is allowed to proceed, catches regressions at the
+      earliest possible point in the upgrade sequence. Rather than halting the
+      workflow immediately on failure, the gate returns the test report to the
+      planner so it can make an informed decision — schedule a rollback phase,
+      attempt a targeted fix, or declare failure — rather than leaving the Airflow
+      environment in an inconsistent intermediate state.
+    implementation: |
+      After every phase with `phase.kind == MIGRATION`, `UpgradeWorkflow`'s
+      `ciGateStep` calls `TestRunnerAgent.RUN_TESTS`. If the returned
+      `PhaseResult.testReport.failed > 0`, the step records a `CiGateFailed` event
+      on `UpgradeJobEntity` (appending a `ProgressEntry` with
+      `verdict=CI_GATE_FAILED` and the full `TestReport`) and returns the report as
+      additional context to `plannerDecideStep`. The planner then decides the next
+      action: emit `Replan` (e.g., insert a rollback phase) or `Fail` if the replan
+      budget is exhausted. If the test report shows zero failures, the gate records
+      an `OK` entry and the loop continues normally.
+    regulation_anchors: []
+
+simplified_view:
+  - id: HI1
+    label: Human approval gate
+    mechanism: HITL
+    implementation: application (ApprovalEntity + reviewer decision)
+    source: —
+  - id: CI1
+    label: CI test gate
+    mechanism: CI gate
+    implementation: test-gate (TestRunnerAgent post-migration)
+    source: —

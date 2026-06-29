@@ -1,0 +1,68 @@
+schema_version: 1
+sample_id: churn-monitor
+coordination_pattern: continuous-monitor
+domain: cx-support
+
+controls:
+  - id: S1
+    name: Redact PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Customer account snapshots routinely carry account names, contact emails, phone
+      numbers, and account IDs. A churn-scoring model needs behavioural signals (usage
+      ratio, ticket volume, months active) — not personally identifiable identifiers —
+      to produce a score. Redaction in a Consumer before the workflow starts ensures
+      the model never receives raw identifiers, and the stripped categories are retained
+      for audit without re-exposing the originals.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `SnapshotReceived` events from
+      `AccountSnapshotQueue`. It applies a pipeline: regex stage (email, phone, account-
+      ID patterns), heuristic stage (name tokens, street addresses). The sanitized result
+      is a `SanitizedSnapshot` carrying only behavioural fields plus a `piiCategoriesFound`
+      list. `PiiSanitizer` emits `SnapshotSanitized` on `AccountChurnEntity` and starts
+      a `ChurnWorkflow` — the LLM call in `ChurnScoringAgent` receives only the sanitized
+      form.
+    regulation_anchors: []
+
+  - id: E1
+    name: Monitor predictions for drift and demographic bias
+    mechanism:
+      kind: eval-periodic
+      flavor: drift-fairness-watch
+    enforcement: non-blocking
+    rationale: |
+      A churn model predicting customer attrition carries two distinct failure modes that
+      do not manifest in any single prediction: (1) prediction drift — the score
+      distribution shifts over time as the underlying customer mix changes, producing
+      stale or miscalibrated risk levels; (2) demographic bias — accounts in certain
+      industry segments or size tiers may be systematically over- or under-scored,
+      creating unfair retention-resource allocation. Periodic sampling across a batch of
+      recent predictions is the only way to detect either issue because both require
+      population-level visibility, not per-account inspection.
+    implementation: |
+      `DriftFairnessEvalRunner` TimedAction fires every 6 hours (overridable via
+      `EVAL_RUNNER_SECONDS` for testing). It queries `ChurnView` for accounts scored
+      since the previous eval run (up to 50, oldest-first), assembles a
+      `List<ChurnScoreSample>` containing each account's risk level, probability,
+      industry, and tier, and passes the batch to `DriftFairnessEvalJudge`
+      (AutonomousAgent). The judge returns an `EvalSummary` with a `driftScore`,
+      `driftVerdict`, `fairnessScore`, and `fairnessVerdict`. The runner calls
+      `AccountChurnEntity.recordEval(evalSummary)` for each account in the batch,
+      emitting `EvalCompleted`. The Eval Matrix tab on the UI surfaces the latest
+      verdicts for the selected account.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: E1
+    label: Drift + fairness eval
+    mechanism: Eval · periodic
+    implementation: drift-fairness-watch
+    source: —

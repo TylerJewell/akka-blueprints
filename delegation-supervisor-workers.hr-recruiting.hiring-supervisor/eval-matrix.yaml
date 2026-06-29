@@ -1,0 +1,76 @@
+# Eval Matrix for the hiring-supervisor Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (hr-recruiting domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: hiring-supervisor
+generated_at: 2026-06-28
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: hr-recruiting
+
+integration_tier: Runs out of the box
+
+controls:
+  - id: G1
+    name: Check delegation policy before each supervisor delegate call
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: policy-enforcement
+    enforcement: blocking
+    rationale: >
+      Hiring decisions carry legal exposure: routing a candidate to an inappropriate
+      evaluation stage, or delegating a task that exceeds the supervisor's authorization
+      scope, can constitute an adverse employment action under equal-opportunity law.
+      A before-invocation guardrail intercepts each HiringSupervisor delegate call,
+      evaluates it against the configured delegation policy, and stops the workflow
+      before a disallowed sub-agent call is made. This catches misconfigured role tiers,
+      unauthorized evaluation types, and out-of-scope scheduling contexts before they
+      propagate through the pipeline.
+    implementation: >
+      A before-agent-invocation guardrail registered on HiringSupervisor runs inside
+      HiringWorkflow.planStep before the PLAN_EVALUATION task is dispatched. The guardrail
+      checks the role tier and evaluation scope against a policy table. On failure the
+      workflow calls ApplicationEntity.policyHold and the application enters POLICY_HOLD
+      with a structured failureReason. Blocking enforcement means no sub-agent call is
+      issued when the check fails.
+    regulation_anchors: []
+
+  - id: S1
+    name: Strip protected-attribute fields before any agent receives the payload
+    mechanism:
+      kind: sanitizer
+      flavor: special-category
+    enforcement: blocking
+    rationale: >
+      Résumés and application forms frequently contain — implicitly or explicitly — data
+      about gender, age, national origin, disability status, and other attributes protected
+      under equal-opportunity employment law. Allowing those fields to reach an LLM-based
+      screening or scheduling agent introduces a vector for illegal disparate impact, even
+      when the agent is not instructed to consider them. A special-category sanitizer that
+      runs as the first workflow step removes those fields from the application payload
+      before any agent sees it, enforcing data-minimization at the pipeline boundary rather
+      than relying on prompt-level instructions that could be overridden or misapplied.
+    implementation: >
+      HiringWorkflow.sanitizeStep transforms the raw ApplicationRequest into a
+      SanitizedApplication by dropping any fields tagged as special-category (gender,
+      age, disability indicators, photograph references). The sanitized boolean flag on
+      SanitizedApplication is set to true; any downstream agent that receives a payload
+      with sanitized=false throws an IllegalStateException, making the invariant
+      machine-checked. No agent — HiringSupervisor, ScreeningAgent, or SchedulingAgent —
+      is ever invoked with an unsanitized payload.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Delegation policy guardrail
+    mechanism: "guardrail · before-agent-invocation"
+    short: Block a delegate call that violates the supervisor's authorization policy.
+  - id: S1
+    name: Protected-attribute sanitizer
+    mechanism: "sanitizer · special-category"
+    short: Strip gender, age, and disability fields before any agent receives the payload.

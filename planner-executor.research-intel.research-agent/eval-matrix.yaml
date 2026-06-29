@@ -1,0 +1,73 @@
+schema_version: 1
+sample_id: research-agent
+coordination_pattern: planner-executor
+domain: research-intel
+
+controls:
+  - id: E1
+    name: Evaluate every retrieved finding for citation accuracy before the planner sees it
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      Research output that reaches downstream consumers — analysts, policy writers,
+      product teams — is only as trustworthy as its sources. In an automated research
+      pipeline the planner receives searcher output verbatim on the next loop tick;
+      without an interposed evaluation step, uncited or unverifiable claims propagate
+      directly into the synthesized report. The citation evaluator runs a deterministic
+      signal-matching pass on every retrieved finding before it is appended to the
+      findings ledger, giving the planner a machine-readable verdict it can act on
+      in its next DECIDE call rather than discovering source quality only at report-
+      synthesis time.
+    implementation: |
+      `CitationEvaluator.evaluate(SearchResult)` runs in `ResearchWorkflow`'s
+      `citationEvalStep` between `dispatchStep` and `recordStep`. It matches four
+      signal classes (URL pattern, author-year reference, document fixture path,
+      ISBN). Each matched signal adds 0.25 to a confidence score (capped at 1.0).
+      Content with at least one matched signal receives `CitationVerdict.CITED`; content
+      with no signal receives `CitationVerdict.UNCITED` along with a `noSourceReason`
+      string. Both verdict and confidence are stored on the `FindingEntry` that
+      `ResearchJobEntity` appends to its findings ledger. The `ResearchPlannerAgent`
+      reads `citationVerdict` and `confidence` on its next DECIDE_NEXT call and may
+      emit `Replan` to fetch a better-sourced result before accepting the finding as
+      evidence.
+    regulation_anchors: []
+
+  - id: HO1
+    name: Let the operator pause new search dispatches without killing in-flight steps
+    mechanism:
+      kind: hotl
+      flavor: deployer-runtime-monitoring
+    enforcement: blocking
+    rationale: |
+      Research jobs can surface unexpected content — a fixture whose scope has
+      changed, a document set that no longer matches the intended query, or a
+      systematic citation gap that suggests a configuration error. The operator
+      must be able to pause the system and inspect the findings ledger without
+      waiting for all in-flight jobs to finish. The halt mechanism drains
+      gracefully: the currently-running search step completes and its finding
+      is recorded, then no further dispatches occur until the operator resumes.
+    implementation: |
+      `SystemControlEntity` (single instance keyed by literal `"global"`) holds the
+      halt flag and an optional reason string. The App UI tab shows an operator
+      dashboard with Halt and Resume buttons backed by `POST /api/control/halt`
+      and `POST /api/control/resume`. Every `ResearchWorkflow` reads the flag in
+      its `checkHaltStep` at the top of each loop iteration. On `halted=true`, the
+      workflow completes the current `dispatchStep` and `citationEvalStep`, records
+      the finding, then emits `JobHaltedOperator` and ends the job in `HALTED`.
+      The UI reflects the halt state in real time via the `control-update` SSE event.
+    regulation_anchors: []
+
+simplified_view:
+  - id: E1
+    label: Citation accuracy evaluator
+    mechanism: Eval-event
+    implementation: on-decision-eval (CitationEvaluator per finding)
+    source: —
+  - id: HO1
+    label: Operator runtime monitoring
+    mechanism: HOTL
+    implementation: deployer-runtime-monitoring (SystemControlEntity + dashboard)
+    source: —

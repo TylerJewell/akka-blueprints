@@ -1,0 +1,93 @@
+schema_version: 1
+sample_id: core-semantic-router
+coordination_pattern: handoff-routing
+domain: hr-recruiting
+
+controls:
+  - id: S1
+    name: Redact employee and financial PII before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound HR and Finance queries routinely carry employee IDs, Social Security
+      Number fragments, salary figures, benefit-plan codes, and financial account
+      references. Neither the intent router nor the specialists need raw identifiers
+      to do their jobs. Redaction happens inside a Consumer before the query enters
+      the workflow, so no LLM call ever sees unmasked employee or financial data.
+    implementation: |
+      `PiiSanitizer` Consumer subscribes to `QueryQueue` events. For each
+      `InboundQueryReceived` it runs a regex stage (EMP-\w+ employee-id tokens,
+      SSN patterns, salary-shaped numeric strings, ACCT-\w+ account tokens,
+      PLN-\d+ benefit-plan codes) and a heuristic stage (full-name patterns,
+      address-shaped lines), produces a `SanitizedQuery` carrying the redacted
+      text plus the list of categories found, and calls `QueryEntity.registerIncoming`
+      then `attachSanitized`. The categories list is kept for audit; only the
+      redacted text is passed to `IntentRouterAgent`, `RoutingGuardrail`,
+      `HrSpecialist`, and `FinanceSpecialist`.
+    regulation_anchors: []
+
+  - id: G1
+    name: Validate routing classification and caller authorization before specialist invocation
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: scope-enforcement
+    enforcement: blocking
+    rationale: |
+      The routing decision gates which domain of employee data a specialist can
+      access. An incorrect classification — particularly one with low confidence
+      or an `AMBIGUOUS` target — could expose HR policy data to an unauthorized
+      Finance caller or vice versa. The before-agent-invocation guardrail intercepts
+      the routing decision before the specialist is invoked and blocks the query if
+      the target domain is not recognized, the confidence is below threshold, or the
+      caller's channel is not authorized for that domain.
+    implementation: |
+      `RoutingGuardrail` is a typed Agent. `RouterWorkflow.guardrailStep` invokes it
+      with the `RoutingDecision` and caller context (requesterId, channel). The agent
+      returns `GuardrailVerdict { authorized, rejections, rubricVersion }`. On
+      `authorized=false` the workflow emits `QueryBlocked` (terminal `BLOCKED`) before
+      any specialist call is attempted. The violations list identifies which rule
+      fired: `low-confidence`, `ambiguous-domain`, or `unauthorized-channel`.
+    regulation_anchors: []
+
+  - id: E1
+    name: Score every routing decision inline
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The routing decision is the most consequential step in the handoff: an employee
+      asking an HR question who gets routed to Finance receives an answer from the
+      wrong policy corpus, and the error may not be visible in the final answer text.
+      An on-decision eval gives a continuous, per-query signal of routing quality —
+      independent of operator spot checks — and surfaces in the UI as a per-query
+      score chip that can reveal systematic drift in the classifier.
+    implementation: |
+      `RoutingEvalScorer` Consumer subscribes to `QueryEntity` events. On every
+      `IntentRouted` it calls `RoutingJudge` (typed Agent) with the `SanitizedQuery`
+      and the `RoutingDecision`. The judge returns `RoutingScore { score: 1–5,
+      rationale }`. The Consumer then calls `QueryEntity.recordRoutingScore` which
+      emits `RoutingScored`. The score is non-blocking — a low score does not change
+      the workflow flow; it surfaces on the App UI tab and (in a deployed setting)
+      would feed a system-level alert on sustained quality regression.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Before-invocation routing guardrail
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —
+  - id: E1
+    label: On-decision routing eval
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

@@ -1,0 +1,100 @@
+schema_version: 1
+sample_id: competitive-coding-agent
+coordination_pattern: evaluator-optimizer
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Block resource-violating solutions before the judge scores them
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      Generated code that exceeds the configured time or memory ceiling is by
+      definition incorrect for USACO-style judging — it would receive a TLE or MLE
+      verdict regardless of algorithmic correctness. Forwarding such a solution to
+      the JudgeAgent wastes an LLM call and can obscure the real defect in the
+      judge's feedback. Blocking at the sandbox step — before the agent is invoked —
+      returns a machine-readable reasonCode (TLE or MLE) to the SolverAgent as
+      structured FailureNotes, keeping the judge focused on correctness rather than
+      resource management.
+    implementation: |
+      Wired as the `sandboxStep` of `SolvingWorkflow`, immediately after
+      `generateStep`. The step POSTs the generated source to the E2B sandbox,
+      which enforces `timeLimitMs` and `memoryLimitMb` per the submission's
+      configuration. If `SandboxReport.resourcesOk = false`, the step emits
+      `AttemptSandboxReportRecorded` with `reasonCode = "TLE"` or `"MLE"` and
+      transitions back to `generateStep` with structured
+      `FailureNotes("Solution exceeded resource limits; see reasonCode and detail.")`
+      as the prior critique. The JudgeAgent is never invoked for this attempt.
+      The attempt still counts toward `maxAttempts`.
+    regulation_anchors: []
+
+  - id: CG1
+    name: Require all test cases to pass before accepting a solution
+    mechanism:
+      kind: ci-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      A USACO-style judge grants no credit for partial correctness — a solution
+      either passes every test case or it does not. Treating the all-cases-pass
+      condition as a gate within the workflow loop enforces this binary standard
+      without relying on the LLM judge to impose it. The gate is what terminates
+      the loop on success: the workflow transitions to ACCEPTED only when the
+      JudgeAgent returns PASS, which in turn requires `passedCases == totalCases`.
+      Partial passes (some cases wrong) remain FAIL and feed the failure notes back
+      to the solver for the next iteration.
+    implementation: |
+      Enforced inside `SolvingWorkflow.judgeStep`. After `JudgeAgent` returns a
+      `JudgeVerdict`, the workflow checks `verdict.outcome() == JudgeOutcome.PASS`.
+      A PASS transitions to `acceptStep`, which emits `SubmissionAccepted` and ends
+      the workflow. Any other outcome — including a FAIL with high `passedCases` —
+      transitions to `generateStep` (if attempts remain) or `rejectStep` (if the
+      ceiling is hit). The `JudgeAgent` prompt instructs it to return PASS only when
+      `passedCases == totalCases`, making the gate doubly enforced: both at the
+      agent-prompt level and at the workflow-step level.
+    regulation_anchors: []
+
+  - id: E1
+    name: Record every cycle's judge outcome as an eval event
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: |
+      The judge's PASS/FAIL verdict plus the case-level pass ratio is the
+      highest-signal measurement the loop produces per attempt. Recording it as a
+      typed event enables operators to track pass-rate trends across algorithm
+      families, detect solver regression over time, and measure how often the sandbox
+      guardrail fires relative to genuine correctness failures — all without
+      instrumenting the workflow directly.
+    implementation: |
+      `EvalSampler` (TimedAction) fires every 45 s. Queries
+      `SubmissionsView.getAllSubmissions`, finds attempts that have been judged but
+      do not yet have a matching `EvalRecorded` event, and calls
+      `SubmissionEntity.recordEval(attemptNumber, outcome, passedCases, totalCases,
+      sandboxOk)`. The call is idempotent on `(submissionId, attemptNumber)`.
+      The workflow itself also emits one `EvalRecorded` event on the terminal
+      transition (SubmissionAccepted or SubmissionRejectedFinal) carrying the
+      loop-level outcome including total attempts and final pass ratio.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Sandbox guardrail · TLE/MLE block
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: CG1
+    label: All-cases test gate
+    mechanism: CI gate
+    implementation: test-gate
+    source: —
+  - id: E1
+    label: Per-attempt eval recorder
+    mechanism: Eval · event
+    implementation: on-decision-eval
+    source: —

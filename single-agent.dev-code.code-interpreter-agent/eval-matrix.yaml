@@ -1,0 +1,91 @@
+schema_version: 1
+sample_id: code-interpreter-agent
+coordination_pattern: single-agent
+domain: dev-code
+
+controls:
+  - id: G1
+    name: Inspect generated code before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: code-safety-validator
+    enforcement: blocking
+    rationale: |
+      An agent that generates and then runs code presents a categorically
+      different risk surface from an agent that only produces text. The
+      generated Python code could import the `os` or `subprocess` modules
+      to escape the sandbox, open file descriptors outside the designated
+      scratch directory, or initiate outbound network connections against
+      arbitrary hosts. Because the code runs in the same process as the
+      application, an unapproved import is a process-level vulnerability,
+      not a data-quality issue. The before-tool-call hook is the right cut:
+      the guardrail sees the generated source before the executor sees it,
+      so a rejected tool call never reaches the runtime at all. The agent
+      is forced to rewrite the code within the same task iteration budget
+      rather than silently bypassing the policy.
+    implementation: |
+      `CodeGuardrail` is registered on `CodeInterpreterAgent` via the
+      agent's guardrail-configuration block, bound to the
+      `before-tool-call` hook. On each code-execution tool call it (1)
+      extracts the `pythonSource` argument, (2) tokenizes import statements
+      and checks against the forbidden-module list (`os`, `sys`,
+      `subprocess`, `socket`, `urllib`, `requests`, `importlib`, `ctypes`,
+      `shutil`), (3) scans for shell-escape patterns (`os.system`,
+      `subprocess.run`, bare `exec(` or `eval(` on externally-derived
+      strings), (4) checks for `open(...)` calls with write or append mode
+      targeting paths outside `/tmp/scratch/`, and (5) checks for direct
+      network primitives (`socket.connect`, `urllib.request.urlopen`,
+      `requests.get`, `requests.post`). On any violation returns a
+      structured rejection via `Guardrail.reject(...)` that names the
+      failed check and the offending token; the agent loop consumes one of
+      its 3 iterations and retries. Code that passes all checks flows
+      through to `InterpretationWorkflow.executeStep`.
+    regulation_anchors: []
+
+  - id: H1
+    name: Terminate runaway executions automatically
+    mechanism:
+      kind: halt
+      flavor: automatic-safety-halt
+    enforcement: system-level
+    rationale: |
+      Even code that passes the before-tool-call guardrail can loop
+      indefinitely or allocate memory unboundedly if the input data is
+      pathological or if the agent's reasoning produced an off-by-one
+      iteration bound. An automatic safety halt enforced at the executor
+      level is the necessary backstop: it operates independently of the
+      guardrail and independently of the agent, so it catches failure
+      modes that neither the LLM nor the code inspector can predict
+      statically. Bounding wall-clock time to 10 seconds and heap
+      allocation to 128 MB keeps the sandboxed execution well within
+      the resource envelope of a single Akka service instance without
+      affecting normal computations, which complete in milliseconds.
+    implementation: |
+      `ExecutionSandbox` runs every approved Python source string under a
+      `ScheduledExecutorService` watchdog inside
+      `InterpretationWorkflow.executeStep`. The watchdog fires after 10
+      seconds; if the execution thread is still alive it is interrupted and
+      the sandbox returns `SandboxResult{status: TIMED_OUT}`. A parallel
+      heuristic estimates allocated heap by examining the size of the input
+      data payload and the intermediate structures the code is expected to
+      produce; if the estimate exceeds 128 MB the execution is refused
+      before it starts and the sandbox returns `SandboxResult{status:
+      MEMORY_EXCEEDED}`. On either breach the workflow calls
+      `JobEntity.halt(breachType)`, which emits `JobHalted` and transitions
+      the entity to `HALTED` — a terminal state. The halt is not retried.
+      The breach type and wall-clock elapsed time are stored on the event
+      so operators can tune the budgets without inspecting logs.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Code safety guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —
+  - id: H1
+    label: Runaway execution halt
+    mechanism: Halt
+    implementation: automatic-safety-halt
+    source: —

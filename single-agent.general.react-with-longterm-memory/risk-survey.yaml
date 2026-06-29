@@ -1,0 +1,86 @@
+schema_version: 1
+sample_id: mem0-react-agent
+
+# ---- Purpose ----
+purpose:
+  primary_function: conversational-assistant-with-memory
+  sector: general
+  decisions_surface: autonomous
+  user_type: end-user
+
+# ---- Data ----
+data:
+  inputs:
+    - user-messages
+    - tool-outputs
+    - recalled-memory-facts
+  data_classes:
+    pii: true
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: TO_BE_COMPLETED_BY_DEPLOYER
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: TO_BE_COMPLETED_BY_DEPLOYER
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  # NOTE: PII may pass through the LLM when a user first mentions it in a message.
+  # The sanitizer cleans facts before they are PERSISTED, not before the initial turn.
+  pii_handled_by_sanitizer_before_llm: false
+  pii_handled_by_sanitizer_before_persist: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: autonomous
+  decision_subject: conversational-answer
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  reviewer_reads_every_verdict_before_action: false
+
+# ---- Failure ----
+failure:
+  blast_radius: single-user-session
+  failure_modes:
+    - stale-memory-recall
+    - pii-persisted-before-sanitize
+    - memory-drift-undetected
+    - hallucinated-tool-call
+    - cross-user-memory-leak
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: false
+  human_on_loop: true
+  reviewer_role: deployer-operator
+  reviewer_must_read_verdict_before_action: false
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+  drift_threshold_facts_per_user: 50
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - web-search-stub
+    - calculator
+    - memory-recall
+    - memory-store
+  rate_limit_per_session: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  memory_retention_policy_communicated_to_users: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,44 @@
+schema_version: 1
+sample_id: score-aggregator
+coordination_pattern: sequential-pipeline
+domain: hr-recruiting
+
+controls:
+  - id: H1
+    name: Verify deterministic agents pass unit tests before service deployment
+    mechanism:
+      kind: ci-gate
+      hook: build-gate
+      flavor: test-gate
+    enforcement: build-gate
+    rationale: |
+      In an HR recruiting pipeline, a scoring error in `ScoreAggregator` is not a
+      probabilistic failure — it is a systematic one. Every candidate processed after
+      a bad deploy receives the same wrong score. Because `ScoreAggregator` and
+      `StatusNotifier` make no LLM calls and hold no external state, their correctness
+      is fully verifiable offline. A build-time test gate is the right mechanism: cheap
+      to run, reliable to fail, and it catches the problem before any candidate data
+      enters a running system. The gate does not try to evaluate the LLM's judgment —
+      it focuses exclusively on the deterministic components, where a gate can give a
+      binary answer.
+    implementation: |
+      `ScoreAggregatorTest` and `StatusNotifierTest` are standard JUnit unit tests wired
+      into the Maven build lifecycle (`test` phase) via the Surefire plugin. The build
+      fails if either test class fails. `ScoreAggregatorTest` verifies four properties:
+      (1) `totalScore` is always in [0, 100] for every test fixture; (2) exactly five
+      `DimensionScore` entries are always returned; (3) the "skills-match" dimension
+      correctly reflects the `SkillMatchResult.matchedRatio`; (4) a candidate with
+      `passedInitialScreen = false` receives 0 for the "screen-flag" dimension.
+      `StatusNotifierTest` verifies: (1) `decision` on the returned `StatusUpdate` matches
+      `recommendation.decision`; (2) `notificationPayload` is non-null and non-empty;
+      (3) `notifiedAt` is after the test start time. The runtime `QualityGate` applies
+      the same four checks to live output on every application, providing a continuous
+      signal that deployed behaviour matches tested behaviour.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    label: Deterministic-agent unit test gate
+    mechanism: CI gate
+    implementation: build-gate / test-gate
+    source: —

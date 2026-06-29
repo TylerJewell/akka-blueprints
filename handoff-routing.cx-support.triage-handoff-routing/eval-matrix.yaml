@@ -1,0 +1,66 @@
+schema_version: 1
+sample_id: triage-handoff-routing
+coordination_pattern: handoff-routing
+domain: cx-support
+
+controls:
+  - id: G1
+    name: Validate routing decision before invoking specialist
+    mechanism:
+      kind: guardrail
+      hook: before-agent-invocation
+      flavor: routing-confidence-check
+    enforcement: blocking
+    rationale: |
+      The routing decision is the irreversible fork that determines which specialist
+      receives the turn. A low-confidence classification or a confidence–intent mismatch
+      passed unchecked would cause the wrong specialist to be invoked, producing a reply
+      outside its authority scope and wasting one full agent round-trip before the error
+      surfaces. The before-agent-invocation guardrail intercepts the decision while no
+      specialist has been called yet — the cost of a block at this point is near-zero
+      compared to the downstream correction cost.
+    implementation: |
+      `RoutingGuardrail` is a typed Agent. `HandoffWorkflow.routingCheckStep` invokes it
+      with the `NormalisedTurn` and the `TriageDecision` immediately after `triageStep`
+      completes. The agent returns `RoutingVerdict { allowed, reason, rubricVersion }`. On
+      `allowed=false` the workflow emits `RoutingBlocked` (terminal `ROUTING_BLOCKED`) and
+      the turn waits for an operator via `POST /api/turns/{id}/review`. On `allowed=true`
+      the workflow proceeds to the intent branch and invokes the appropriate specialist.
+    regulation_anchors: []
+
+  - id: G2
+    name: Block specialist drafts that violate the content policy
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: content-policy-check
+    enforcement: blocking
+    rationale: |
+      A specialist agent can return a well-formed `Reply` whose content violates the
+      operator's content policy — citing a policy document that does not exist, offering
+      financial or legal guidance outside its scope, or promising a return window beyond
+      the published 30-day limit. These violations are not detectable by type-checking
+      the `Reply` record; they require a semantic review of the reply text against the
+      policy rubric. The before-agent-response guardrail performs that review and blocks
+      the draft before any user sees it.
+    implementation: |
+      `ResponseGuardrail` is a typed Agent. `HandoffWorkflow.responseCheckStep` invokes it
+      with the `NormalisedTurn` and the specialist's `Reply` draft after the specialist
+      returns and before `publishStep` runs. The agent returns `ResponseVerdict { allowed,
+      violations, rubricVersion }`. On `allowed=false` the workflow emits `ReplyBlocked`
+      (terminal `RESPONSE_BLOCKED`) and the operator can either publish the draft via
+      `POST /api/turns/{id}/review` with `publish=true` or escalate it with `publish=false`.
+      The blocked draft and violation list remain on the entity for audit in both cases.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Routing decision guardrail
+    mechanism: Guardrail
+    implementation: before-agent-invocation
+    source: —
+  - id: G2
+    label: Before-response content guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —

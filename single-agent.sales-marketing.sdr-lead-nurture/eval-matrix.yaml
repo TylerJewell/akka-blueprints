@@ -1,0 +1,112 @@
+schema_version: 1
+sample_id: sdr-lead-nurture
+coordination_pattern: single-agent
+domain: sales-marketing
+
+controls:
+  - id: S1
+    name: Redact lead contact details before any LLM call
+    mechanism:
+      kind: sanitizer
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Inbound lead records contain personal contact details — email addresses,
+      phone numbers, full names, and sometimes postal addresses — that are
+      supplied by the lead or scraped from a form submission. An outbound
+      sales agent should only ever see a sanitized version of this record:
+      the PII is not necessary for answering product questions or booking
+      meetings, and its presence in the LLM call context creates unnecessary
+      exposure. The sanitizer runs in a Consumer between raw ingest and the
+      first agent turn so that the model works entirely on redacted data; the
+      original contact record is retained on the entity for CRM hand-off and
+      audit purposes only.
+    implementation: |
+      `LeadSanitizer` Consumer subscribes to `LeadReceived` events emitted by
+      `LeadEntity`. It runs a pipeline of regex stages covering email addresses,
+      E.164-format phone numbers, and account-id tokens, plus a heuristic stage
+      for person names and postal addresses. Outputs a `SanitizedContact`
+      carrying the redacted JSON string and the list of categories found. Calls
+      `LeadEntity.attachSanitized(sanitized)`. `LeadWorkflow.engageStep` then
+      formats the sanitized contact as the `SdrAgent` task context; the raw
+      `LeadContact` is accessible only via `contact` on the entity, never on
+      the wire to the model.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject brand-unsafe agent replies before they are sent
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: content-policy-validator
+    enforcement: blocking
+    rationale: |
+      Outbound messages from an autonomous sales agent carry the company's
+      brand. A single reply that commits to an unapproved price, mentions a
+      competitor, or uses prohibited language can create legal exposure or
+      damage trust. The before-agent-response hook is the right cut: the
+      agent's candidate reply is checked before it is recorded on the entity
+      or delivered to the lead. On failure the agent retries within its
+      iteration budget, and the non-compliant draft is never persisted.
+      This is distinct from post-hoc moderation because the lead never sees
+      the violating text.
+    implementation: |
+      `ReplyGuardrail` is registered on `SdrAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response`
+      hook. On each candidate `AgentTurn` it (1) checks the message is
+      non-empty, (2) pattern-matches against a deny list of prohibited pricing
+      phrases loaded from `src/main/resources/brand-rules/pricing-deny-list.txt`,
+      (3) pattern-matches against a competitor brand-name deny list from
+      `src/main/resources/brand-rules/competitor-deny-list.txt`. On any failure
+      returns a structured `brand-violation` rejection naming which check
+      failed and which phrase triggered it; the agent loop consumes one of its
+      5 iterations and retries. Passing replies flow through to `LeadWorkflow`
+      for recording.
+    regulation_anchors: []
+
+  - id: G2
+    name: Block out-of-bounds calendar and CRM tool calls before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: write-action-validator
+    enforcement: blocking
+    rationale: |
+      Calendar bookings and CRM status mutations are write actions with
+      real-world consequences: a meeting booked outside business hours or
+      a CRM field set to an invalid value creates operational problems that
+      are more costly to reverse than to prevent. The before-tool-call hook
+      runs synchronously before any write is dispatched, giving the agent
+      a structured error it can recover from by proposing a different slot
+      or value rather than hard-failing the workflow step.
+    implementation: |
+      `BookingGuardrail` is registered on `SdrAgent` via the agent's
+      tool-call-guardrail-configuration block, bound to the
+      `before-tool-call` hook. For `BOOK_MEETING` calls it asserts the
+      proposed `slot` ISO-8601 datetime falls on a weekday, the local
+      hour is between 08:00 and 17:00 in the configured timezone, and
+      `durationMinutes` is one of `{15, 30, 45}`. For `UPDATE_CRM_STATUS`
+      calls it asserts the target `newStatus` value is a member of the
+      `LeadStatus` enum. All other tool names pass through without
+      additional checks. On failure returns a structured `tool-blocked`
+      error naming the violated constraint; the agent loop can recover by
+      proposing an alternative slot or status value within the same task
+      iteration.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII redaction before LLM
+    mechanism: Sanitizer
+    implementation: pii
+    source: —
+  - id: G1
+    label: Brand-safety reply guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: G2
+    label: Write-action tool-call guardrail
+    mechanism: Guardrail
+    implementation: before-tool-call
+    source: —

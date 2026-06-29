@@ -1,0 +1,86 @@
+schema_version: 1
+sample_id: post-incident-reviewer
+coordination_pattern: sequential-pipeline
+domain: ops-automation
+
+controls:
+  - id: G1
+    name: Reject draft PIR responses that fail structural quality checks before recording
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Post-incident reviews are read by executives and auditors who must act on the
+      action items they contain. A PIR that is missing an executive summary, lists
+      action items without named owners or due dates, cites timeline events that do
+      not appear in the gathered evidence, or misclassifies impact severity exposes
+      the organization to accountability gaps and audit findings. The
+      before-agent-response hook is the right cut: the draft is inspected once,
+      after the DRAFT task completes but before the ReviewDrafted event is committed
+      to the entity. A rejected draft never becomes part of the durable record; the
+      agent retries with the structured rejection reason inside its iteration budget.
+      This keeps the entity log clean: every ReviewDrafted event carries a PIR that
+      passed all four structural checks.
+    implementation: |
+      `PIRGuardrail` is registered on `PIRAgent` via the agent's
+      guardrail-configuration block, bound to the respond-hook. On every task
+      response the guardrail checks the current task name; GATHER and ASSESS
+      responses pass through immediately. On a DRAFT task response the guardrail
+      applies four checks: (1) `executiveSummary` is non-empty and >= 50 characters;
+      (2) `actionItems.size() >= 1` with non-null `owner` and `dueDate` on each
+      item; (3) every `TimelineEvent.eventId` referenced in the review body is
+      present in the `EvidenceLog` looked up via `pirId` from the `TaskDef.metadata`;
+      (4) `review.impactClassification.severity` matches
+      `evidenceLog.incident.severity`. On rejection `PIRGuardrail` returns
+      `Guardrail.reject("draft-quality-violation: <check> failed: <detail>")` to the
+      agent loop and also calls `PIREntity.recordGuardrailRejection(check, reason)`
+      so the violation is visible in the UI's rejection-log strip and in the audit
+      log. On accept the review is forwarded to the workflow's `draftStep` for
+      recording.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require incident owner sign-off before a review is marked complete
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: |
+      A post-incident review has downstream consequences — engineering teams act on
+      its action items, compliance teams cite it during audits, and leadership uses
+      it to assess operational risk posture. Allowing the pipeline to auto-complete
+      a review without a human accountability gate means no individual is on record
+      as having read and endorsed the document. The application-layer sign-off
+      creates a durable, auditable record of who approved (or rejected) the review
+      and when. Rejection with a comment creates a feedback loop: the document can
+      be revised before re-submission. This gate is implemented as a workflow pause,
+      not a timeout, because human accountability cannot be collapsed into a deadline.
+    implementation: |
+      After `PIRGuardrail` accepts the draft and `ReviewDrafted` is committed to
+      `PIREntity`, `PIRWorkflow.signoffStep` calls `PIRSignoffNotifier.notify(pirId,
+      assigneeEmail)` to alert the incident owner, writes `SignoffRequested` on the
+      entity, and then pauses by returning a `WorkflowState.waitForSignal`. The
+      workflow resumes only when `PIREndpoint` receives `POST /api/pir/{id}/signoff`
+      with `{ approved: boolean, comments: Optional<String> }` and calls
+      `PIRWorkflow.resumeSignoff`. An `approved: true` decision writes
+      `SignoffRecorded` and then `ReviewComplete`, transitioning the entity to
+      `COMPLETE`. An `approved: false` decision writes `SignoffRecorded` and then
+      `ReviewRejected{rejectionComment}`, transitioning to `REJECTED`. Both
+      outcomes are permanently recorded on the entity and reflected in the UI.
+      `signoffStep` carries no step timeout — the workflow waits indefinitely for the
+      human decision.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Draft quality guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    source: —
+  - id: H1
+    label: Incident owner sign-off
+    mechanism: HITL
+    implementation: application sign-off gate
+    source: —

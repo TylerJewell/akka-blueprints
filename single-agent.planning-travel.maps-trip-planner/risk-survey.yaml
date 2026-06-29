@@ -1,0 +1,83 @@
+schema_version: 1
+sample_id: maps-trip-planner
+
+# ---- Purpose ----
+purpose:
+  primary_function: ai-travel-itinerary-planning
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: recommend-only
+  user_type: traveller-or-travel-coordinator
+
+# ---- Data ----
+data:
+  inputs:
+    - trip-requests
+    - destination-names
+    - travel-dates
+    - party-size
+    - free-text-preferences
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: true
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  location_data_handled_by_screener_before_llm: true
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: travel-itinerary
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  traveller_confirms_itinerary_before_booking: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-trip-request
+  failure_modes:
+    - hallucinated-place
+    - implausible-transit-duration
+    - preference-not-addressed
+    - blocked-destination-bypassed
+    - day-count-mismatch
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reviewer_role: traveller-or-travel-coordinator
+  traveller_must_confirm_before_booking: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - maps-mcp-geocode
+    - maps-mcp-directions
+    - maps-mcp-place-details
+  rate_limit_per_trip: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  maps-api-terms-of-service-reviewed: TO_BE_COMPLETED_BY_DEPLOYER

@@ -1,0 +1,78 @@
+schema_version: 1
+sample_id: signal-driven-chat
+
+# ---- Purpose ----
+purpose:
+  primary_function: interactive-multi-turn-ai-assistant
+  sector: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_surface: TO_BE_COMPLETED_BY_DEPLOYER
+  user_type: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Data ----
+data:
+  inputs:
+    - user-chat-prompts
+    - operator-corrective-notes
+  data_classes:
+    pii: TO_BE_COMPLETED_BY_DEPLOYER
+    phi: TO_BE_COMPLETED_BY_DEPLOYER
+    payment-card-data: false
+    children-data: TO_BE_COMPLETED_BY_DEPLOYER
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+  conversation-log-retained-after-session-close: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: TO_BE_COMPLETED_BY_DEPLOYER
+  decision_subject: TO_BE_COMPLETED_BY_DEPLOYER
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: TO_BE_COMPLETED_BY_DEPLOYER
+  operator_can_intervene_mid_session: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-session
+  failure_modes:
+    - off-topic-reply
+    - prompt-injection-via-signal
+    - runaway-session-cost
+    - guardrail-bypass
+    - operator-note-misapplied
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: true
+  reviewer_role: TO_BE_COMPLETED_BY_DEPLOYER
+  operator_can_pause_and_resume: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+  rate_limit_per_session: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: single-agent
+  max_turns_per_session: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  session-logs-subject-to-data-subject-rights: TO_BE_COMPLETED_BY_DEPLOYER
