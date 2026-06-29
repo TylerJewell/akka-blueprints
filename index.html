@@ -163,11 +163,13 @@
   .intro-block code{ font-family:'SFMono-Regular',Consolas,monospace; font-size:13px;
     background:rgba(245,197,24,0.08); border:1px solid rgba(245,197,24,0.18);
     padding:1px 6px; border-radius:4px; color:var(--yellow); }
-  .intro-block pre{ margin:6px 0 10px; background:rgba(16,17,22,0.9);
+  .intro-block pre.run-block{ margin:18px 0 0; background:rgba(16,17,22,0.9);
     border:1px solid var(--line); border-left:3px solid var(--yellow);
-    padding:10px 14px; border-radius:4px; overflow-x:auto; }
-  .intro-block pre code{ background:none; border:none; padding:0; border-radius:0;
-    font-size:13px; color:#e8e8ec; }
+    padding:14px 18px; border-radius:4px; overflow-x:auto; }
+  .intro-block pre.run-block code{ background:none; border:none; padding:0; border-radius:0;
+    font-size:13.5px; line-height:1.65; color:#e8e8ec;
+    font-family:'SFMono-Regular',Consolas,monospace; white-space:pre; }
+  .intro-block pre.run-block .cmt{ color:var(--muted); }
 </style>
 </head>
 <body>
@@ -177,16 +179,16 @@
 
   <div class="intro-block">
     <p>A library of agentic AI patterns. The samples are runnable AI systems that you generate, test, and run with <a href="https://doc.akka.io/" target="_blank" rel="noopener">Akka Specify</a>.</p>
-    <p class="run-steps"><b>Run any sample:</b></p>
-    <ol class="run-steps">
-      <li>Install <a href="https://doc.akka.io/" target="_blank" rel="noopener">Akka Specify</a>.</li>
-      <li>Clone this repository:
-<pre><code>git clone https://github.com/TylerJewell/akka-blueprints.git</code></pre></li>
-      <li>Change into a sample directory:
-<pre><code>cd akka-blueprints/&lt;sample-folder&gt;</code></pre></li>
-      <li>Open Claude Code and run:
-<pre><code>/akka:specify @SPEC.md</code></pre></li>
-    </ol>
+<pre class="run-block"><code><span class="cmt"># 1. Install Akka Specify (see https://doc.akka.io/)</span>
+
+<span class="cmt"># 2. Clone this repository</span>
+git clone https://github.com/TylerJewell/akka-blueprints.git
+
+<span class="cmt"># 3. Change into a sample directory</span>
+cd akka-blueprints/&lt;sample-folder&gt;
+
+<span class="cmt"># 4. Open Claude Code and run</span>
+/akka:specify @SPEC.md</code></pre>
   </div>
 
   <div class="filters" id="filters">
