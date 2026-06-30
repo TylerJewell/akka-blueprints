@@ -1,0 +1,80 @@
+schema_version: 1
+sample_id: meeting-assistant-zoom
+
+# ---- Purpose ----
+purpose:
+  primary_function: meeting-transcript-processing-and-followup-dispatch
+  sector: ops-automation
+  decisions_surface: recommend-only
+  user_type: meeting-participant-or-ops-coordinator
+
+# ---- Data ----
+data:
+  inputs:
+    - zoom-meeting-transcript
+    - meeting-title
+    - participant-list-derived-from-transcript
+  data_classes:
+    pii: true
+    phi: false
+    payment-card-data: false
+    children-data: false
+    biometric: false
+    location-fine-grained: false
+  data_retention_days: TO_BE_COMPLETED_BY_DEPLOYER
+  data_residency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Decisions ----
+decisions:
+  authority_level: recommend-only
+  decision_subject: meeting-follow-up-actions
+  decisions_per_day: TO_BE_COMPLETED_BY_DEPLOYER
+  reversibility: fully-reversible
+  human_confirms_each_followup_before_send: true
+
+# ---- Failure ----
+failure:
+  blast_radius: single-meeting
+  failure_modes:
+    - out-of-scope-write
+    - pii-leak-to-llm
+    - missing-assignee
+    - phase-violation
+    - unresolved-action-item
+    - hallucinated-participant
+  acceptable_downtime_minutes: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Oversight ----
+oversight:
+  human_in_loop: true
+  human_on_loop: false
+  reader_role: meeting-participant-or-ops-coordinator
+  human_reviews_package_before_dispatch: true
+  audit_frequency: TO_BE_COMPLETED_BY_DEPLOYER
+
+# ---- Operations ----
+operations:
+  model_family: TO_BE_COMPLETED_BY_DEPLOYER
+  model_version_pinned: false
+  external_tool_calls:
+    - llm-completion
+    - in-process-function-tools
+  rate_limit_per_meeting: TO_BE_COMPLETED_BY_DEPLOYER
+  agent_count: 1
+  agent_pattern: sequential-pipeline
+
+# ---- Compliance ----
+compliance:
+  capabilities:
+    predictive-policing: false
+    mass-surveillance: false
+    emotion-recognition-in-workplace: false
+    real-time-biometric-id: false
+    social-scoring: false
+    untargeted-image-scraping: false
+    political-microtargeting: false
+  jurisdictions_in_scope: TO_BE_COMPLETED_BY_DEPLOYER
+  data-protection-officer_assigned: TO_BE_COMPLETED_BY_DEPLOYER
+  customer_consent_to_ai_processing: TO_BE_COMPLETED_BY_DEPLOYER
+  transcript-recording-consent-obtained: TO_BE_COMPLETED_BY_DEPLOYER
+  participant-pseudonymization-reversibility-policy: TO_BE_COMPLETED_BY_DEPLOYER

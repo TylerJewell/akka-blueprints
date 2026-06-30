@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-29",
+  "generated_at": "2026-06-30",
   "total_entries": 455,
   "sources": 16,
   "patterns": 12,
@@ -1994,7 +1994,7 @@
       "akka_sample": {
         "status": "not-started",
         "estimated_complexity": "low",
-        "candidate_name": "marketing-strategy-team",
+        "candidate_name": "marketing-strategy-team-marketplace",
         "notes": ""
       }
     },
@@ -2189,7 +2189,7 @@
       "akka_sample": {
         "status": "not-started",
         "estimated_complexity": "medium",
-        "candidate_name": "lead-score-hitl",
+        "candidate_name": "lead-score-hitl-marketplace",
         "notes": "Canonical hitl-application sample."
       }
     },
@@ -2378,7 +2378,7 @@
       "akka_sample": {
         "status": "not-started",
         "estimated_complexity": "low",
-        "candidate_name": "screenplay-writer",
+        "candidate_name": "screenplay-writer-marketplace",
         "notes": ""
       }
     },
@@ -8757,7 +8757,7 @@
       "akka_sample": {
         "status": "not-started",
         "estimated_complexity": "medium",
-        "candidate_name": "trip-planner-team",
+        "candidate_name": "trip-planner-team-mac",
         "notes": ""
       }
     },
@@ -17572,7 +17572,7 @@
       "akka_sample": {
         "status": "not-started",
         "estimated_complexity": "low",
-        "candidate_name": "meeting-assistant",
+        "candidate_name": "meeting-assistant-zoom",
         "notes": ""
       }
     },

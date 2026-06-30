@@ -1,0 +1,87 @@
+# Eval Matrix for the lead-score-flow Akka sample.
+#
+# Note on schema fit: framework/schema/control.schema.yaml requires regulation_anchors
+# on each control. This is a community-content sample (sales-marketing domain) with no
+# industry- or jurisdiction-bound anchors, so regulation_anchors is intentionally an empty
+# list across all controls.
+
+schema_version: 1
+sample_id: lead-score-flow
+generated_at: 2026-06-30
+
+matrix_cell:
+  coordination_pattern: human-in-loop-gate
+  domain: sales-marketing
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Pause the pipeline at a human review gate
+    mechanism:
+      kind: hitl
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      An automated score is a recommendation, not a decision. Sales qualification
+      has commercial and reputational consequences; a human reviewer must confirm or
+      override before any follow-up action is taken. The review gate between scoring
+      and qualification is the defining characteristic of the human-in-loop-gate
+      pattern applied to lead management.
+    implementation: >
+      LeadScoringWorkflow pauses in awaitReviewStep, polling LeadEntity status.
+      POST /api/leads/{id}/approve and POST /api/leads/{id}/reject transition the
+      entity; the workflow resumes on the next poll cycle.
+    regulation_anchors: []
+
+  - id: E1
+    name: Emit a scoring eval event on every lead decision
+    mechanism:
+      kind: eval-event
+      hook: on-decision-eval
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      Lead scoring models drift as market conditions, ICP definitions, and competitive
+      positioning change. Each scoring decision is a labeled data point. Capturing it
+      as an eval event creates an audit trail that a monitoring pipeline can consume
+      to detect when the model's output distribution has shifted away from expected
+      patterns.
+    implementation: >
+      After LeadScoringWorkflow writes recordScore to LeadEntity, it emits an
+      EvalEvent carrying the leadId, score, confidence, and the original company
+      profile. The event is routed to the eval log endpoint and is visible in the
+      Eval Matrix tab of the UI.
+    regulation_anchors: []
+
+  - id: G1
+    name: Block the qualify tool unless the lead is approved
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: tool-permission
+    enforcement: blocking
+    rationale: >
+      Generating a qualification summary and next steps for a lead that has not
+      passed human review would produce CRM records and potentially trigger
+      downstream automations on the basis of an unconfirmed score. A pre-tool
+      guardrail ensures qualification only proceeds when a human has explicitly
+      approved the lead.
+    implementation: >
+      before-tool-call guardrail on QualificationAgent re-reads LeadEntity.status
+      and allows the qualification tool only when status is APPROVED.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Human review gate
+    mechanism: "hitl · application"
+    short: Workflow pauses for human approve/reject on scored lead.
+  - id: E1
+    name: Scoring eval event
+    mechanism: "eval-event · on-decision-eval"
+    short: Each scoring decision emits an eval event for drift detection.
+  - id: G1
+    name: Guard qualify tool
+    mechanism: "guardrail · before-tool-call"
+    short: Block qualification unless lead status is APPROVED.

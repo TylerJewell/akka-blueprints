@@ -1,0 +1,105 @@
+schema_version: 1
+sample_id: sequential-pipeline-content-editorial-screenplay-writer-marketplace
+coordination_pattern: sequential-pipeline
+domain: content-editorial
+
+controls:
+  - id: G1
+    name: Block delivery of any screenplay that contains residual PII tokens
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: before-agent-response
+    enforcement: blocking
+    rationale: |
+      Source emails submitted to this pipeline commonly contain personally
+      identifiable information — display names, email addresses, and phone
+      numbers from email headers and message bodies. The PII sanitizer at
+      ingestion replaces these with stable numbered placeholders before the
+      agent ever sees the material. However, the sanitizer works on the raw
+      submitted text; a creative LLM producing action lines and dialogue could
+      reconstruct or hallucinate a PII-like token during the FORMAT phase
+      (e.g., by incorporating a placeholder label incorrectly or by drawing on
+      model knowledge about named individuals that happen to appear as
+      characters). The before-agent-response guardrail is the last line of
+      defence: it runs after the FORMAT task completes but before the workflow
+      writes ScreenplayDelivered, and it checks the full formatted screenplay
+      text against the original PII values held in the placeholder map. A
+      screenplay that passes sanitization but contains a reconstructed or
+      hallucinated PII token is caught here, blocked, and routed to a
+      DELIVERY_BLOCKED terminal state. The author is notified of the specific
+      detected token and must resubmit with corrected source material.
+    implementation: |
+      `DeliveryGuardrail` is registered on `ScreenplayAgent` via the agent's
+      guardrail-configuration block, bound to the `before-agent-response` hook.
+      It fires once per FORMAT task — when the agent is about to return its
+      `Screenplay` result to `ScreenplayPipelineWorkflow.formatStep`. The
+      guardrail reads the `PlaceholderMap` from the in-flight `ScreenplayEntity`
+      state (keyed by `screenplayId` carried in the `TaskDef` metadata). It
+      iterates over the map's original-PII values and checks whether any appear
+      as substrings in the serialised screenplay text (case-insensitive for
+      names). On any match, it calls
+      `ScreenplayEntity.blockDelivery(detectedTokens, reason)` so the rejection
+      is recorded on the entity for audit, then returns
+      `Guardrail.reject("pii-detected: <token> found in formatted output")`.
+      The workflow's `formatStep` receives the rejection, increments the step's
+      error count, and fails over to `ScreenplayPipelineWorkflow::error`, which
+      writes `ScreenplayFailed` if the entity is not already in
+      `DELIVERY_BLOCKED`. On pass (no PII detected), the guardrail returns
+      accept and the workflow proceeds to `deliverStep`.
+    regulation_anchors: []
+
+  - id: S1
+    name: Scrub PII from source emails before agent ingestion
+    mechanism:
+      kind: sanitizer
+      hook: pre-ingestion
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Screenplay pipelines processing email threads face a specific risk: the
+      source material is not a neutral topic query but a real communication
+      record that may carry the names, email addresses, and phone numbers of
+      real people. Passing this material directly to an LLM risks those PII
+      values being incorporated into the creative output — as character names,
+      as props ("he typed his email address into the form"), or as dialogue.
+      A sanitizer that runs before the entity write — before any async write,
+      before any agent call — removes this risk at the root. By replacing
+      tokens with stable numbered placeholders, the sanitizer also lets the
+      agent produce structurally consistent output (the same person is always
+      [NAME_1] across all scenes) without receiving the underlying PII. The
+      placeholder map, stored privately on the entity, is never returned to the
+      UI or passed to the agent; it is used only by `DeliveryGuardrail` to
+      verify the output is clean.
+    implementation: |
+      `PiiSanitizer` is a plain Java class called synchronously inside
+      `ScreenplayEndpoint.submitScreenplay()` before `ScreenplayEntity.create()`
+      is called. It receives the raw `sourceText` from the POST body and applies
+      three extraction passes in order: (1) RFC-5322 email-address regex — each
+      unique address is assigned `[EMAIL_N]`; (2) E.164 phone-number regex —
+      each unique number is assigned `[PHONE_N]`; (3) display-name extraction
+      from `From:` / `To:` / `Cc:` headers matching the pattern
+      `"Name <address>"` — each unique display name is assigned `[NAME_N]`.
+      After all passes, the sanitizer performs a single-pass string replacement
+      (longest-match-first to avoid partial overlaps) and returns
+      `SanitizedSource{sanitizedText, placeholderMap}`. The sanitized text is
+      written onto `ScreenplayEntity` as the authoritative source; the
+      placeholder map is stored on the entity's private field and is never
+      projected onto `ScreenplayView` or returned by any API endpoint. The
+      counter `N` is per-category, per-screenplay, so the same PII token
+      always maps to the same placeholder within one screenplay's lifetime.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    label: Delivery PII guardrail
+    mechanism: Guardrail
+    implementation: before-agent-response
+    integration_tier: runs-out-of-the-box
+    source: —
+  - id: S1
+    label: Ingestion PII sanitizer
+    mechanism: Sanitizer
+    implementation: pre-ingestion
+    integration_tier: runs-out-of-the-box
+    source: —

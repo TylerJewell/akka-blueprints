@@ -1,0 +1,95 @@
+schema_version: 1
+sample_id: meeting-assistant-zoom
+coordination_pattern: sequential-pipeline
+domain: ops-automation
+
+controls:
+  - id: S1
+    name: Strip participant PII from transcripts before LLM processing
+    mechanism:
+      kind: sanitizer
+      hook: pre-task
+      flavor: pii
+    enforcement: blocking
+    rationale: |
+      Zoom meeting transcripts contain participant names, email addresses,
+      and phone numbers captured from calendar invites, in-meeting chat, and
+      verbal introductions. Forwarding this material verbatim to an LLM
+      creates a PII-in-prompt risk: the raw names and contacts could be
+      echoed into logs, stored in model context, or surfaced in downstream
+      summaries shared with unauthorized readers. The sanitizer runs
+      synchronously before the TRANSCRIBE task's instruction context is
+      assembled; the LLM in all three phases — TRANSCRIBE, SUMMARIZE,
+      DISPATCH — sees only pseudonymized text. The original raw transcript
+      is stored encrypted on MeetingEntity and never forwarded to any
+      model call.
+    implementation: |
+      `PiiSanitizer` is called inside `MeetingPipelineWorkflow.transcribeStep`,
+      before `runSingleTask` is invoked on `MeetingAgent`. It scans the
+      raw `rawTranscript` string in three passes: (1) an email-address
+      regex `[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`;
+      (2) a phone-number regex `\+?[\d\s\-().]{7,15}`; (3) a capitalized-
+      bigram NER heuristic for participant names (two-word capitalized
+      sequences that recur across at least two segments). Each distinct
+      match is assigned a stable pseudonym — `[PERSON-1]`, `[EMAIL-1]`,
+      `[PHONE-1]`, etc. — keyed by `SHA-1(original).substring(0,4)` so the
+      mapping is consistent within a session. The output `SanitizedTranscript{
+      text, redactionAudit}` is what every `TaskDef.instructions` carry
+      into the model. `TranscribeStarted{redactionAudit}` records the
+      redaction count on `MeetingEntity` as a first-class audit event,
+      independently of the transcript result. The redaction count is shown
+      in the App UI's redaction-audit badge on the transcript panel.
+    regulation_anchors: []
+
+  - id: G1
+    name: Reject tool calls that violate phase order or write-scope bounds
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: before-tool-call
+    enforcement: blocking
+    rationale: |
+      In the meeting-assistant pipeline, misordered tool calls and out-of-
+      scope writes are structurally distinct failure modes. A DISPATCH-phase
+      tool called before SummaryProduced breaks the task-dependency contract
+      — the agent would dispatch follow-ups against a summary it has not yet
+      received. An out-of-scope write (scheduling a calendar event for a
+      pseudonym not in the meeting's participant list) breaks the data-
+      minimization property — the pipeline would create work items for people
+      who were not present and whose pseudonyms may map to real identities
+      the deployer has not consented to act on. The before-tool-call hook
+      is the right place to enforce both constraints: it runs before the
+      tool body executes, so no side effect (calendar entry, task record)
+      is created from a rejected call.
+    implementation: |
+      `ScopeGuardrail` is registered on `MeetingAgent` via the agent's
+      guardrail-configuration block, bound to the `before-tool-call` hook.
+      Each function-tool class (`TranscribeTools`, `SummarizeTools`,
+      `DispatchTools`) carries a `Phase` constant. On every tool call
+      the guardrail applies two sequential checks:
+      (A) Phase-order check — `TRANSCRIBE` tools require `status ∈
+      {CREATED, TRANSCRIBING}`; `SUMMARIZE` tools require `status ∈
+      {TRANSCRIBED, SUMMARIZING}` AND `transcript.isPresent()`; `DISPATCH`
+      tools require `status ∈ {SUMMARIZED, DISPATCHING}` AND
+      `summary.isPresent()`. A failure returns a `phase-violation` error.
+      (B) Write-scope check — for `DispatchTools.scheduleFollowUp` and
+      `DispatchTools.createTask`, every `attendeePseudonym` /
+      `assigneePseudonym` in the call arguments must appear in
+      `transcript.segments[].speaker`; any unrecognized pseudonym triggers
+      a `scope-violation` rejection naming the unknown pseudonym. On any
+      reject, the guardrail calls `MeetingEntity.recordScopeRejection(phase,
+      tool, reason)` so the rejection is visible in the UI's rejection-log
+      strip and in the audit log. On accept, the call proceeds.
+    regulation_anchors: []
+
+simplified_view:
+  - id: S1
+    label: PII sanitizer — transcript redaction
+    mechanism: Sanitizer
+    implementation: pre-task (runs-out-of-the-box)
+    source: —
+  - id: G1
+    label: Scope guardrail — phase order + write scope
+    mechanism: Guardrail
+    implementation: before-tool-call (runs-out-of-the-box)
+    source: —

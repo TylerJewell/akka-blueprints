@@ -1,0 +1,72 @@
+# Eval Matrix for the trip-planner-team-mac Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (planning-travel domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: trip-planner-team-mac
+generated_at: 2026-06-30
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: planning-travel
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: G1
+    name: Block booking proposals that violate the stated budget before execution
+    mechanism:
+      kind: guardrail
+      hook: before-tool-call
+      flavor: deterministic-policy-check
+    enforcement: blocking
+    rationale: >
+      Booking is an irreversible, spend-incurring action. A before-tool-call guardrail
+      evaluates every proposal against the user-supplied budget ceiling before the workflow
+      is allowed to proceed to the approval step. If any single proposal exceeds 80% of the
+      budget or the sum of all proposals exceeds the total, the trip is blocked immediately
+      and no approval token is ever issued. This prevents the user from reaching an approval
+      screen only to find the plan is already financially infeasible.
+    implementation: >
+      TripWorkflow.guardrailStep runs immediately after TripSupervisor returns the compiled
+      TripPlan. It reads the budgetUsd field from TripRequest (held in TripEntity state) and
+      iterates over TripPlan.bookingProposals, summing estimatedCostUsd values. If the sum
+      exceeds budgetUsd or any single proposal exceeds 0.8 * budgetUsd, the step calls
+      TripEntity.block with a failureReason message and the workflow ends with TripBlocked.
+      No ApprovalEntity token is issued. The guardrail is deterministic — no LLM call.
+    regulation_anchors: []
+
+  - id: H1
+    name: Require explicit user approval before confirming any travel booking
+    mechanism:
+      kind: hitl
+      hook: application
+      flavor: application
+    enforcement: blocking
+    rationale: >
+      Travel bookings commit real spend on behalf of a real person. An automated agent must
+      never confirm a reservation without an explicit human decision signal. The workflow
+      pauses after the guardrail passes and waits indefinitely for an approve or reject
+      response from the user. No booking is made — even a modelled one — unless the user
+      sends a positive signal with the correct approval token.
+    implementation: >
+      After guardrailStep passes, TripWorkflow.approvalStep calls ApprovalEntity.issueToken,
+      persisting a unique approval token keyed to the tripId, and transitions TripEntity to
+      AWAITING_APPROVAL. The workflow then suspends. TripEndpoint exposes POST /api/trips/{id}/
+      approve and POST /api/trips/{id}/reject. Both endpoints call ApprovalEntity.recordDecision.
+      The workflow resumes on the decision signal: approve triggers TripEntity.confirmTrip
+      (CONFIRMED); reject triggers TripEntity.rejectTrip (REJECTED). In both cases no external
+      booking system is called — this sample models the reservation payloads in-process.
+    regulation_anchors: []
+
+simplified_view:
+  - id: G1
+    name: Budget guardrail before booking
+    mechanism: "guardrail · before-tool-call"
+    short: Block any plan whose proposals exceed the user-stated budget.
+  - id: H1
+    name: Human approval gate
+    mechanism: "hitl · application"
+    short: Pause the workflow; confirm only after the user approves the draft plan.

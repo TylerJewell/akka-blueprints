@@ -1,0 +1,69 @@
+# Eval Matrix for the marketing-strategy-team-marketplace Akka sample.
+#
+# Schema fit: framework/schema/control.schema.yaml requires regulation_anchors on each
+# control. This is a community-content sample (sales-marketing domain) with no industry- or
+# jurisdiction-bound anchors, so regulation_anchors is an empty list across all controls.
+
+schema_version: 1
+sample_id: marketing-strategy-team-marketplace
+generated_at: 2026-06-30
+
+matrix_cell:
+  coordination_pattern: delegation-supervisor-workers
+  domain: sales-marketing
+
+integration_tier: runs-out-of-the-box
+
+controls:
+  - id: H1
+    name: Vet marketing claims for brand and legal compliance before the brief is returned
+    mechanism:
+      kind: guardrail
+      hook: before-agent-response
+      flavor: llm-content-evaluation
+    enforcement: blocking
+    rationale: >
+      The assembled campaign brief is the user-facing artifact that may be forwarded directly
+      to publishing or ad-buy workflows. A before-agent-response guardrail intercepts the
+      brief before it leaves the CampaignDirector and checks all claims, channel selections,
+      and copy direction against brand-term blocklists and legally impermissible marketing
+      assertions (comparative superiority claims, unsubstantiated efficacy, prohibited
+      categories). If any violation is detected the brief never reaches the requester, and
+      the campaign enters BLOCKED so the team can review and revise the objective.
+    implementation: >
+      A before-agent-response guardrail on CampaignDirector runs a deterministic brand-term
+      vetter plus an LLM judge over the AssembledBrief in CampaignWorkflow.guardrailStep.
+      The vetter checks complianceVerdict and scans executiveSummary and all keyMessages for
+      prohibited terms. The LLM judge evaluates comparative claims and unsubstantiated
+      superlatives. On any failure the workflow calls CampaignBriefEntity.block and the brief
+      enters BLOCKED with a failureReason naming the violated rule.
+    regulation_anchors: []
+
+  - id: E1
+    name: Sample the director assembly decision for campaign quality
+    mechanism:
+      kind: eval-event
+      flavor: on-decision-eval
+    enforcement: non-blocking
+    rationale: >
+      The CampaignDirector's ASSEMBLE_BRIEF decision integrates four independent worker
+      outputs into one campaign brief. Sampling that decision with a rubric judge surfaces
+      a quality score — covering strategic coherence, audience-message alignment, and channel
+      fit — that appears beside the brief in the App UI. The score is informational only and
+      never delays delivery.
+    implementation: >
+      EvalSampler (TimedAction, every 5 minutes) queries CampaignView for the oldest
+      ASSEMBLED brief lacking an evalScore, runs a 1-5 rubric judge over the assembled
+      content evaluating strategic coherence and channel-message alignment, and calls
+      CampaignBriefEntity.recordEval(score, rationale), emitting CampaignEvalScored.
+    regulation_anchors: []
+
+simplified_view:
+  - id: H1
+    name: Marketing claims compliance guardrail
+    mechanism: "guardrail · before-agent-response"
+    short: Block a brief with brand violations or legally impermissible marketing claims.
+  - id: E1
+    name: Assembly quality eval
+    mechanism: "eval-event · on-decision-eval"
+    short: Rubric-score the director's campaign assembly decision.
